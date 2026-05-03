@@ -3,13 +3,16 @@ import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { H, Body, Label, Mono, Ring, Bar } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { InsightSlot } from "@/components/today/insight-slot";
 import {
-  PlannedMealCard,
   EmptyMealCard,
+  LoggedSlotCard,
   LogAnythingButton,
+  PlannedMealCard,
+  RemoveLogButton,
 } from "@/components/today/meal-card";
+import { MemberSwitcher } from "@/components/family/member-switcher";
 import { getProgram } from "@/lib/programs";
+import type { FamilyMember } from "@/lib/family";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 
@@ -26,7 +29,14 @@ const DAY_FMT = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as?: string }>;
+}) {
+  const sp = await searchParams;
+  const viewAs = sp?.as ?? null;
+
   const supabase = isSupabaseConfigured() ? await createClient() : null;
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
 
@@ -39,9 +49,8 @@ export default async function TodayPage() {
     schedule_json: Record<string, string> | null;
   } | null = null;
   let totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-  let insight: { id: string; body: string } | null = null;
-  let insightHoursOld: number | null = null;
   let activeProgramIds: string[] = [];
+  let family: FamilyMember[] = [];
   type PlanRow = {
     id: string;
     slot: string;
@@ -58,6 +67,7 @@ export default async function TodayPage() {
   type LogRow = {
     id: string;
     custom_name: string | null;
+    slot: string | null;
     kcal: number | null;
     protein: number | null;
     recipe_id: string | null;
@@ -65,37 +75,75 @@ export default async function TodayPage() {
   };
   let logs: LogRow[] = [];
 
+  // Resolve which subject we're viewing (self or a named member).
+  let viewedMember: FamilyMember | null = null;
+  let viewedScopeLabel: string | null = null;
+
   if (user && supabase) {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at, active_programs",
+        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at, active_programs, family_json",
       )
       .eq("id", user.id)
       .maybeSingle();
     if (!data?.onboarded_at) redirect("/onboard");
-    profile = data;
+
+    const familyRaw =
+      (data?.family_json as FamilyMember[] | null | undefined) ?? [];
+    family = familyRaw.filter((m) => m.name?.trim());
+
+    if (viewAs && viewAs !== "self") {
+      viewedMember = family.find((m) => m.id === viewAs) ?? null;
+      if (viewedMember) viewedScopeLabel = `for ${viewedMember.name}`;
+    }
+
+    if (viewedMember) {
+      profile = {
+        name: viewedMember.name,
+        kcal_target: viewedMember.kcal_target ?? null,
+        protein_target: viewedMember.protein_target ?? null,
+        carbs_target: viewedMember.carbs_target ?? null,
+        fat_target: viewedMember.fat_target ?? null,
+        schedule_json:
+          (viewedMember.schedule_json as Record<string, string> | null) ?? null,
+      };
+    } else {
+      profile = data;
+    }
     activeProgramIds =
       (data as { active_programs?: string[] | null }).active_programs ?? [];
 
     const today = new Date().toISOString().slice(0, 10);
-    const { data: planRows } = await supabase
-      .from("meal_plan_entries")
-      .select(
-        "id, slot, status, recipe_id, recipes:recipe_id(name, kcal, protein, photo_url)",
-      )
-      .eq("user_id", user.id)
-      .eq("date", today);
-    plan = (planRows ?? []) as unknown as PlanRow[];
 
-    const { data: logRows } = await supabase
+    // Plan entries are household-level (no per-member plan in v1) — only
+    // load them when viewing self.
+    if (!viewedMember) {
+      const { data: planRows } = await supabase
+        .from("meal_plan_entries")
+        .select(
+          "id, slot, status, recipe_id, recipes:recipe_id(name, kcal, protein, photo_url)",
+        )
+        .eq("user_id", user.id)
+        .eq("date", today);
+      plan = (planRows ?? []) as unknown as PlanRow[];
+    }
+
+    let logQuery = supabase
       .from("meal_logs")
-      .select("id, custom_name, kcal, protein, carbs, fat, recipe_id, recipes:recipe_id(name)")
+      .select(
+        "id, custom_name, slot, kcal, protein, carbs, fat, recipe_id, recipes:recipe_id(name)",
+      )
       .eq("user_id", user.id)
       .gte("logged_at", `${today}T00:00:00`)
       .lt("logged_at", `${today}T23:59:59`)
       .order("logged_at", { ascending: false });
+    logQuery = viewedMember
+      ? logQuery.eq("family_member_id", viewedMember.id)
+      : logQuery.is("family_member_id", null);
+    const { data: logRows } = await logQuery;
     logs = (logRows ?? []) as unknown as LogRow[];
+
     totals = (logRows ?? []).reduce(
       (acc, r) => ({
         kcal: acc.kcal + (r.kcal ?? 0),
@@ -105,20 +153,6 @@ export default async function TodayPage() {
       }),
       { kcal: 0, protein: 0, carbs: 0, fat: 0 },
     );
-
-    const { data: ins } = await supabase
-      .from("insights")
-      .select("id, body, created_at")
-      .eq("user_id", user.id)
-      .is("dismissed_at", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (ins) {
-      insight = { id: ins.id, body: ins.body };
-      insightHoursOld =
-        (Date.now() - new Date(ins.created_at).getTime()) / (1000 * 60 * 60);
-    }
   }
 
   const now = new Date();
@@ -135,13 +169,30 @@ export default async function TodayPage() {
   const planBySlot = Object.fromEntries(
     plan.map((p) => [p.slot, p]),
   ) as Record<(typeof SLOTS)[number], PlanRow | undefined>;
+
+  // First slot-attached log per slot — drives the "logged" slot card variant
+  // when there's no plan entry. Logs are ordered desc; we want the most
+  // recent one per slot.
+  const logBySlot: Partial<Record<(typeof SLOTS)[number], LogRow>> = {};
+  for (const log of logs) {
+    if (
+      log.slot &&
+      (SLOTS as readonly string[]).includes(log.slot) &&
+      !logBySlot[log.slot as (typeof SLOTS)[number]]
+    ) {
+      logBySlot[log.slot as (typeof SLOTS)[number]] = log;
+    }
+  }
+
   const activePrograms = activeProgramIds
     .map((id) => getProgram(id))
     .filter((p): p is NonNullable<ReturnType<typeof getProgram>> => !!p);
 
+  const headerName = viewedMember ? viewedMember.name : name;
+
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
-      {activePrograms.length > 0 ? (
+      {activePrograms.length > 0 && !viewedMember ? (
         <div className="flex items-center flex-wrap gap-2 -mb-4">
           <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
           <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3 mr-1">
@@ -165,10 +216,20 @@ export default async function TodayPage() {
         </div>
       ) : null}
 
-      <header className="flex flex-col gap-2">
-        <Label>{DAY_FMT.format(now).toLowerCase()}</Label>
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <Label>{DAY_FMT.format(now).toLowerCase()}</Label>
+          <MemberSwitcher
+            selectedId={viewedMember?.id ?? null}
+            members={family.map((m) => ({ id: m.id, name: m.name }))}
+          />
+        </div>
         <H size="xl" as="h1">
-          {greet(now)}, {name}.
+          {viewedMember ? (
+            <>Today, <span className="text-accent">{headerName}</span>.</>
+          ) : (
+            <>{greet(now)}, {headerName}.</>
+          )}
         </H>
       </header>
 
@@ -186,18 +247,24 @@ export default async function TodayPage() {
           <MacroRow label="fat" value={totals.fat} target={fatTarget} unit="g" />
           {user ? (
             <div className="pt-2">
-              <LogAnythingButton />
+              <LogAnythingButton
+                familyMemberId={viewedMember?.id ?? null}
+                scopeLabel={viewedScopeLabel ?? undefined}
+              />
             </div>
           ) : null}
         </div>
       </section>
 
       <section className="flex flex-col gap-4">
-        <Label>today&apos;s meals</Label>
+        <Label>{viewedMember ? `${headerName}'s meals` : "today's meals"}</Label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {SLOTS.map((slot) => {
             const entry = planBySlot[slot];
+            const logged = logBySlot[slot];
             const time = schedule[slot];
+            // Plan + recipe wins (priority). Logged ad-hoc is next.
+            // Otherwise empty.
             if (entry?.recipes && entry.recipe_id) {
               return (
                 <PlannedMealCard
@@ -214,7 +281,28 @@ export default async function TodayPage() {
                 />
               );
             }
-            return <EmptyMealCard key={slot} slot={slot} time={time} />;
+            if (logged) {
+              return (
+                <LoggedSlotCard
+                  key={slot}
+                  logId={logged.id}
+                  slot={slot}
+                  time={time}
+                  name={logged.recipes?.name ?? logged.custom_name ?? "logged meal"}
+                  kcal={logged.kcal}
+                  protein={logged.protein}
+                />
+              );
+            }
+            return (
+              <EmptyMealCard
+                key={slot}
+                slot={slot}
+                time={time}
+                familyMemberId={viewedMember?.id ?? null}
+                scopeLabel={viewedScopeLabel ?? undefined}
+              />
+            );
           })}
         </div>
       </section>
@@ -226,33 +314,30 @@ export default async function TodayPage() {
             {logs.map((log) => (
               <li
                 key={log.id}
-                className="flex items-center justify-between px-4 py-3 border-b border-ink-l/40 last:border-b-0"
+                className="flex items-center justify-between gap-3 px-4 py-3 border-b border-ink-l/40 last:border-b-0"
               >
-                <Body size="sm" className="text-ink">
+                <Body size="sm" className="text-ink flex-1 min-w-0">
                   {log.recipes?.name ?? log.custom_name ?? "untitled meal"}
                 </Body>
-                <Mono className="text-ink-3 text-[12px]">
+                <Mono className="text-ink-3 text-[12px] shrink-0">
                   {log.kcal ?? 0} kcal
                   {log.protein != null ? ` · ${log.protein}g protein` : ""}
                 </Mono>
+                <RemoveLogButton logId={log.id} />
               </li>
             ))}
           </ul>
         </section>
       ) : null}
 
-      {user ? (
-        <section>
-          <InsightSlot insight={insight} hoursOld={insightHoursOld} />
-        </section>
-      ) : (
+      {!user ? (
         <section className="border border-dashed border-ink-l rounded-card p-6">
           <Body size="sm" dim>
             You&apos;re viewing the demo Today screen unauthenticated. Configure
             Supabase + sign in to see your real targets and meals.
           </Body>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }

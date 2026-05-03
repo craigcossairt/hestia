@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, Label, Body, Btn, Mono } from "@/components/ds";
+import { Card, Label, Body, Btn, Mono, Select } from "@/components/ds";
 import { updateProfile, recomputeTargets } from "@/app/(app)/me/actions";
 import {
   updateMember,
@@ -105,15 +105,16 @@ export function ProfileSection({
       </Field>
 
       <Field label="sex">
-        <select
+        <Select<Sex>
           value={sex}
-          onChange={(e) => setSex(e.target.value as Sex)}
-          className="bg-transparent text-ink font-sans text-[14px] outline-none text-right capitalize"
-        >
-          <option value="male">male</option>
-          <option value="female">female</option>
-          <option value="other">other</option>
-        </select>
+          onChange={setSex}
+          ariaLabel="sex"
+          options={[
+            { value: "male", label: "Male" },
+            { value: "female", label: "Female" },
+            { value: "other", label: "Other" },
+          ]}
+        />
       </Field>
 
       <Field label="age">
@@ -132,31 +133,27 @@ export function ProfileSection({
       </Field>
 
       <Field label="activity">
-        <select
+        <Select<Activity>
           value={activity}
-          onChange={(e) => setActivity(e.target.value as Activity)}
-          className="bg-transparent text-ink font-sans text-[14px] outline-none text-right capitalize"
-        >
-          {ACTIVITIES.map((a) => (
-            <option key={a} value={a}>
-              {a.replace("_", " ")}
-            </option>
-          ))}
-        </select>
+          onChange={setActivity}
+          ariaLabel="activity"
+          options={ACTIVITIES.map((a) => ({
+            value: a,
+            label: a.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          }))}
+        />
       </Field>
 
       <Field label="goal">
-        <select
+        <Select<Goal>
           value={goal}
-          onChange={(e) => setGoal(e.target.value as Goal)}
-          className="bg-transparent text-ink font-sans text-[14px] outline-none text-right capitalize"
-        >
-          {GOALS.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
+          onChange={setGoal}
+          ariaLabel="goal"
+          options={GOALS.map((g) => ({
+            value: g,
+            label: g.replace(/\b\w/g, (c) => c.toUpperCase()),
+          }))}
+        />
       </Field>
 
       <div className="border-t border-ink-l/50 pt-4 flex flex-col gap-3">

@@ -13,3 +13,4 @@ export { Check } from "./check";
 export { FoodImage } from "./food-image";
 export { Dialog } from "./dialog";
 export { Drawer } from "./drawer";
+export { Select, type SelectOption } from "./select";

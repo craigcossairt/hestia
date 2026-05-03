@@ -82,7 +82,6 @@ export function DietSection({
       <Subsection
         title="Allergies"
         hint="Hard rules — Hestia will never suggest a recipe containing these."
-        accent="warn"
       >
         <div className="flex flex-wrap gap-2">
           {ALLERGENS.map((tag) => (
@@ -138,23 +137,15 @@ export function DietSection({
 function Subsection({
   title,
   hint,
-  accent,
   children,
 }: {
   title: string;
   hint: string;
-  accent?: "warn";
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 border-l-2 pl-4 border-ink-l">
-      <Mono
-        className={
-          accent === "warn"
-            ? "text-warn text-[10.5px] uppercase tracking-[1.4px]"
-            : "text-ink-3 text-[10.5px] uppercase tracking-[1.4px]"
-        }
-      >
+      <Mono className="text-ink-3 text-[10.5px] uppercase tracking-[1.4px]">
         {title}
       </Mono>
       <Body size="xs" dim>
