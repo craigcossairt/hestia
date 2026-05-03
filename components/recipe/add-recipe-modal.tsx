@@ -29,7 +29,7 @@ export function AddRecipeModal({ open, onClose }: AddRecipeModalProps) {
         <div className="flex items-center justify-between">
           <Label>add a recipe</Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
-            close
+            Close
           </button>
         </div>
         <H size="md" as="h2">
@@ -112,11 +112,11 @@ function AiMode({ onClose }: { onClose: () => void }) {
       />
       <div className="flex gap-2">
         <Btn variant="primary" onClick={generate} disabled={generating || prompt.length < 5}>
-          {generating ? "thinking…" : "generate"}
+          {generating ? "Thinking…" : "Generate"}
         </Btn>
         {recipe ? (
           <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "saving…" : "save to library"}
+            {pending ? "Saving…" : "Save to library"}
           </Btn>
         ) : null}
       </div>
@@ -177,13 +177,13 @@ function UrlMode({ onClose }: { onClose: () => void }) {
           className="flex-1 px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         />
         <Btn variant="primary" onClick={parse} disabled={fetching || !/^https?:\/\//.test(url)}>
-          {fetching ? "parsing…" : "fetch"}
+          {fetching ? "Parsing…" : "Fetch"}
         </Btn>
       </div>
       {recipe ? (
         <div className="flex gap-2">
           <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "saving…" : "save to library"}
+            {pending ? "Saving…" : "Save to library"}
           </Btn>
         </div>
       ) : null}
@@ -259,11 +259,11 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
       </Body>
       <div className="flex gap-2">
         <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={parsing}>
-          {parsing ? "reading…" : previewUrl ? "another photo" : "upload photo"}
+          {parsing ? "Reading…" : previewUrl ? "Another photo" : "Upload photo"}
         </Btn>
         {recipe ? (
           <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "saving…" : "save to library"}
+            {pending ? "Saving…" : "Save to library"}
           </Btn>
         ) : null}
       </div>
@@ -346,20 +346,20 @@ function ManualMode({ onClose }: { onClose: () => void }) {
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="recipe name"
+        placeholder="Recipe name"
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
       />
       <textarea
         value={ingredientsText}
         onChange={(e) => setIngredientsText(e.target.value)}
-        placeholder={"ingredients — one per line\n2 eggs\n1 cup spinach\n1 tbsp olive oil"}
+        placeholder={"Ingredients — one per line\n2 eggs\n1 cup spinach\n1 tbsp olive oil"}
         rows={5}
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
       />
       <textarea
         value={stepsText}
         onChange={(e) => setStepsText(e.target.value)}
-        placeholder={"steps — one per line\nHeat oil in pan\nAdd eggs and cook 2 min\nAdd spinach, fold"}
+        placeholder={"Steps — one per line\nHeat oil in pan\nAdd eggs and cook 2 min\nAdd spinach, fold"}
         rows={5}
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
       />
@@ -374,14 +374,14 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         <input
           value={protein}
           onChange={(e) => setProtein(e.target.value)}
-          placeholder="protein g"
+          placeholder="Protein (g)"
           inputMode="numeric"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent"
         />
         <input
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          placeholder="time min"
+          placeholder="Time (min)"
           inputMode="numeric"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent"
         />
@@ -389,7 +389,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       <div>
         <Btn variant="primary" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save to library"}
+          {pending ? "Saving…" : "Save to library"}
         </Btn>
       </div>
     </div>

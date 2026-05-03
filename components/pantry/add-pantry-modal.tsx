@@ -63,7 +63,7 @@ export function AddPantryModal({
         <div className="flex items-center justify-between">
           <Label>add to pantry</Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
-            close
+            Close
           </button>
         </div>
         <H size="md" as="h2">
@@ -165,7 +165,7 @@ function ManualMode({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="item name"
+          placeholder="Item name"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         />
         <input
@@ -206,6 +206,7 @@ function ManualMode({
             variant={location === l ? "fill" : "default"}
             interactive
             onClick={() => setLocation(l)}
+            className="capitalize"
           >
             {l}
           </Chip>
@@ -214,7 +215,7 @@ function ManualMode({
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       <div className="flex gap-2">
         <Btn variant="primary" onClick={() => save()} disabled={pending}>
-          {pending ? "saving…" : "add"}
+          {pending ? "Saving…" : "Add"}
         </Btn>
       </div>
       <div className="border-t border-ink-l/40 pt-3">
@@ -279,17 +280,17 @@ function BulkMode({ onSaved }: { onSaved: () => void }) {
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={"paste anything — receipts, brain dumps:\n2 doz eggs\n1 lb chicken\nyogurt × 4\nspinach\nolive oil"}
+        placeholder={"Paste anything — receipts, brain dumps:\n2 doz eggs\n1 lb chicken\nyogurt × 4\nspinach\nolive oil"}
         rows={6}
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
       />
       <div className="flex gap-2">
         <Btn variant="primary" onClick={parse} disabled={parsing || text.trim().length < 3}>
-          {parsing ? "parsing…" : "parse with hestia"}
+          {parsing ? "Parsing…" : "Parse with Hestia"}
         </Btn>
         {parsed ? (
           <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "adding…" : `add ${parsed.length} items`}
+            {pending ? "Adding…" : `Add ${parsed.length} items`}
           </Btn>
         ) : null}
       </div>
@@ -351,7 +352,7 @@ function ParsedItemsGrid({
               };
               setItems(next);
             }}
-            className="bg-transparent text-ink font-sans text-[12px] outline-none"
+            className="bg-transparent text-ink font-sans text-[12px] outline-none capitalize"
           >
             {(["pantry", "fridge", "freezer", "spices"] as const).map((l) => (
               <option key={l}>{l}</option>
@@ -454,11 +455,11 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
       />
       <div className="flex gap-2">
         <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={parsing}>
-          {parsing ? "reading…" : previewUrl ? "another receipt" : "upload receipt"}
+          {parsing ? "Reading…" : previewUrl ? "Another receipt" : "Upload receipt"}
         </Btn>
         {parsed ? (
           <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "adding…" : `add ${parsed.length} items`}
+            {pending ? "Adding…" : `Add ${parsed.length} items`}
           </Btn>
         ) : null}
       </div>
@@ -475,7 +476,7 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       {parsed ? (
         <>
-          <Mono className="text-ink-3 text-[11px]">tap any field to edit</Mono>
+          <Mono className="text-ink-3 text-[11px]">Tap any field to edit</Mono>
           <ParsedItemsGrid items={parsed} setItems={setParsed} />
         </>
       ) : null}

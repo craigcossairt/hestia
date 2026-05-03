@@ -76,7 +76,7 @@ export function RecipePicker({ open, onClose, date, slot }: RecipePickerProps) {
             {slot} · {new Date(date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           </Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
-            close
+            Close
           </button>
         </div>
         <H size="md" as="h2">
@@ -86,12 +86,12 @@ export function RecipePicker({ open, onClose, date, slot }: RecipePickerProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="search recipes…"
+          placeholder="Search recipes…"
           className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         />
         {loading ? (
           <Body size="sm" dim>
-            loading…
+            Loading…
           </Body>
         ) : null}
         {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
@@ -123,7 +123,7 @@ export function RecipePicker({ open, onClose, date, slot }: RecipePickerProps) {
         </div>
         <div className="flex justify-end pt-2">
           <Btn variant="ghost" size="sm" onClick={onClose}>
-            cancel
+            Cancel
           </Btn>
         </div>
       </div>

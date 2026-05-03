@@ -55,7 +55,7 @@ export function CoachChat() {
         {sending ? (
           <div className="flex items-center gap-2 px-1 py-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3 animate-pulse">
-              hestia is thinking…
+              Hestia is thinking…
             </span>
           </div>
         ) : null}
@@ -92,7 +92,7 @@ export function CoachChat() {
         <textarea
           name="prompt"
           rows={1}
-          placeholder="ask hestia anything…"
+          placeholder="Ask Hestia anything…"
           required
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -104,7 +104,7 @@ export function CoachChat() {
         />
         <Btn variant="primary" type="submit" disabled={sending}>
           <Send size={14} strokeWidth={1.5} />
-          send
+          Send
         </Btn>
       </form>
     </div>

@@ -28,7 +28,7 @@ export function InsightSlot({ insight, hoursOld }: InsightSlotProps) {
             onClick={() => askForOne(start, setError, router)}
             className="self-start text-ink-3 hover:text-ink font-mono text-[11px] uppercase tracking-wider px-2 py-1"
           >
-            {pending ? "thinking…" : "ask for a fresh one →"}
+            {pending ? "Thinking…" : "Ask for a fresh one →"}
           </button>
         ) : null}
         {error ? <Body size="xs" className="text-danger">{error}</Body> : null}
@@ -51,7 +51,7 @@ export function InsightSlot({ insight, hoursOld }: InsightSlotProps) {
           onClick={() => askForOne(start, setError, router)}
         >
           <Sparkles size={14} strokeWidth={1.5} />{" "}
-          {pending ? "asking hestia…" : "ask hestia"}
+          {pending ? "Asking Hestia…" : "Ask Hestia"}
         </Btn>
       </div>
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}

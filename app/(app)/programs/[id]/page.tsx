@@ -83,7 +83,7 @@ export default async function ProgramDetailPage({
                 }}
               >
                 <Btn variant="outline" type="submit">
-                  active · end program
+                  Active · end program
                 </Btn>
               </form>
             ) : (
@@ -94,12 +94,12 @@ export default async function ProgramDetailPage({
                 }}
               >
                 <Btn variant="primary" type="submit">
-                  activate program
+                  Activate program
                 </Btn>
               </form>
             )}
             <Link href="/programs">
-              <Btn variant="ghost">all programs</Btn>
+              <Btn variant="ghost">All programs</Btn>
             </Link>
           </div>
         </Card>

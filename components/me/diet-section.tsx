@@ -68,7 +68,7 @@ export function DietSection({
       </div>
       <div>
         <Btn variant="primary" size="sm" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save diet"}
+          {pending ? "Saving…" : "Save diet"}
         </Btn>
       </div>
     </Card>

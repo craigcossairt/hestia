@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 type FilterId = "under-30min" | "high-protein" | "vegetarian" | "pantry-ready";
 
 const FILTERS: Array<{ id: FilterId; label: string }> = [
-  { id: "under-30min", label: "under 30 min" },
-  { id: "high-protein", label: "high protein" },
-  { id: "vegetarian", label: "vegetarian" },
-  { id: "pantry-ready", label: "pantry-ready" },
+  { id: "under-30min", label: "Under 30 min" },
+  { id: "high-protein", label: "High protein" },
+  { id: "vegetarian", label: "Vegetarian" },
+  { id: "pantry-ready", label: "Pantry-ready" },
 ];
 
 interface RecipeRow {
@@ -103,7 +103,7 @@ export function LibraryControls({
         ))}
         {filters.size > 0 ? (
           <Chip variant="dim" interactive onClick={() => setFilters(new Set())}>
-            clear ×
+            Clear ×
           </Chip>
         ) : null}
       </div>
@@ -207,7 +207,7 @@ function SearchInput({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="search recipes…"
+        placeholder="Search recipes…"
         className="flex-1 pl-9 pr-20 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
       />
       <div className="absolute right-2 flex items-center gap-1">

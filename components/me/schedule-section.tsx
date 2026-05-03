@@ -60,7 +60,7 @@ export function ScheduleSection({ initial }: { initial: Schedule }) {
       ))}
       <div>
         <Btn variant="primary" size="sm" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save schedule"}
+          {pending ? "Saving…" : "Save schedule"}
         </Btn>
       </div>
     </Card>

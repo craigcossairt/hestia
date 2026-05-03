@@ -33,7 +33,7 @@ export function GenerateWeekButton() {
     <div className="flex items-center gap-3 flex-wrap">
       <Btn variant="primary" onClick={generate} disabled={pending}>
         <Sparkles size={14} strokeWidth={1.5} />
-        {pending ? "thinking…" : "generate this week's dinners"}
+        {pending ? "Thinking…" : "Generate this week's dinners"}
       </Btn>
       {status ? (
         <Body

@@ -60,6 +60,7 @@ export function PlannedMealCard({
                   ? "dim"
                   : "default"
             }
+            className="capitalize"
           >
             {status}
           </Chip>
@@ -86,7 +87,7 @@ export function PlannedMealCard({
                 })
               }
             >
-              <Check size={14} strokeWidth={2} /> mark eaten
+              <Check size={14} strokeWidth={2} /> Mark eaten
             </Btn>
             <Btn
               variant="ghost"
@@ -98,7 +99,7 @@ export function PlannedMealCard({
                 })
               }
             >
-              skip
+              Skip
             </Btn>
           </div>
         ) : null}
@@ -124,12 +125,12 @@ export function EmptyMealCard({
             {time ? ` · ${time}` : ""}
           </Label>
           <div className="text-ink-3 font-display text-[18px] italic mt-2">
-            nothing planned
+            Nothing planned
           </div>
         </div>
         <div className="flex gap-2 pt-2">
           <Btn variant="outline" size="sm" onClick={() => setOpen(true)}>
-            log a meal
+            Log a meal
           </Btn>
         </div>
       </Card>
@@ -148,7 +149,7 @@ export function LogAnythingButton() {
   return (
     <>
       <Btn variant="outline" onClick={() => setOpen(true)}>
-        + log a meal
+        + Log a meal
       </Btn>
       <LogMealModal open={open} onClose={() => setOpen(false)} />
     </>

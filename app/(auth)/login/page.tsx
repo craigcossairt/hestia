@@ -61,7 +61,7 @@ export default function LoginPage() {
               autoComplete="one-time-code"
               pattern="[0-9]{6,10}"
               maxLength={10}
-              placeholder="paste your code"
+              placeholder="Paste your code"
               className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[20px] tracking-[0.3em] text-center outline-none focus:border-accent transition-colors"
               autoFocus
             />
@@ -71,7 +71,7 @@ export default function LoginPage() {
               </Body>
             ) : null}
             <Btn variant="primary" type="submit" disabled={verifying} full>
-              {verifying ? "verifying…" : "sign in"}
+              {verifying ? "Verifying…" : "Sign in"}
             </Btn>
             <Body size="xs" dim className="text-center">
               Wrong email?{" "}
@@ -80,7 +80,7 @@ export default function LoginPage() {
                 onClick={() => window.location.reload()}
                 className="underline hover:text-ink"
               >
-                start over
+                Start over
               </button>
             </Body>
           </form>
@@ -101,7 +101,7 @@ export default function LoginPage() {
               </Body>
             ) : null}
             <Btn variant="primary" type="submit" disabled={sending} full>
-              {sending ? "sending…" : "send code"}
+              {sending ? "Sending…" : "Send code"}
             </Btn>
           </form>
         )}

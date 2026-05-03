@@ -39,7 +39,7 @@ export default async function FamilyPage() {
             portions, picky-eater pathways, and allergen checks.
           </Body>
           <Link href="/me">
-            <Btn variant="primary">add family on Me →</Btn>
+            <Btn variant="primary">Add family on Me →</Btn>
           </Link>
         </Card>
       ) : (

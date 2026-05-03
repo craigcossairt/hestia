@@ -21,7 +21,7 @@ export function LoadStarterButton() {
           })
         }
       >
-        {pending ? "loading…" : "load 12 starter recipes"}
+        {pending ? "Loading…" : "Load 12 starter recipes"}
       </Btn>
       {error ? (
         <Body size="sm" className="text-danger">

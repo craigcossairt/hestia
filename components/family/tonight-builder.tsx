@@ -75,7 +75,7 @@ export function TonightBuilder() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="search recipes…"
+          placeholder="Search recipes…"
           className="px-4 py-2.5 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         />
         <select
@@ -83,7 +83,7 @@ export function TonightBuilder() {
           onChange={(e) => setRecipeId(e.target.value)}
           className="px-3 py-2.5 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         >
-          <option value="">— pick a recipe —</option>
+          <option value="">— Pick a recipe —</option>
           {filtered.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}
@@ -97,7 +97,7 @@ export function TonightBuilder() {
             disabled={loading || !recipeId}
           >
             <Sparkles size={14} strokeWidth={1.5} />
-            {loading ? "thinking…" : "build tonight"}
+            {loading ? "Thinking…" : "Build tonight"}
           </Btn>
         </div>
         {error ? <Body size="sm" className="text-danger">{error}</Body> : null}

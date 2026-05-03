@@ -91,10 +91,10 @@ export function FamilySection({ initial }: { initial: FamilyMember[] }) {
 
       <div className="flex gap-2">
         <Btn variant="outline" size="sm" onClick={add}>
-          + add member
+          + Add member
         </Btn>
         <Btn variant="primary" size="sm" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save family"}
+          {pending ? "Saving…" : "Save family"}
         </Btn>
       </div>
     </Card>
@@ -116,7 +116,7 @@ function MemberRow({
         <input
           value={member.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="name"
+          placeholder="Name"
           className="flex-1 px-3 py-1.5 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
         />
         <input
@@ -136,7 +136,7 @@ function MemberRow({
               sex: (e.target.value || undefined) as FamilyMember["sex"],
             })
           }
-          className="px-2 py-1.5 rounded-thumb border border-ink-l bg-card text-ink-2 font-sans text-[12px] outline-none focus:border-accent"
+          className="px-2 py-1.5 rounded-thumb border border-ink-l bg-card text-ink-2 font-sans text-[12px] outline-none focus:border-accent capitalize"
         >
           <option value="">—</option>
           <option value="male">male</option>
@@ -210,7 +210,7 @@ function MemberRow({
       <input
         value={member.notes ?? ""}
         onChange={(e) => onUpdate({ notes: e.target.value || undefined })}
-        placeholder="notes (e.g. 'soccer practice tues/thurs', 'loves spicy')"
+        placeholder="Notes (e.g. 'soccer practice Tues/Thurs', 'loves spicy')"
         className="px-3 py-1.5 rounded-thumb border border-ink-l bg-card text-ink-2 font-sans text-[13px] outline-none focus:border-accent"
       />
     </div>

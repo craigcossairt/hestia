@@ -50,13 +50,13 @@ export function SundayPrepTimeline() {
           rows={2}
           value={request}
           onChange={(e) => setRequest(e.target.value)}
-          placeholder="optional: 'high-protein', 'no fish this week', 'use the chicken thighs'"
+          placeholder="Optional: 'high-protein', 'no fish this week', 'use the chicken thighs'"
           className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
         />
         <div>
           <Btn variant="primary" onClick={generate} disabled={loading}>
             <Sparkles size={14} strokeWidth={1.5} />
-            {loading ? "thinking…" : plan ? "regenerate" : "generate plan"}
+            {loading ? "Thinking…" : plan ? "Regenerate" : "Generate plan"}
           </Btn>
         </div>
         {error ? <Body size="sm" className="text-danger">{error}</Body> : null}

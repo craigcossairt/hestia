@@ -91,7 +91,7 @@ export function ProfileSection({ profile }: ProfileSectionProps) {
         <select
           value={sex}
           onChange={(e) => setSex(e.target.value as Sex)}
-          className="bg-transparent text-ink font-sans text-[14px] outline-none text-right"
+          className="bg-transparent text-ink font-sans text-[14px] outline-none text-right capitalize"
         >
           <option value="male">male</option>
           <option value="female">female</option>
@@ -157,10 +157,10 @@ export function ProfileSection({ profile }: ProfileSectionProps) {
 
       <div className="flex flex-wrap gap-2">
         <Btn variant="primary" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save profile"}
+          {pending ? "Saving…" : "Save profile"}
         </Btn>
         <Btn variant="outline" onClick={recompute} disabled={recomputing}>
-          {recomputing ? "recomputing…" : "recompute targets"}
+          {recomputing ? "Recomputing…" : "Recompute targets"}
         </Btn>
       </div>
     </Card>

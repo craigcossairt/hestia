@@ -53,8 +53,8 @@ export function AppearanceSection({
         </Body>
         <div className="flex gap-1 p-1 bg-paper-2 rounded-full">
           {[
-            { v: false, label: "light" },
-            { v: true, label: "dark" },
+            { v: false, label: "Light" },
+            { v: true, label: "Dark" },
           ].map((opt) => (
             <button
               key={opt.label}
@@ -96,7 +96,7 @@ export function AppearanceSection({
 
       <div>
         <Btn variant="primary" size="sm" onClick={save} disabled={pending}>
-          {pending ? "saving…" : "save appearance"}
+          {pending ? "Saving…" : "Save appearance"}
         </Btn>
       </div>
     </Card>

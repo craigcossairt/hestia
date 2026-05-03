@@ -58,7 +58,7 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
                 })
               }
             >
-              {pending ? "ending…" : "active · end"}
+              {pending ? "Ending…" : "Active · end"}
             </Btn>
           ) : (
             <Btn
@@ -71,12 +71,12 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
                 })
               }
             >
-              {pending ? "activating…" : "activate"}
+              {pending ? "Activating…" : "Activate"}
             </Btn>
           )}
           <Link href={`/programs/${program.id}`}>
             <Btn variant="ghost" size="sm">
-              learn more →
+              Learn more →
             </Btn>
           </Link>
         </div>

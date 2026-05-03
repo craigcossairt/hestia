@@ -52,7 +52,7 @@ export function SubstitutionDrawer({
         <div className="flex items-center justify-between">
           <Label>substitute</Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
-            close
+            Close
           </button>
         </div>
         <H size="md" as="h2">
@@ -65,7 +65,7 @@ export function SubstitutionDrawer({
 
         {options.length === 0 && !loading ? (
           <Btn variant="primary" onClick={fetchOptions}>
-            ask hestia
+            Ask Hestia
           </Btn>
         ) : null}
 

@@ -57,7 +57,7 @@ export function WeightSection({ currentKg, recent }: WeightSectionProps) {
         <span className="font-mono text-[12px] text-ink-3">lb</span>
         <div className="flex-1" />
         <Btn variant="primary" size="sm" onClick={save} disabled={pending}>
-          {pending ? "logging…" : "log weight"}
+          {pending ? "Logging…" : "Log weight"}
         </Btn>
       </div>
       {recent.length > 0 ? (

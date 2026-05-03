@@ -44,17 +44,17 @@ export default function DesignSystemPage() {
       <section className="flex flex-col gap-4">
         <Label>buttons</Label>
         <div className="flex flex-wrap gap-3 items-center">
-          <Btn variant="primary">start cooking →</Btn>
-          <Btn variant="outline">tell me more</Btn>
-          <Btn variant="ghost">dismiss</Btn>
+          <Btn variant="primary">Start cooking →</Btn>
+          <Btn variant="outline">Tell me more</Btn>
+          <Btn variant="ghost">Dismiss</Btn>
           <Btn variant="primary" size="sm">
-            small primary
+            Small primary
           </Btn>
           <Btn variant="outline" size="sm">
-            small outline
+            Small outline
           </Btn>
           <Btn variant="primary" disabled>
-            disabled
+            Disabled
           </Btn>
         </div>
       </section>

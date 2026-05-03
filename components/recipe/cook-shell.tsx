@@ -38,7 +38,7 @@ export function CookShell({ recipeId, recipeName, steps }: CookShellProps) {
       <main className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center">
         <H size="lg">No steps to cook.</H>
         <Link href={`/recipes/${recipeId}`}>
-          <Btn variant="primary">back to recipe</Btn>
+          <Btn variant="primary">Back to recipe</Btn>
         </Link>
       </main>
     );
@@ -54,12 +54,12 @@ export function CookShell({ recipeId, recipeName, steps }: CookShellProps) {
           className="flex items-center gap-2 text-ink-3 hover:text-ink"
         >
           <X size={18} strokeWidth={1.5} />
-          <span className="font-mono text-[11px] uppercase tracking-wider">close</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
         </Link>
         <div className="text-center">
           <Label>cook · {recipeName}</Label>
           <Mono className="text-ink text-[14px]">
-            step {i + 1} of {steps.length}
+            Step {i + 1} of {steps.length}
           </Mono>
         </div>
         <div className="w-12" />
@@ -101,12 +101,12 @@ export function CookShell({ recipeId, recipeName, steps }: CookShellProps) {
           onClick={() => setI(Math.max(0, i - 1))}
           disabled={i === 0}
         >
-          <ChevronLeft size={16} /> back
+          <ChevronLeft size={16} /> Back
         </Btn>
         {last ? (
           <Link href={`/recipes/${recipeId}`}>
             <Btn variant="primary" size="lg" full>
-              done
+              Done
             </Btn>
           </Link>
         ) : (
@@ -116,7 +116,7 @@ export function CookShell({ recipeId, recipeName, steps }: CookShellProps) {
             onClick={() => setI(Math.min(steps.length - 1, i + 1))}
             full
           >
-            next <ChevronRight size={16} />
+            Next <ChevronRight size={16} />
           </Btn>
         )}
       </footer>

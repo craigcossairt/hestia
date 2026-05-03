@@ -19,7 +19,7 @@ export function InsightCard({ id, body }: InsightCardProps) {
       </Body>
       <div className="flex gap-2">
         <Btn variant="outline" size="sm">
-          tell me more
+          Tell me more
         </Btn>
         <Btn
           variant="ghost"
@@ -27,7 +27,7 @@ export function InsightCard({ id, body }: InsightCardProps) {
           disabled={pending}
           onClick={() => start(() => dismissInsight(id))}
         >
-          {pending ? "…" : "dismiss"}
+          {pending ? "…" : "Dismiss"}
         </Btn>
       </div>
     </Card>

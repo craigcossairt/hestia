@@ -64,9 +64,9 @@ export function PantryItemCard({
           <Mono className="text-ink-3 text-[11px]">
             {qty} {unit}
           </Mono>
-          {f === "fresh" ? <Chip variant="success">fresh</Chip> : null}
-          {f === "use_soon" ? <Chip variant="warn">use soon</Chip> : null}
-          {f === "expired" ? <Chip variant="danger">expired</Chip> : null}
+          {f === "fresh" ? <Chip variant="success">Fresh</Chip> : null}
+          {f === "use_soon" ? <Chip variant="warn">Use soon</Chip> : null}
+          {f === "expired" ? <Chip variant="danger">Expired</Chip> : null}
         </div>
       </div>
     </Card>

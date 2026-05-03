@@ -34,7 +34,7 @@ export function LogMealModal({ open, onClose, defaultSlot }: LogMealModalProps) 
         <div className="flex items-center justify-between">
           <Label>log a meal</Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
-            close
+            Close
           </button>
         </div>
         <H size="md" as="h2">
@@ -131,11 +131,11 @@ function LibraryMode({
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="search recipes…"
+        placeholder="Search recipes…"
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
       />
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
-      {loading ? <Body size="sm" dim>loading…</Body> : null}
+      {loading ? <Body size="sm" dim>Loading…</Body> : null}
       {!loading && filtered.length === 0 ? (
         <Body size="sm" dim>
           No recipes. Add one from the Recipes tab first.
@@ -157,7 +157,7 @@ function LibraryMode({
                 {r.protein ? ` · ${r.protein}g protein` : ""}
               </Mono>
             </div>
-            <span className="text-ink-3">log</span>
+            <span className="text-ink-3">Log</span>
           </button>
         ))}
       </div>
@@ -207,7 +207,7 @@ function QuickMode({
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="what did you eat?"
+        placeholder="What did you eat?"
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
       />
       <div className="grid grid-cols-4 gap-2">
@@ -219,7 +219,7 @@ function QuickMode({
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       <div className="flex gap-2">
         <Btn variant="primary" onClick={save} disabled={pending}>
-          {pending ? "logging…" : "log it"}
+          {pending ? "Logging…" : "Log it"}
         </Btn>
       </div>
     </div>
@@ -270,7 +270,7 @@ function SlotPicker({
             type="button"
             onClick={() => onChange(slot === s ? null : s)}
             className={cn(
-              "px-3 py-1 rounded-full font-sans text-[11.5px] border transition-colors",
+              "px-3 py-1 rounded-full font-sans text-[11.5px] border transition-colors capitalize",
               slot === s
                 ? "bg-ink text-paper border-ink"
                 : "bg-transparent text-ink-2 border-ink-l hover:bg-paper-2",

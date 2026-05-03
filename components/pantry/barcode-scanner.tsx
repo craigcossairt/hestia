@@ -100,16 +100,16 @@ export function BarcodeScanner({ onResult }: BarcodeScannerProps) {
       {code ? (
         <Mono className="text-ink-3 text-[11px]">decoded: {code}</Mono>
       ) : null}
-      {looking ? <Body size="sm" dim>looking up…</Body> : null}
+      {looking ? <Body size="sm" dim>Looking up…</Body> : null}
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       <div className="flex gap-2">
         {scanning ? (
           <Btn variant="outline" onClick={() => setScanning(false)}>
-            stop
+            Stop
           </Btn>
         ) : (
           <Btn variant="primary" onClick={() => { setCode(null); setScanning(true); }}>
-            start camera
+            Start camera
           </Btn>
         )}
       </div>
