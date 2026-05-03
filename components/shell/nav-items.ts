@@ -10,7 +10,7 @@ export interface NavItem {
 export const PRIMARY_NAV: NavItem[] = [
   { href: "/today", label: "Today", icon: "home" },
   { href: "/plan", label: "Plan", icon: "calendar" },
-  { href: "/pantry", label: "Pantry", icon: "fridge" },
+  { href: "/inventory", label: "Inventory", icon: "fridge" },
   { href: "/shop", label: "Shop", icon: "cart" },
   { href: "/me", label: "Me", icon: "user" },
 ];
@@ -19,7 +19,7 @@ export const PRIMARY_NAV: NavItem[] = [
 export const SIDEBAR_PRIMARY_NAV: NavItem[] = [
   { href: "/today", label: "Today", icon: "home" },
   { href: "/plan", label: "Plan", icon: "calendar" },
-  { href: "/pantry", label: "Pantry", icon: "fridge" },
+  { href: "/inventory", label: "Inventory", icon: "fridge" },
   { href: "/shop", label: "Shop", icon: "cart" },
 ];
 

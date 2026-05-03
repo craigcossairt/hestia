@@ -7,7 +7,7 @@ export type Activity = "sedentary" | "light" | "moderate" | "active" | "very_act
 export type Goal = "lose" | "maintain" | "build" | "energy";
 export type PantryLocation = "pantry" | "fridge" | "freezer" | "spices";
 export type PantrySource = "manual" | "scan" | "receipt" | "bulk";
-export type Slot = "breakfast" | "lunch" | "dinner" | "snack";
+export type Slot = "breakfast" | "lunch" | "dinner" | "dessert" | "snack";
 export type PlanStatus = "planned" | "logged" | "skipped";
 export type AccentPreset = "charcoal" | "terracotta" | "forest" | "ink";
 

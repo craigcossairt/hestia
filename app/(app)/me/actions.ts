@@ -138,6 +138,22 @@ export async function updateAppearance(args: {
   revalidatePath("/me");
 }
 
+export async function updateCookingPrefs(args: {
+  auto_decrement_pantry?: boolean;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (args.auto_decrement_pantry !== undefined)
+    patch.auto_decrement_pantry = args.auto_decrement_pantry;
+  const { error } = await supabase
+    .from("profiles")
+    .update(patch)
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/me");
+  return { ok: true };
+}
+
 export async function updateFamily(
   members: Array<{
     id: string;

@@ -17,7 +17,7 @@ export default async function CoachPage() {
         </H>
         <Body size="lg" dim>
           A calm, evidence-based thinking partner that knows your targets,
-          recent meals, and pantry.
+          recent meals, and inventory.
         </Body>
       </header>
 

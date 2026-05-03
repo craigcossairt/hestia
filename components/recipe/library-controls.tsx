@@ -12,7 +12,7 @@ const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "under-30min", label: "Under 30 min" },
   { id: "high-protein", label: "High protein" },
   { id: "vegetarian", label: "Vegetarian" },
-  { id: "pantry-ready", label: "Pantry-ready" },
+  { id: "pantry-ready", label: "In stock" },
 ];
 
 interface RecipeRow {

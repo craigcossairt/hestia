@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { decrementInventoryFromIngredients } from "@/app/(app)/inventory/actions";
 import type { Slot } from "@/lib/types/database";
 
 async function getUserOrRedirect() {
@@ -20,7 +21,9 @@ export async function logPlannedMeal(planEntryId: string) {
 
   const { data: entry } = await supabase
     .from("meal_plan_entries")
-    .select("id, slot, recipe_id, recipes:recipe_id(name, kcal, protein, carbs, fat)")
+    .select(
+      "id, slot, recipe_id, recipes:recipe_id(name, kcal, protein, carbs, fat, ingredients_json)",
+    )
     .eq("id", planEntryId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -35,6 +38,7 @@ export async function logPlannedMeal(planEntryId: string) {
     protein: number | null;
     carbs: number | null;
     fat: number | null;
+    ingredients_json: Array<{ name: string; qty: number; unit: string }> | null;
   } | null;
 
   const [{ error: planErr }, { error: logErr }] = await Promise.all([
@@ -59,6 +63,21 @@ export async function logPlannedMeal(planEntryId: string) {
     return { error: planErr?.message ?? logErr?.message ?? "Failed to log." };
   }
 
+  // Best-effort inventory decrement when the user has opted in. Non-blocking
+  // — a failure here doesn't undo the log.
+  const { data: prefs } = await supabase
+    .from("profiles")
+    .select("auto_decrement_pantry")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (prefs?.auto_decrement_pantry && recipe?.ingredients_json?.length) {
+    try {
+      await decrementInventoryFromIngredients(recipe.ingredients_json);
+    } catch (err) {
+      console.warn("auto-decrement skipped:", (err as Error).message);
+    }
+  }
+
   revalidatePath("/today");
   revalidatePath("/plan");
 }
@@ -76,12 +95,14 @@ export async function skipPlannedMeal(planEntryId: string) {
 
 // Log an ad-hoc meal not tied to the plan. The slot (if provided) is now
 // stored on the log itself, so the Today slot card picks it up directly even
-// without a plan entry.
+// without a plan entry. logged_at can be overridden so users can log meals
+// after-the-fact at the right time (defaults to now).
 export async function logCustomMeal(payload: {
   recipe_id?: string | null;
   custom_name?: string | null;
   slot?: Slot | null;
   family_member_id?: string | null;
+  logged_at?: string | null;
   kcal: number;
   protein: number;
   carbs: number;
@@ -98,7 +119,7 @@ export async function logCustomMeal(payload: {
     custom_name: payload.custom_name ?? null,
     slot: payload.slot ?? null,
     family_member_id: payload.family_member_id ?? null,
-    logged_at: new Date().toISOString(),
+    logged_at: payload.logged_at ?? new Date().toISOString(),
     kcal: payload.kcal,
     protein: payload.protein,
     carbs: payload.carbs,
@@ -109,12 +130,12 @@ export async function logCustomMeal(payload: {
   // Mark the plan entry (if any) as logged so /plan reflects adherence.
   // Self-only — member views don't touch the household plan.
   if (payload.slot && !payload.family_member_id) {
-    const today = new Date().toISOString().slice(0, 10);
+    const date = (payload.logged_at ?? new Date().toISOString()).slice(0, 10);
     await supabase
       .from("meal_plan_entries")
       .update({ status: "logged" })
       .eq("user_id", user.id)
-      .eq("date", today)
+      .eq("date", date)
       .eq("slot", payload.slot);
   }
 

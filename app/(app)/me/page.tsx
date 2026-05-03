@@ -8,6 +8,7 @@ import { DietSection } from "@/components/me/diet-section";
 import { HealthSection } from "@/components/me/health-section";
 import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
+import { CookingSection } from "@/components/me/cooking-section";
 import { WeightSection } from "@/components/me/weight-section";
 import type { AccentPreset } from "@/lib/types/database";
 
@@ -19,7 +20,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, onboarded_at",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -109,6 +110,8 @@ export default async function MePage() {
         initialAccent={(profile.accent_preset as AccentPreset) ?? "charcoal"}
         initialDark={profile.dark_mode ?? false}
       />
+
+      <CookingSection initialAutoDecrement={profile.auto_decrement_pantry ?? false} />
 
       <Card className="p-6 flex flex-col gap-3">
         <Label accent>account</Label>

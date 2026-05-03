@@ -45,7 +45,7 @@ export function CoachChat() {
             </div>
             <Body size="sm" dim>
               Hestia knows your targets, recent meals, and what&apos;s in your
-              pantry. Ask anything food-related.
+              inventory. Ask anything food-related.
             </Body>
           </Card>
         ) : (

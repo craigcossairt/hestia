@@ -12,11 +12,13 @@ import {
   Chip,
 } from "@/components/ds";
 import {
+  addOrIncrementPantryItem,
   addPantryItem,
   bulkAddPantryItems,
-} from "@/app/(app)/pantry/actions";
+} from "@/app/(app)/inventory/actions";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
+import { QUICK_ADDS } from "@/lib/inventory/quick-adds";
 import type { PantryLocation } from "@/lib/types/database";
 
 type Mode = "manual" | "bulk" | "barcode" | "receipt";
@@ -26,21 +28,6 @@ const MODES: { id: Mode; label: string }[] = [
   { id: "bulk", label: "Bulk paste" },
   { id: "barcode", label: "Barcode" },
   { id: "receipt", label: "Receipt" },
-];
-
-const QUICK_ADDS = [
-  "eggs",
-  "milk",
-  "bread",
-  "chicken",
-  "rice",
-  "olive oil",
-  "garlic",
-  "onion",
-  "pasta",
-  "spinach",
-  "yogurt",
-  "salt",
 ];
 
 interface AddPantryModalProps {
@@ -61,7 +48,7 @@ export function AddPantryModal({
     <Dialog open={open} onClose={onClose} size="lg">
       <div className="p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between">
-          <Label>add to pantry</Label>
+          <Label accent>add to inventory</Label>
           <button onClick={onClose} className="text-ink-3 hover:text-ink text-[13px]">
             Close
           </button>
@@ -137,9 +124,9 @@ function ManualMode({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function save(itemName?: string) {
+  function save() {
     setError(null);
-    const finalName = (itemName ?? name).trim();
+    const finalName = name.trim();
     if (!finalName) {
       setError("Name required.");
       return;
@@ -153,9 +140,25 @@ function ManualMode({
       });
       if (result?.error) setError(result.error);
       else {
-        if (!itemName) setName("");
+        setName("");
         onSaved();
       }
+    });
+  }
+
+  // Quick-add presets carry their own smart unit/qty defaults; the location
+  // sticks to whatever tab the user is on.
+  function quickAdd(preset: { name: string; qty: number; unit: string }) {
+    setError(null);
+    start(async () => {
+      const result = await addOrIncrementPantryItem({
+        name: preset.name,
+        qty: preset.qty,
+        unit: preset.unit,
+        location,
+      });
+      if (result?.error) setError(result.error);
+      else onSaved();
     });
   }
 
@@ -214,16 +217,28 @@ function ManualMode({
       </div>
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
       <div className="flex gap-2">
-        <Btn variant="primary" onClick={() => save()} disabled={pending}>
+        <Btn variant="primary" onClick={save} disabled={pending}>
           {pending ? "Saving…" : "Add"}
         </Btn>
       </div>
       <div className="border-t border-ink-l/40 pt-3">
-        <Label>quick add</Label>
+        <div className="flex items-baseline justify-between">
+          <Label>quick add</Label>
+          <Mono className="text-ink-3 text-[10px]">→ {location}</Mono>
+        </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
           {QUICK_ADDS.map((q) => (
-            <Chip key={q} variant="default" interactive onClick={() => save(q)}>
-              + {q}
+            <Chip
+              key={q.name}
+              variant="default"
+              interactive
+              onClick={() => quickAdd(q)}
+              title={`Adds ${q.qty} ${q.unit} → ${location}`}
+            >
+              + {q.name}{" "}
+              <span className="text-ink-3 ml-0.5">
+                {q.qty} {q.unit}
+              </span>
             </Chip>
           ))}
         </div>

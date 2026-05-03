@@ -51,7 +51,7 @@ export function IngredientList({
                   {ing.name}
                 </Body>
                 {inPantry ? (
-                  <Chip variant="success">In pantry</Chip>
+                  <Chip variant="success">In stock</Chip>
                 ) : (
                   <Chip variant="dim">Need</Chip>
                 )}

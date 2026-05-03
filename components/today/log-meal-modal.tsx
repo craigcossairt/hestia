@@ -110,6 +110,7 @@ function LibraryMode({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [slot, setSlot] = useState<Slot | null>(defaultSlot);
+  const [time, setTime] = useState<string>(nowHHmm());
 
   useEffect(() => {
     let active = true;
@@ -143,6 +144,7 @@ function LibraryMode({
         recipe_id: r.id,
         slot,
         family_member_id: familyMemberId,
+        logged_at: composeLoggedAt(time),
         kcal: r.kcal ?? 0,
         protein: r.protein ?? 0,
         carbs: r.carbs ?? 0,
@@ -156,6 +158,7 @@ function LibraryMode({
   return (
     <div className="flex flex-col gap-3">
       <SlotPicker slot={slot} onChange={setSlot} />
+      <TimePicker time={time} onChange={setTime} />
       <input
         type="text"
         value={query}
@@ -209,6 +212,7 @@ function QuickMode({
   const [carbs, setCarbs] = useState("");
   const [fat, setFat] = useState("");
   const [slot, setSlot] = useState<Slot | null>(defaultSlot);
+  const [time, setTime] = useState<string>(nowHHmm());
   const [pending, start] = useTransition();
   const [estimating, setEstimating] = useState(false);
   const [estimateBasis, setEstimateBasis] = useState<string | null>(null);
@@ -280,6 +284,7 @@ function QuickMode({
         custom_name: name.trim(),
         slot,
         family_member_id: familyMemberId,
+        logged_at: composeLoggedAt(time),
         kcal: nKcal || 0,
         protein: nProtein || 0,
         carbs: nCarbs || 0,
@@ -293,6 +298,7 @@ function QuickMode({
   return (
     <div className="flex flex-col gap-3">
       <SlotPicker slot={slot} onChange={setSlot} />
+      <TimePicker time={time} onChange={setTime} />
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -364,7 +370,7 @@ function NumInput({
   );
 }
 
-const SLOTS: Slot[] = ["breakfast", "lunch", "dinner", "snack"];
+const SLOTS: Slot[] = ["breakfast", "lunch", "dinner", "dessert", "snack"];
 
 function SlotPicker({
   slot,
@@ -374,9 +380,9 @@ function SlotPicker({
   onChange: (s: Slot | null) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <Label>slot</Label>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         {SLOTS.map((s) => (
           <button
             key={s}
@@ -395,4 +401,42 @@ function SlotPicker({
       </div>
     </div>
   );
+}
+
+function TimePicker({
+  time,
+  onChange,
+}: {
+  time: string;
+  onChange: (t: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label>time</Label>
+      <input
+        type="time"
+        value={time}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-card text-ink font-mono text-[13px] outline-none px-2.5 py-1 rounded-thumb border border-ink-l focus:border-accent"
+      />
+      <Body size="xs" dim>
+        Defaults to now.
+      </Body>
+    </div>
+  );
+}
+
+// Combine the user-selected slot/time into the timestamp the log row stores.
+// Time is HH:mm; we slap today's date on it.
+function composeLoggedAt(time: string): string {
+  if (!time) return new Date().toISOString();
+  const today = new Date();
+  const [h, m] = time.split(":").map(Number);
+  today.setHours(h ?? 0, m ?? 0, 0, 0);
+  return today.toISOString();
+}
+
+function nowHHmm(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
