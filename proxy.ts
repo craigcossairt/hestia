@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_PATHS = ["/", "/login", "/auth"];
+const PUBLIC_PATHS = ["/", "/login", "/auth", "/icon", "/apple-icon"];
 const DEV_PATHS = ["/dev"];
 
 function isPublic(pathname: string): boolean {
