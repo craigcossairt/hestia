@@ -2,15 +2,33 @@
 
 import { useActionState } from "react";
 import { Btn, Body, H, Label, Card } from "@/components/ds";
-import { sendMagicLink } from "./actions";
+import { sendOtp, verifyOtp } from "./actions";
 
-type State = { sent?: boolean; email?: string; error?: string } | null;
+type State =
+  | { step: "email"; error?: string }
+  | { step: "code"; email: string; error?: string }
+  | null;
 
 export default function LoginPage() {
-  const [state, formAction, pending] = useActionState<State, FormData>(
-    sendMagicLink,
+  const [emailState, sendAction, sending] = useActionState<State, FormData>(
+    sendOtp,
     null,
   );
+  const [codeState, verifyAction, verifying] = useActionState<State, FormData>(
+    verifyOtp,
+    null,
+  );
+
+  // Once we've successfully sent a code, switch to the verify step.
+  // codeState wins if user is already attempting verification.
+  const state: State =
+    codeState && codeState.step === "code"
+      ? codeState
+      : emailState && emailState.step === "code"
+        ? emailState
+        : emailState;
+
+  const onCodeStep = state?.step === "code";
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
@@ -20,21 +38,48 @@ export default function LoginPage() {
           <H size="xl" as="h1">
             Hestia
           </H>
-          <Body dim>Sign in with a magic link — no password needed.</Body>
+          <Body dim>
+            {onCodeStep
+              ? `We sent a code to ${state.email}.`
+              : "Sign in with a one-time code emailed to you."}
+          </Body>
         </div>
 
-        {state?.sent ? (
-          <div className="flex flex-col gap-3 items-center text-center">
-            <Label accent>check your inbox</Label>
-            <Body>
-              We sent a sign-in link to <span className="text-ink">{state.email}</span>.
+        {onCodeStep ? (
+          <form action={verifyAction} className="flex flex-col gap-3">
+            <input type="hidden" name="email" value={state.email} />
+            <input
+              type="text"
+              name="token"
+              required
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="123456"
+              className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[20px] tracking-[0.4em] text-center outline-none focus:border-accent transition-colors"
+              autoFocus
+            />
+            {state.error ? (
+              <Body size="sm" className="text-danger">
+                {state.error}
+              </Body>
+            ) : null}
+            <Btn variant="primary" type="submit" disabled={verifying} full>
+              {verifying ? "verifying…" : "sign in"}
+            </Btn>
+            <Body size="xs" dim className="text-center">
+              Wrong email?{" "}
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="underline hover:text-ink"
+              >
+                start over
+              </button>
             </Body>
-            <Body size="sm" dim>
-              Click the link to come back here, signed in.
-            </Body>
-          </div>
+          </form>
         ) : (
-          <form action={formAction} className="flex flex-col gap-3">
+          <form action={sendAction} className="flex flex-col gap-3">
             <input
               type="email"
               name="email"
@@ -42,14 +87,15 @@ export default function LoginPage() {
               autoComplete="email"
               placeholder="you@example.com"
               className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent transition-colors"
+              autoFocus
             />
             {state?.error ? (
               <Body size="sm" className="text-danger">
                 {state.error}
               </Body>
             ) : null}
-            <Btn variant="primary" type="submit" disabled={pending} full>
-              {pending ? "sending…" : "send magic link"}
+            <Btn variant="primary" type="submit" disabled={sending} full>
+              {sending ? "sending…" : "send code"}
             </Btn>
           </form>
         )}
