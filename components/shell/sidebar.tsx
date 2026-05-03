@@ -54,8 +54,8 @@ export function Sidebar({ user, initialDark }: SidebarProps) {
           <Image
             src="/logos/wordmark.png"
             alt="Hestia"
-            width={504}
-            height={212}
+            width={408}
+            height={119}
             priority
             className="h-9 w-auto group-hover:opacity-80 transition-opacity"
           />

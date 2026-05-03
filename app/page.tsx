@@ -9,10 +9,10 @@ export default function HomePage() {
         <Image
           src="/logos/full.png"
           alt="Hestia"
-          width={1000}
-          height={1000}
+          width={565}
+          height={565}
           priority
-          className="h-44 w-auto"
+          className="h-40 w-auto"
         />
         <Body size="lg">
           A calm meal planner that pairs daily nutrition targets with an AI

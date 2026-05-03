@@ -1,15 +1,13 @@
 // One-shot logo processor.
-//   1. Trim Hestia Wordmark.png from 1:1 to its actual content (middle band)
-//      so it scales nicely in the sidebar.
-//   2. Generate favicon-sized PNGs from Hestia H-Only Logo.png and write
-//      them to public/ (favicon.ico is a PNG-as-ico — modern browsers
-//      accept that format).
+//   - Wordmark: source is already a tight rectangle (~408×119 in the
+//     current asset). Just downscale + optimise for serving.
+//   - H-Only: trim residual whitespace, generate icons + favicon.
+//   - Full Logo: downscale for serving on landing/login.
 //
-// Run once: `node scripts/process-logos.mjs`. Re-run any time the source
-// logos change.
+// Run: `node scripts/process-logos.mjs`. Re-run any time source assets change.
 
 import sharp from "sharp";
-import { mkdir, copyFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -21,41 +19,42 @@ const APP = path.join(ROOT, "app");
 async function main() {
   await mkdir(PUBLIC_LOGOS, { recursive: true });
 
-  // 1. Trim the wordmark to its actual content band.
-  // The source is 1000x1000 with the wordmark text occupying roughly the
-  // middle 40% vertically. Extract that band so the displayed image has a
-  // sensible aspect ratio (≈ 1000 × 400 → 5:2).
+  // ─── Wordmark ─────────────────────────────────────────────────────
+  // Source is already a tight rectangular crop — just trim any residual
+  // pixel-level whitespace and downscale for serving.
   const wordmarkSrc = path.join(LOGOS_SRC, "Hestia Wordmark.png");
   const wordmarkMeta = await sharp(wordmarkSrc).metadata();
-  const w = wordmarkMeta.width ?? 1000;
-  const h = wordmarkMeta.height ?? 1000;
-  const bandHeight = Math.round(h * 0.42);
-  const top = Math.round((h - bandHeight) / 2);
-  await sharp(wordmarkSrc)
-    .extract({ left: 0, top, width: w, height: bandHeight })
-    .resize({ width: 800, withoutEnlargement: true })
+  const wmTrimmed = await sharp(wordmarkSrc)
+    .trim({ background: "white", threshold: 10 })
+    .toBuffer();
+  const wmTrimmedMeta = await sharp(wmTrimmed).metadata();
+  const targetWidth = Math.min(800, wmTrimmedMeta.width ?? 800);
+  await sharp(wmTrimmed)
+    .resize({ width: targetWidth, withoutEnlargement: true })
     .png({ compressionLevel: 9, palette: true })
     .toFile(path.join(PUBLIC_LOGOS, "wordmark.png"));
-  console.log(`✓ wordmark.png trimmed to ${w}×${bandHeight}`);
+  console.log(
+    `✓ wordmark.png ${wordmarkMeta.width}×${wordmarkMeta.height} → ${wmTrimmedMeta.width}×${wmTrimmedMeta.height} → public/logos`,
+  );
 
-  // 2. Copy + downscale the full and h-only versions for serving.
+  // ─── H-Only ───────────────────────────────────────────────────────
   const hSrc = path.join(LOGOS_SRC, "Hestia H-Only Logo.png");
-  const fullSrc = path.join(LOGOS_SRC, "Hestia Logo.png");
-
   await sharp(hSrc)
     .resize({ width: 512, withoutEnlargement: true })
     .png({ compressionLevel: 9 })
     .toFile(path.join(PUBLIC_LOGOS, "h-mark.png"));
-  console.log(`✓ h-mark.png 512×512`);
+  console.log(`✓ h-mark.png → public/logos`);
 
+  // ─── Full Logo ────────────────────────────────────────────────────
+  const fullSrc = path.join(LOGOS_SRC, "Hestia Logo.png");
   await sharp(fullSrc)
     .resize({ width: 800, withoutEnlargement: true })
     .png({ compressionLevel: 9 })
     .toFile(path.join(PUBLIC_LOGOS, "full.png"));
-  console.log(`✓ full.png 800×800`);
+  console.log(`✓ full.png → public/logos`);
 
-  // 3. Generate Next.js icon.png + apple-icon.png from the H-only logo.
-  // Trim the surrounding whitespace first so the H fills the icon.
+  // ─── App icons + favicon (from H-Only) ───────────────────────────
+  // Trim residual whitespace so the H fills the icon at fixed sizes.
   const trimmed = await sharp(hSrc)
     .trim({ background: "white", threshold: 10 })
     .toBuffer();

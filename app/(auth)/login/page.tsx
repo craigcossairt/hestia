@@ -38,10 +38,10 @@ export default function LoginPage() {
           <Image
             src="/logos/full.png"
             alt="Hestia"
-            width={1000}
-            height={1000}
+            width={565}
+            height={565}
             priority
-            className="h-32 w-auto -mt-2"
+            className="h-28 w-auto"
           />
           <Body dim>
             {onCodeStep
