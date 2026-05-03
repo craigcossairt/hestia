@@ -35,6 +35,13 @@ export const metadata: Metadata = {
     title: "Hestia",
     statusBarStyle: "default",
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/icon.png", type: "image/png", sizes: "256x256" },
+    ],
+    apple: { url: "/apple-icon.png", sizes: "180x180" },
+  },
   formatDetection: { telephone: false },
 };
 

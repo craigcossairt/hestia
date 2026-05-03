@@ -63,7 +63,27 @@
   --color-ink-l: #3a362e;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.5);
+  /* Default charcoal accent inverts to paper in dark mode so it sits as the
+     bright element against the dark surface — same visual weight as in light. */
+  --color-accent: #f6f3ec;
+  --color-accent-tint: rgba(246, 243, 236, 0.10);
   color-scheme: dark;
+}
+
+/* Lift the colored accent presets in dark mode so they keep enough contrast
+   against the dark paper surface. Source colors are dark-saturated for light
+   backgrounds; we shift to lighter, slightly less saturated tones. */
+:root.dark[data-accent="terracotta"] {
+  --color-accent: #e08163;
+  --color-accent-tint: rgba(224, 129, 99, 0.14);
+}
+:root.dark[data-accent="forest"] {
+  --color-accent: #a3d169;
+  --color-accent-tint: rgba(163, 209, 105, 0.14);
+}
+:root.dark[data-accent="ink"] {
+  --color-accent: #8aa9f0;
+  --color-accent-tint: rgba(138, 169, 240, 0.14);
 }
 
 :root {

@@ -9,7 +9,7 @@
 //
 // Cache name is versioned so a deploy invalidates everything.
 
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `hestia-static-${VERSION}`;
 const PAGES_CACHE = `hestia-pages-${VERSION}`;
 

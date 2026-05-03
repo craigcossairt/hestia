@@ -31,14 +31,14 @@ export function Sidebar() {
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 px-4 py-6 bg-paper-2 border-r border-ink-l">
-      <Link href="/today" className="flex items-center px-1 mb-6 group" aria-label="Hestia home">
+      <Link href="/today" className="flex items-center px-1 mb-8 group" aria-label="Hestia home">
         <Image
           src="/logos/wordmark.png"
           alt="Hestia"
-          width={500}
-          height={500}
+          width={504}
+          height={212}
           priority
-          className="h-14 w-auto -my-2 group-hover:opacity-80 transition-opacity"
+          className="h-9 w-auto group-hover:opacity-80 transition-opacity"
         />
       </Link>
 
