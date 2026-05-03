@@ -1,15 +1,15 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { H, Body, Btn, Label, Card, Mono } from "@/components/ds";
 import { signOut } from "@/app/(auth)/login/actions";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { ProfileSection } from "@/components/me/profile-section";
 import { DietSection } from "@/components/me/diet-section";
+import { HealthSection } from "@/components/me/health-section";
 import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
 import { WeightSection } from "@/components/me/weight-section";
-import { FamilySection } from "@/components/me/family-section";
 import type { AccentPreset } from "@/lib/types/database";
-import type { FamilyMember } from "@/lib/family";
 
 export default async function MePage() {
   const supabase = isSupabaseConfigured() ? await createClient() : null;
@@ -19,25 +19,23 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, schedule_json, accent_preset, dark_mode, onboarded_at, family_json",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, onboarded_at",
     )
     .eq("id", user.id)
     .maybeSingle();
 
-  const family =
-    (profile?.family_json as FamilyMember[] | null | undefined) ?? [];
-
   if (!profile?.onboarded_at) redirect("/onboard");
 
-  // Best-effort: weight_logs table may not exist yet if migration 0002 hasn't
-  // been run. Tolerate the failure — the WeightSection still renders for
-  // logging, just without the recent list.
+  // Best-effort: weight_logs table may not exist yet if migrations haven't been
+  // run. Tolerate the failure — the WeightSection still renders for logging,
+  // just without the recent list. Self-only logs (family_member_id is null).
   let recentWeights: Array<{ id: string; value_kg: number; logged_at: string }> = [];
   try {
     const { data } = await supabase
       .from("weight_logs")
       .select("id, value_kg, logged_at")
       .eq("user_id", user.id)
+      .is("family_member_id", null)
       .order("logged_at", { ascending: false })
       .limit(5);
     recentWeights = data ?? [];
@@ -60,7 +58,14 @@ export default async function MePage() {
         </H>
         <Body size="lg" dim>
           Edit anything below — Hestia uses it to compute targets and generate
-          recipes.
+          recipes. Manage household members on{" "}
+          <Link
+            href="/family"
+            className="text-accent underline underline-offset-2"
+          >
+            Family
+          </Link>
+          .
         </Body>
       </header>
 
@@ -82,9 +87,15 @@ export default async function MePage() {
 
       <WeightSection currentKg={profile.weight_kg} recent={recentWeights} />
 
-      <FamilySection initial={family} />
+      <DietSection
+        initial={{
+          dietary_restrictions: profile.dietary_restrictions ?? [],
+          allergies: profile.allergies ?? [],
+          disliked_foods: profile.disliked_foods ?? [],
+        }}
+      />
 
-      <DietSection initial={profile.dietary_restrictions ?? []} />
+      <HealthSection initial={profile.medical_conditions ?? []} />
 
       <ScheduleSection
         initial={{

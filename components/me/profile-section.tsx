@@ -3,10 +3,17 @@
 import { useState, useTransition } from "react";
 import { Card, Label, Body, Btn, Mono } from "@/components/ds";
 import { updateProfile, recomputeTargets } from "@/app/(app)/me/actions";
+import {
+  updateMember,
+  recomputeMemberTargets,
+} from "@/app/(app)/family/[id]/actions";
 import { cmToFtIn, ftInToCm, kgToLb, lbToKg } from "@/lib/units";
 import type { Activity, Goal, Sex } from "@/lib/types/database";
 
+export type EditScope = { kind: "user" } | { kind: "member"; memberId: string };
+
 interface ProfileSectionProps {
+  scope?: EditScope;
   profile: {
     name: string | null;
     sex: Sex | null;
@@ -25,7 +32,10 @@ interface ProfileSectionProps {
 const ACTIVITIES: Activity[] = ["sedentary", "light", "moderate", "active", "very_active"];
 const GOALS: Goal[] = ["lose", "maintain", "build", "energy"];
 
-export function ProfileSection({ profile }: ProfileSectionProps) {
+export function ProfileSection({
+  profile,
+  scope = { kind: "user" },
+}: ProfileSectionProps) {
   const ft = profile.height_cm ? cmToFtIn(profile.height_cm).ft : 5;
   const inches = profile.height_cm ? cmToFtIn(profile.height_cm).in : 10;
   const lb = profile.weight_kg ? kgToLb(profile.weight_kg) : 165;
@@ -46,7 +56,7 @@ export function ProfileSection({ profile }: ProfileSectionProps) {
   function save() {
     setStatus(null);
     start(async () => {
-      const result = await updateProfile({
+      const patch = {
         name: name.trim(),
         sex,
         age,
@@ -54,7 +64,11 @@ export function ProfileSection({ profile }: ProfileSectionProps) {
         weight_kg: lbToKg(weightLb),
         activity,
         goal,
-      });
+      };
+      const result =
+        scope.kind === "user"
+          ? await updateProfile(patch)
+          : await updateMember(scope.memberId, patch);
       setStatus(result?.error ? `Error: ${result.error}` : "Saved.");
     });
   }
@@ -62,7 +76,10 @@ export function ProfileSection({ profile }: ProfileSectionProps) {
   function recompute() {
     setStatus(null);
     startRecompute(async () => {
-      const result = await recomputeTargets();
+      const result =
+        scope.kind === "user"
+          ? await recomputeTargets()
+          : await recomputeMemberTargets(scope.memberId);
       if (result?.error) setStatus(`Error: ${result.error}`);
       else setStatus("Targets recomputed.");
     });

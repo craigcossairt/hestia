@@ -3,14 +3,21 @@
 import { useState, useTransition } from "react";
 import { Card, Label, Body, Btn, Mono } from "@/components/ds";
 import { logWeight } from "@/app/(app)/me/actions";
+import { logMemberWeight } from "@/app/(app)/family/[id]/actions";
 import { kgToLb, lbToKg } from "@/lib/units";
+import type { EditScope } from "@/components/me/profile-section";
 
 interface WeightSectionProps {
+  scope?: EditScope;
   currentKg: number | null;
   recent: Array<{ id: string; value_kg: number; logged_at: string }>;
 }
 
-export function WeightSection({ currentKg, recent }: WeightSectionProps) {
+export function WeightSection({
+  currentKg,
+  recent,
+  scope = { kind: "user" },
+}: WeightSectionProps) {
   const currentLb = currentKg ? kgToLb(currentKg) : null;
   const [lb, setLb] = useState<string>(currentLb ? String(currentLb) : "");
   const [pending, start] = useTransition();
@@ -24,7 +31,10 @@ export function WeightSection({ currentKg, recent }: WeightSectionProps) {
       return;
     }
     start(async () => {
-      const result = await logWeight(lbToKg(n));
+      const result =
+        scope.kind === "user"
+          ? await logWeight(lbToKg(n))
+          : await logMemberWeight(scope.memberId, lbToKg(n));
       setStatus(result?.error ? `Error: ${result.error}` : "Logged.");
     });
   }

@@ -27,6 +27,9 @@ export interface ProfileUpdate {
   activity?: Activity;
   goal?: Goal;
   dietary_restrictions?: string[];
+  allergies?: string[];
+  disliked_foods?: string[];
+  medical_conditions?: string[];
   schedule?: { breakfast: string; lunch: string; dinner: string };
 }
 
@@ -43,6 +46,11 @@ export async function updateProfile(update: ProfileUpdate) {
   if (update.goal !== undefined) patch.goal = update.goal;
   if (update.dietary_restrictions !== undefined)
     patch.dietary_restrictions = update.dietary_restrictions;
+  if (update.allergies !== undefined) patch.allergies = update.allergies;
+  if (update.disliked_foods !== undefined)
+    patch.disliked_foods = update.disliked_foods;
+  if (update.medical_conditions !== undefined)
+    patch.medical_conditions = update.medical_conditions;
   if (update.schedule !== undefined) patch.schedule_json = update.schedule;
 
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
@@ -50,6 +58,7 @@ export async function updateProfile(update: ProfileUpdate) {
 
   revalidatePath("/me");
   revalidatePath("/today");
+  revalidatePath("/family");
 }
 
 // Recompute kcal + macros from current profile body data, then write a fresh
