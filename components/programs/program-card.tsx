@@ -8,8 +8,16 @@ import {
   activateProgram,
   deactivateProgram,
 } from "@/app/(app)/programs/actions";
+import { ActivationModal } from "@/components/programs/activation-modal";
 import type { Program } from "@/lib/programs";
 import { assignableToMembers } from "@/lib/programs";
+import type { Scope } from "@/app/(app)/programs/actions";
+
+interface FamilyScope {
+  id: string;
+  name: string;
+  active_programs: string[];
+}
 
 interface ProgramCardProps {
   program: Program;
@@ -18,28 +26,67 @@ interface ProgramCardProps {
   activeScopes: string[];
   // Whether the user is on this program (controls primary toggle text).
   activeForUser: boolean;
+  // Used to drive the activation modal: if pattern/focus + family present,
+  // we ask which scopes to apply to.
+  userActivePrograms: string[];
+  family: FamilyScope[];
 }
 
 export function ProgramCard({
   program,
   activeScopes,
   activeForUser,
+  userActivePrograms,
+  family,
 }: ProgramCardProps) {
   const [pending, start] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  function toggleUserScope() {
+  const memberAssignable = assignableToMembers(program.kind);
+  const showModalFlow = memberAssignable && family.length > 0;
+
+  function handleClick() {
     setStatus(null);
+    if (activeForUser) {
+      // Active for user → end on user. Member-scope toggling lives on the
+      // detail page so this stays a single-action button.
+      start(async () => {
+        const result = await deactivateProgram(program.id, { kind: "user" });
+        if (result?.error) setStatus(`Error: ${result.error}`);
+        else setStatus("Ended for you.");
+      });
+      return;
+    }
+    if (showModalFlow) {
+      setModalOpen(true);
+      return;
+    }
+    // Workflow program OR pattern/focus with no family → simple activate.
     start(async () => {
-      const result = activeForUser
-        ? await deactivateProgram(program.id, { kind: "user" })
-        : await activateProgram(program.id, { kind: "user" });
+      const result = await activateProgram(program.id, { kind: "user" });
       if (result?.error) setStatus(`Error: ${result.error}`);
-      else if (result?.replaced) {
-        setStatus(`Replaced ${result.replaced.name}.`);
-      }
+      else if (result?.replaced) setStatus(`Replaced ${result.replaced.name}.`);
     });
   }
+
+  // Build the scopes the modal will ask about. "You" + each named member.
+  const modalScopes: Array<{
+    scope: Scope;
+    label: string;
+    activePrograms: string[];
+  }> = [
+    {
+      scope: { kind: "user" },
+      label: "You",
+      activePrograms: userActivePrograms,
+    },
+    ...family.map((m) => ({
+      scope: { kind: "member" as const, memberId: m.id },
+      label: m.name,
+      activePrograms: m.active_programs,
+    })),
+  ];
 
   return (
     <Card className="overflow-hidden flex flex-col">
@@ -93,27 +140,21 @@ export function ProgramCard({
             variant={activeForUser ? "outline" : "primary"}
             size="sm"
             disabled={pending}
-            onClick={toggleUserScope}
+            onClick={handleClick}
           >
             {pending
               ? "…"
               : activeForUser
                 ? "Active · end"
-                : "Activate"}
+                : showModalFlow
+                  ? "Activate…"
+                  : "Activate"}
           </Btn>
-          {assignableToMembers(program.kind) ? (
-            <Link href={`/programs/${program.id}`}>
-              <Btn variant="ghost" size="sm">
-                Assign to family →
-              </Btn>
-            </Link>
-          ) : (
-            <Link href={`/programs/${program.id}`}>
-              <Btn variant="ghost" size="sm">
-                Learn more →
-              </Btn>
-            </Link>
-          )}
+          <Link href={`/programs/${program.id}`}>
+            <Btn variant="ghost" size="sm">
+              {memberAssignable ? "Manage scopes →" : "Learn more →"}
+            </Btn>
+          </Link>
         </div>
         {status ? (
           <Body
@@ -124,6 +165,14 @@ export function ProgramCard({
           </Body>
         ) : null}
       </div>
+      {showModalFlow ? (
+        <ActivationModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          program={program}
+          scopes={modalScopes}
+        />
+      ) : null}
     </Card>
   );
 }
