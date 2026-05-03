@@ -1,0 +1,88 @@
+import {
+  Home,
+  Search,
+  Plus,
+  Minus,
+  Check,
+  X,
+  ChevronRight,
+  ChevronLeft,
+  ShoppingCart,
+  BookOpen,
+  Calendar,
+  Refrigerator,
+  User,
+  Timer,
+  Flame,
+  Bell,
+  Settings,
+  Leaf,
+  Mic,
+  Play,
+  Pause,
+  Heart,
+  Share2,
+  Barcode,
+  Camera,
+  ArrowLeftRight,
+  Sparkles,
+  Flag,
+  Scale,
+  Droplet,
+  Pencil,
+  Trash2,
+  Bookmark,
+  Star,
+  Apple,
+  type LucideProps,
+} from "lucide-react";
+
+const map = {
+  home: Home,
+  search: Search,
+  plus: Plus,
+  minus: Minus,
+  check: Check,
+  x: X,
+  chevron: ChevronRight,
+  chevronL: ChevronLeft,
+  cart: ShoppingCart,
+  book: BookOpen,
+  calendar: Calendar,
+  fridge: Refrigerator,
+  user: User,
+  timer: Timer,
+  fire: Flame,
+  flame: Flame,
+  bell: Bell,
+  settings: Settings,
+  leaf: Leaf,
+  mic: Mic,
+  play: Play,
+  pause: Pause,
+  heart: Heart,
+  share: Share2,
+  barcode: Barcode,
+  camera: Camera,
+  swap: ArrowLeftRight,
+  sparkle: Sparkles,
+  flag: Flag,
+  scale: Scale,
+  droplet: Droplet,
+  pencil: Pencil,
+  trash: Trash2,
+  bookmark: Bookmark,
+  star: Star,
+  apple: Apple,
+} as const;
+
+export type IconName = keyof typeof map;
+
+interface IconProps extends Omit<LucideProps, "ref"> {
+  name: IconName;
+}
+
+export function Icon({ name, size = 20, strokeWidth = 1.5, ...rest }: IconProps) {
+  const Comp = map[name];
+  return <Comp size={size} strokeWidth={strokeWidth} {...rest} />;
+}

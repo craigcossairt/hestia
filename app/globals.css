@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
+/* ─── Hestia design tokens ──────────────────────────────────────────── */
+
+@theme {
+  --color-paper: #f6f3ec;
+  --color-paper-2: #efeae0;
+  --color-paper-3: #e6e0d4;
+  --color-card: #fffdf7;
+
+  --color-ink: #1a1815;
+  --color-ink-2: #3a362e;
+  --color-ink-3: #7a7468;
+  --color-ink-l: #d9d2c1;
+
+  --color-accent: #1a1a1a;
+  --color-accent-tint: rgba(26, 26, 26, 0.06);
+
+  --color-warm: #c75d36;
+  --color-success: #3f6212;
+  --color-warn: #b45309;
+  --color-danger: #b91c1c;
+
+  --font-display: var(--font-fraunces), "Times New Roman", serif;
+  --font-sans: var(--font-inter), -apple-system, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", monospace;
+
+  --radius-card: 14px;
+  --radius-thumb: 8px;
+  --radius-hero: 22px;
+
+  --shadow-1: 0 1px 2px rgba(60, 50, 30, 0.05);
+  --shadow-2: 0 6px 24px rgba(60, 50, 30, 0.08);
+}
+
+/* ─── Accent presets (set via data-accent on <html>) ───────────────── */
+
+:root[data-accent="terracotta"] {
+  --color-accent: #b54a25;
+  --color-accent-tint: rgba(181, 74, 37, 0.08);
+}
+:root[data-accent="forest"] {
+  --color-accent: #3f6212;
+  --color-accent-tint: rgba(63, 98, 18, 0.08);
+}
+:root[data-accent="ink"] {
+  --color-accent: #1e3a8a;
+  --color-accent-tint: rgba(30, 58, 138, 0.08);
+}
+
+/* ─── Dark mode ─────────────────────────────────────────────────────── */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root.dark {
+  --color-paper: #1a1814;
+  --color-paper-2: #23201b;
+  --color-paper-3: #2c2924;
+  --color-card: #23201b;
+  --color-ink: #f6f3ec;
+  --color-ink-2: #c9c4b8;
+  --color-ink-3: #8a857a;
+  --color-ink-l: #3a362e;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ─── Base ──────────────────────────────────────────────────────────── */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink-2);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* numerics: tabular by default when used with .mono */
+.mono,
+[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
