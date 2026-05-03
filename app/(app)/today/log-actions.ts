@@ -20,7 +20,7 @@ export async function logPlannedMeal(planEntryId: string) {
 
   const { data: entry } = await supabase
     .from("meal_plan_entries")
-    .select("id, recipe_id, recipes:recipe_id(name, kcal, protein, carbs, fat)")
+    .select("id, slot, recipe_id, recipes:recipe_id(name, kcal, protein, carbs, fat)")
     .eq("id", planEntryId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -46,6 +46,7 @@ export async function logPlannedMeal(planEntryId: string) {
     supabase.from("meal_logs").insert({
       user_id: user.id,
       recipe_id: entry.recipe_id,
+      slot: entry.slot,
       logged_at: new Date().toISOString(),
       kcal: recipe?.kcal ?? null,
       protein: recipe?.protein ?? null,
@@ -73,11 +74,14 @@ export async function skipPlannedMeal(planEntryId: string) {
   revalidatePath("/plan");
 }
 
-// Log an ad-hoc meal not tied to the plan.
+// Log an ad-hoc meal not tied to the plan. The slot (if provided) is now
+// stored on the log itself, so the Today slot card picks it up directly even
+// without a plan entry.
 export async function logCustomMeal(payload: {
   recipe_id?: string | null;
   custom_name?: string | null;
   slot?: Slot | null;
+  family_member_id?: string | null;
   kcal: number;
   protein: number;
   carbs: number;
@@ -92,6 +96,8 @@ export async function logCustomMeal(payload: {
     user_id: user.id,
     recipe_id: payload.recipe_id ?? null,
     custom_name: payload.custom_name ?? null,
+    slot: payload.slot ?? null,
+    family_member_id: payload.family_member_id ?? null,
     logged_at: new Date().toISOString(),
     kcal: payload.kcal,
     protein: payload.protein,
@@ -100,10 +106,9 @@ export async function logCustomMeal(payload: {
   });
   if (error) return { error: error.message };
 
-  // If a slot was provided AND a planned entry exists for today/that slot
-  // with no recipe yet, attach this log conceptually by also marking that
-  // slot as logged. (Kept simple: we don't auto-attach the recipe.)
-  if (payload.slot) {
+  // Mark the plan entry (if any) as logged so /plan reflects adherence.
+  // Self-only — member views don't touch the household plan.
+  if (payload.slot && !payload.family_member_id) {
     const today = new Date().toISOString().slice(0, 10);
     await supabase
       .from("meal_plan_entries")
@@ -114,11 +119,20 @@ export async function logCustomMeal(payload: {
   }
 
   revalidatePath("/today");
+  revalidatePath("/stats");
 }
 
-export async function undoLog(logId: string) {
+export async function removeMealLog(logId: string) {
   const { supabase, user } = await getUserOrRedirect();
-  await supabase.from("meal_logs").delete().eq("id", logId).eq("user_id", user.id);
-  // Don't revert the plan entry status — too ambiguous. User can re-log easily.
+  const { error } = await supabase
+    .from("meal_logs")
+    .delete()
+    .eq("id", logId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
   revalidatePath("/today");
+  revalidatePath("/stats");
 }
+
+// Backwards-compatible alias for older imports.
+export const undoLog = removeMealLog;

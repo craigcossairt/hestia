@@ -3,6 +3,8 @@ import { H, Body, Label, Card, Mono, Stat } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { WeekBars } from "@/components/stats/week-bars";
 import { WeightChart } from "@/components/stats/weight-chart";
+import { MemberSwitcher } from "@/components/family/member-switcher";
+import type { FamilyMember } from "@/lib/family";
 
 const WEEKDAY_FMT = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 
@@ -19,17 +21,42 @@ function lastNDays(n: number) {
   });
 }
 
-export default async function StatsPage() {
+export default async function StatsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as?: string }>;
+}) {
+  const sp = await searchParams;
+  const viewAs = sp?.as ?? null;
+
   const supabase = isSupabaseConfigured() ? await createClient() : null;
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
   if (!user || !supabase) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, kcal_target, protein_target, onboarded_at")
+    .select(
+      "name, kcal_target, protein_target, family_json, onboarded_at",
+    )
     .eq("id", user.id)
     .maybeSingle();
   if (!profile?.onboarded_at) redirect("/onboard");
+
+  const family =
+    ((profile?.family_json as FamilyMember[] | null | undefined) ?? []).filter(
+      (m) => m.name?.trim(),
+    );
+
+  const viewedMember =
+    viewAs && viewAs !== "self"
+      ? (family.find((m) => m.id === viewAs) ?? null)
+      : null;
+
+  const subjectName = viewedMember?.name ?? profile.name ?? "you";
+  const subjectKcalTarget =
+    viewedMember?.kcal_target ?? profile.kcal_target ?? 0;
+  const subjectProteinTarget =
+    viewedMember?.protein_target ?? profile.protein_target ?? 0;
 
   const days = lastNDays(7);
   const fromDay = days[0].date;
@@ -44,32 +71,44 @@ export default async function StatsPage() {
 
   let weightsResData: Array<{ logged_at: string; value_kg: number }> | null = null;
   try {
-    const weightsRes = await supabase
+    let query = supabase
       .from("weight_logs")
       .select("logged_at, value_kg")
       .eq("user_id", user.id)
       .gte("logged_at", `${ninetyDaysAgo}T00:00:00`)
       .order("logged_at", { ascending: true });
+    query = viewedMember
+      ? query.eq("family_member_id", viewedMember.id)
+      : query.is("family_member_id", null);
+    const weightsRes = await query;
     weightsResData = (weightsRes.data ?? null) as
       | Array<{ logged_at: string; value_kg: number }>
       | null;
   } catch {
-    // weight_logs table may not exist yet — ignore
+    // weight_logs table or family_member_id column may not exist yet — ignore
   }
 
+  let logsQuery = supabase
+    .from("meal_logs")
+    .select("logged_at, kcal, protein")
+    .eq("user_id", user.id)
+    .gte("logged_at", `${fromDay}T00:00:00`)
+    .lte("logged_at", toIso);
+  logsQuery = viewedMember
+    ? logsQuery.eq("family_member_id", viewedMember.id)
+    : logsQuery.is("family_member_id", null);
+
+  // Plan rows are household-level — only meaningful when viewing self.
   const [logsRes, planRes] = await Promise.all([
-    supabase
-      .from("meal_logs")
-      .select("logged_at, kcal, protein")
-      .eq("user_id", user.id)
-      .gte("logged_at", `${fromDay}T00:00:00`)
-      .lte("logged_at", toIso),
-    supabase
-      .from("meal_plan_entries")
-      .select("date, status")
-      .eq("user_id", user.id)
-      .gte("date", fromDay)
-      .lte("date", days[days.length - 1].date),
+    logsQuery,
+    viewedMember
+      ? Promise.resolve({ data: [] as Array<{ date: string; status: string }> })
+      : supabase
+          .from("meal_plan_entries")
+          .select("date, status")
+          .eq("user_id", user.id)
+          .gte("date", fromDay)
+          .lte("date", days[days.length - 1].date),
   ]);
 
   const weightPoints = (weightsResData ?? []).map((w) => ({
@@ -118,42 +157,70 @@ export default async function StatsPage() {
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
-      <header className="flex flex-col gap-2">
-        <Label>last 7 days</Label>
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <Label>last 7 days</Label>
+          <MemberSwitcher
+            selectedId={viewedMember?.id ?? null}
+            members={family.map((m) => ({ id: m.id, name: m.name }))}
+          />
+        </div>
         <H size="xl" as="h1">
-          Stats
+          {viewedMember ? (
+            <><span className="text-accent">{subjectName}</span>&apos;s stats</>
+          ) : (
+            <>Stats</>
+          )}
         </H>
         <Body size="lg" dim>
-          A read-only view of how this week landed.
+          {viewedMember
+            ? `A read-only view of ${subjectName}'s last 7 days.`
+            : "A read-only view of how this week landed."}
         </Body>
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="avg kcal" value={avgKcal || "—"} sub={`target ${profile.kcal_target ?? 0}`} />
-        <KpiCard label="avg protein" value={avgProtein ? `${avgProtein}g` : "—"} sub={`target ${profile.protein_target ?? 0}g`} />
-        <KpiCard label="days logged" value={`${daysWithLogs}/7`} sub={daysWithLogs >= 5 ? "consistent" : "build the habit"} />
-        <KpiCard label="adherence" value={planned ? `${adherence}%` : "—"} sub={planned ? `${logged} of ${planned} planned` : "no plan yet"} />
+        <KpiCard label="avg kcal" value={avgKcal || "—"} sub={`target ${subjectKcalTarget}`} />
+        <KpiCard
+          label="avg protein"
+          value={avgProtein ? `${avgProtein}g` : "—"}
+          sub={`target ${subjectProteinTarget}g`}
+        />
+        <KpiCard
+          label="days logged"
+          value={`${daysWithLogs}/7`}
+          sub={daysWithLogs >= 5 ? "consistent" : "build the habit"}
+        />
+        {viewedMember ? null : (
+          <KpiCard
+            label="adherence"
+            value={planned ? `${adherence}%` : "—"}
+            sub={planned ? `${logged} of ${planned} planned` : "no plan yet"}
+          />
+        )}
       </section>
 
       <section className="grid md:grid-cols-2 gap-6">
         <Card className="p-5 flex flex-col gap-4">
           <div className="flex items-baseline justify-between">
-            <Label>kcal per day</Label>
+            <Label accent>kcal per day</Label>
             <Mono className="text-ink-3 text-[11px]">streak {streak}d</Mono>
           </div>
-          <WeekBars days={dayPoints} target={profile.kcal_target ?? 0} metric="kcal" />
+          <WeekBars days={dayPoints} target={subjectKcalTarget} metric="kcal" />
         </Card>
         <Card className="p-5 flex flex-col gap-4">
-          <Label>protein per day</Label>
-          <WeekBars days={dayPoints} target={profile.protein_target ?? 0} metric="protein" />
+          <Label accent>protein per day</Label>
+          <WeekBars days={dayPoints} target={subjectProteinTarget} metric="protein" />
         </Card>
       </section>
 
       <section>
         <Card className="p-5 flex flex-col gap-4">
           <div className="flex items-baseline justify-between">
-            <Label>weight (last 90 days)</Label>
-            <Mono className="text-ink-3 text-[11px]">log on Me</Mono>
+            <Label accent>weight (last 90 days)</Label>
+            <Mono className="text-ink-3 text-[11px]">
+              {viewedMember ? `log on /family/${viewedMember.id}` : "log on Me"}
+            </Mono>
           </div>
           <WeightChart points={weightPoints} />
         </Card>
@@ -163,9 +230,9 @@ export default async function StatsPage() {
         <Card className="p-6 flex flex-col gap-2 border-dashed">
           <Label>no data yet</Label>
           <Body size="sm" dim>
-            Log a meal on Today and stats will start filling in. Hestia keeps
-            it lightweight — no streaks-as-pressure, just a quiet read of the
-            week.
+            {viewedMember
+              ? `Log a meal on Today (with ${subjectName} selected) and stats will start filling in.`
+              : "Log a meal on Today and stats will start filling in. Hestia keeps it lightweight — no streaks-as-pressure, just a quiet read of the week."}
           </Body>
         </Card>
       ) : null}

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Card, FoodImage, Label, H, Mono, Chip, Btn } from "@/components/ds";
 import {
   logPlannedMeal,
+  removeMealLog,
   skipPlannedMeal,
 } from "@/app/(app)/today/log-actions";
 import { LogMealModal } from "./log-meal-modal";
@@ -108,13 +109,80 @@ export function PlannedMealCard({
   );
 }
 
+// Card variant for an ad-hoc log attached to a slot (no recipe). Looks like
+// a planned card visually so the slot reads as "filled", but with a remove
+// affordance for quick correction.
+export interface LoggedSlotCardProps {
+  logId: string;
+  slot: string;
+  time?: string;
+  name: string;
+  kcal: number | null;
+  protein: number | null;
+}
+
+export function LoggedSlotCard({
+  logId,
+  slot,
+  time,
+  name,
+  kcal,
+  protein,
+}: LoggedSlotCardProps) {
+  const [pending, start] = useTransition();
+  return (
+    <Card className="p-4 flex flex-col gap-2 min-h-[180px] justify-between">
+      <div className="flex items-center justify-between">
+        <Label>
+          {slot}
+          {time ? ` · ${time}` : ""}
+        </Label>
+        <Chip variant="success" className="capitalize">
+          logged
+        </Chip>
+      </div>
+      <div className="flex flex-col gap-1.5 flex-1">
+        <H size="sm">{name}</H>
+        {kcal != null || protein != null ? (
+          <Mono className="text-ink-2 text-[12.5px]">
+            {kcal != null ? `${kcal} kcal` : null}
+            {kcal != null && protein != null ? " · " : null}
+            {protein != null ? `${protein} g protein` : null}
+          </Mono>
+        ) : null}
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Btn
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              await removeMealLog(logId);
+            })
+          }
+        >
+          <X size={13} strokeWidth={1.8} />
+          Remove
+        </Btn>
+      </div>
+    </Card>
+  );
+}
+
+interface EmptyMealCardProps {
+  slot: string;
+  time?: string;
+  familyMemberId?: string | null;
+  scopeLabel?: string;
+}
+
 export function EmptyMealCard({
   slot,
   time,
-}: {
-  slot: string;
-  time?: string;
-}) {
+  familyMemberId,
+  scopeLabel,
+}: EmptyMealCardProps) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -138,20 +206,53 @@ export function EmptyMealCard({
         open={open}
         onClose={() => setOpen(false)}
         defaultSlot={slot as Slot}
+        familyMemberId={familyMemberId ?? null}
+        scopeLabel={scopeLabel}
       />
     </>
   );
 }
 
 // Floating "log anything" entry point — for today's standing macro bar.
-export function LogAnythingButton() {
+export function LogAnythingButton({
+  familyMemberId,
+  scopeLabel,
+}: {
+  familyMemberId?: string | null;
+  scopeLabel?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Btn variant="outline" onClick={() => setOpen(true)}>
         + Log a meal
       </Btn>
-      <LogMealModal open={open} onClose={() => setOpen(false)} />
+      <LogMealModal
+        open={open}
+        onClose={() => setOpen(false)}
+        familyMemberId={familyMemberId ?? null}
+        scopeLabel={scopeLabel}
+      />
     </>
+  );
+}
+
+// Inline "remove" affordance on the "logged today" list rows.
+export function RemoveLogButton({ logId }: { logId: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          await removeMealLog(logId);
+        })
+      }
+      aria-label="remove log"
+      className="text-ink-3 hover:text-danger transition-colors disabled:opacity-50 p-1"
+    >
+      <X size={13} strokeWidth={1.8} />
+    </button>
   );
 }
