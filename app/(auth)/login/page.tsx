@@ -54,9 +54,10 @@ export default function LoginPage() {
               required
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="123456"
-              className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[20px] tracking-[0.4em] text-center outline-none focus:border-accent transition-colors"
+              pattern="[0-9]{6,10}"
+              maxLength={10}
+              placeholder="paste your code"
+              className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[20px] tracking-[0.3em] text-center outline-none focus:border-accent transition-colors"
               autoFocus
             />
             {state.error ? (
