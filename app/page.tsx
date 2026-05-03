@@ -1,14 +1,19 @@
 import Link from "next/link";
-import { H, Body, Btn, Label } from "@/components/ds";
+import Image from "next/image";
+import { Body, Btn, Label } from "@/components/ds";
 
 export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center px-6">
-      <div className="max-w-md text-center flex flex-col gap-6 items-center">
-        <Label>welcome</Label>
-        <H size="xl" as="h1">
-          Hestia
-        </H>
+      <div className="max-w-md text-center flex flex-col gap-5 items-center">
+        <Image
+          src="/logos/full.png"
+          alt="Hestia"
+          width={1000}
+          height={1000}
+          priority
+          className="h-44 w-auto"
+        />
         <Body size="lg">
           A calm meal planner that pairs daily nutrition targets with an AI
           coach, an inventory-aware grocery list, and recipe + cook flows.
@@ -21,6 +26,7 @@ export default function HomePage() {
             <Btn variant="outline">Design system</Btn>
           </Link>
         </div>
+        <Label>welcome to the hearth</Label>
       </div>
     </main>
   );

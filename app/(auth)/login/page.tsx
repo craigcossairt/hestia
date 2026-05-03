@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState } from "react";
-import { Btn, Body, H, Label, Card } from "@/components/ds";
+import { Btn, Body, Card } from "@/components/ds";
 import { sendOtp, verifyOtp } from "./actions";
 
 type State =
@@ -33,15 +34,19 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
       <Card className="w-full max-w-md p-8 flex flex-col gap-6">
-        <div className="flex flex-col gap-2 items-center text-center">
-          <Label>welcome to</Label>
-          <H size="xl" as="h1">
-            Hestia
-          </H>
+        <div className="flex flex-col gap-3 items-center text-center">
+          <Image
+            src="/logos/full.png"
+            alt="Hestia"
+            width={1000}
+            height={1000}
+            priority
+            className="h-32 w-auto -mt-2"
+          />
           <Body dim>
             {onCodeStep
               ? `We sent a code to ${state.email}.`
-              : "Sign in with a one-time code emailed to you."}
+              : "A calm meal planner. Sign in with a one-time code."}
           </Body>
         </div>
 

@@ -37,7 +37,11 @@ yarn-error.log*
 # design handoff (kept locally, not committed)
 /design_handoff_meal_planner/
 
-# stray root-level images (Grok-generated test outputs, screenshots, etc.)
+# stray Grok-generated images and screenshots (anywhere)
+**/grok-*.png
+**/grok-*.jpg
+**/grok-image-*.png
+**/grok-image-*.jpg
 /*.png
 /*.jpg
 /*.jpeg

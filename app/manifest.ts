@@ -13,8 +13,9 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#1a1a1a",
     categories: ["food", "health", "lifestyle", "productivity"],
     icons: [
-      { src: "/icon", sizes: "256x256", type: "image/png" },
-      { src: "/apple-icon", sizes: "180x180", type: "image/png" },
+      // Auto-served from app/icon.png and app/apple-icon.png
+      { src: "/icon.png", sizes: "500x500", type: "image/png", purpose: "any" },
+      { src: "/apple-icon.png", sizes: "500x500", type: "image/png", purpose: "any" },
     ],
   };
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Icon, Label, H } from "@/components/ds";
+import { Icon, Label } from "@/components/ds";
 import { PRIMARY_NAV, SECONDARY_NAV, type NavItem } from "./nav-items";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +31,15 @@ export function Sidebar() {
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 px-4 py-6 bg-paper-2 border-r border-ink-l">
-      <Link href="/today" className="flex items-center gap-2 px-3 mb-8">
-        <H size="md">Hestia</H>
+      <Link href="/today" className="flex items-center px-1 mb-6 group" aria-label="Hestia home">
+        <Image
+          src="/logos/wordmark.png"
+          alt="Hestia"
+          width={500}
+          height={500}
+          priority
+          className="h-14 w-auto -my-2 group-hover:opacity-80 transition-opacity"
+        />
       </Link>
 
       <nav className="flex flex-col gap-1">

@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import { H, Body, Label, Mono, Ring, Bar } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { InsightSlot } from "@/components/today/insight-slot";
@@ -7,6 +9,7 @@ import {
   EmptyMealCard,
   LogAnythingButton,
 } from "@/components/today/meal-card";
+import { getProgram } from "@/lib/programs";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 
@@ -38,6 +41,7 @@ export default async function TodayPage() {
   let totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   let insight: { id: string; body: string } | null = null;
   let insightHoursOld: number | null = null;
+  let activeProgramId: string | null = null;
   type PlanRow = {
     id: string;
     slot: string;
@@ -65,12 +69,14 @@ export default async function TodayPage() {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at",
+        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at, active_program",
       )
       .eq("id", user.id)
       .maybeSingle();
     if (!data?.onboarded_at) redirect("/onboard");
     profile = data;
+    activeProgramId =
+      (data as { active_program?: string | null }).active_program ?? null;
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: planRows } = await supabase
@@ -129,9 +135,30 @@ export default async function TodayPage() {
   const planBySlot = Object.fromEntries(
     plan.map((p) => [p.slot, p]),
   ) as Record<(typeof SLOTS)[number], PlanRow | undefined>;
+  const activeProgram = activeProgramId ? getProgram(activeProgramId) : null;
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
+      {activeProgram ? (
+        <Link
+          href={`/programs/${activeProgram.id}`}
+          className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-accent bg-accent-tint hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] transition-colors -mb-4 self-start"
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ background: activeProgram.hero_color }}
+          />
+          <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
+          <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3">
+            active program
+          </span>
+          <span className="font-sans text-[13px] text-ink font-medium">
+            {activeProgram.name}
+          </span>
+          <span className="text-ink-3 text-[12px]">→</span>
+        </Link>
+      ) : null}
+
       <header className="flex flex-col gap-2">
         <Label>{DAY_FMT.format(now).toLowerCase()}</Label>
         <H size="xl" as="h1">

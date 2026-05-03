@@ -1,6 +1,7 @@
 import { H, Body, Label, Mono, Stat } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { PlanGrid, type PlanCellEntry } from "@/components/plan/plan-grid";
+import { GenerateWeekButton } from "@/components/plan/generate-week-button";
 import type { Slot } from "@/lib/types/database";
 
 const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
@@ -94,6 +95,8 @@ export default async function PlanPage() {
         <Stat label="avg kcal" value={avgKcal ? <><Mono>{avgKcal}</Mono></> : "—"} />
         <Stat label="week of" value={new Date(dateRange.from).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
       </div>
+
+      {user ? <GenerateWeekButton /> : null}
 
       <PlanGrid days={days} entries={entries} />
     </div>
