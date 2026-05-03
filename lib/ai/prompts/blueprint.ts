@@ -14,10 +14,12 @@ personalised blueprint for someone starting Hestia, a meal-planning app.
 Their inputs:
 - Sex: ${inputs.sex}
 - Age: ${inputs.age}
-- Height: ${inputs.height_cm} cm
-- Weight: ${inputs.weight_kg} kg
+- Height: ${Math.floor(inputs.height_cm / 2.54 / 12)} ft ${Math.round((inputs.height_cm / 2.54) % 12)} in (${inputs.height_cm} cm)
+- Weight: ${Math.round(inputs.weight_kg * 2.205)} lb (${inputs.weight_kg} kg)
 - Activity: ${inputs.activity}
 - Goal: ${inputs.goal}
+
+The user is US-based. When referring to weight or distance in your narrative, use US units (lb, ft, in, cup, oz). Macros stay in grams (universal in nutrition).
 
 The targets they have been assigned (computed via Mifflin–St Jeor — DO NOT
 recompute or contradict these):

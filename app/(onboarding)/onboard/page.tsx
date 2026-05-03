@@ -6,11 +6,12 @@ import { OptionCard } from "@/components/onboarding/option-card";
 import { StepDots } from "@/components/onboarding/step-dots";
 import { submitOnboarding, type OnboardSubmission } from "./actions";
 import type { Activity, Goal, Sex } from "@/lib/types/database";
+import { ftInToCm, lbToKg } from "@/lib/units";
 
 const TOTAL_STEPS = 6;
 
 const GOALS: { id: Goal; label: string; description: string }[] = [
-  { id: "lose", label: "Lose weight", description: "Sustainable deficit, ~0.5 kg / week." },
+  { id: "lose", label: "Lose weight", description: "Sustainable deficit, ~1 lb / week." },
   { id: "build", label: "Build muscle", description: "Modest surplus, high protein." },
   { id: "maintain", label: "Maintain", description: "Hold steady, eat consciously." },
   { id: "energy", label: "Improve energy", description: "Same kcal, smarter timing." },
@@ -43,8 +44,9 @@ interface FormState {
   goal: Goal | null;
   sex: Sex | null;
   age: number | "";
-  height_cm: number | "";
-  weight_kg: number | "";
+  height_ft: number | "";
+  height_in: number | "";
+  weight_lb: number | "";
   activity: Activity | null;
   dietary_restrictions: string[];
   schedule: { breakfast: string; lunch: string; dinner: string };
@@ -55,8 +57,9 @@ const initial: FormState = {
   goal: null,
   sex: null,
   age: "",
-  height_cm: 175,
-  weight_kg: 75,
+  height_ft: 5,
+  height_in: 10,
+  weight_lb: 165,
   activity: null,
   dietary_restrictions: [],
   schedule: { breakfast: "08:00", lunch: "12:30", dinner: "19:00" },
@@ -78,7 +81,11 @@ export default function OnboardPage() {
       case 1:
         return !!form.sex && Number(form.age) >= 13;
       case 2:
-        return Number(form.height_cm) > 0 && Number(form.weight_kg) > 0;
+        return (
+          Number(form.height_ft) > 0 &&
+          Number(form.height_in) >= 0 &&
+          Number(form.weight_lb) > 0
+        );
       case 3:
         return !!form.activity;
       case 4:
@@ -97,8 +104,9 @@ export default function OnboardPage() {
       !form.sex ||
       !form.activity ||
       !form.age ||
-      !form.height_cm ||
-      !form.weight_kg
+      form.height_ft === "" ||
+      form.height_in === "" ||
+      !form.weight_lb
     ) {
       setError("Please complete every step.");
       return;
@@ -108,8 +116,8 @@ export default function OnboardPage() {
       goal: form.goal,
       sex: form.sex,
       age: Number(form.age),
-      height_cm: Number(form.height_cm),
-      weight_kg: Number(form.weight_kg),
+      height_cm: ftInToCm(Number(form.height_ft), Number(form.height_in)),
+      weight_kg: lbToKg(Number(form.weight_lb)),
       activity: form.activity,
       dietary_restrictions: form.dietary_restrictions,
       schedule: form.schedule,
@@ -176,21 +184,21 @@ export default function OnboardPage() {
 
         {step === 2 && (
           <Step eyebrow="step 3 — body" title="Your starting point.">
-            <NumberField
-              label="height"
-              value={form.height_cm}
-              onChange={(v) => set("height_cm", v)}
-              min={120}
-              max={230}
-              suffix="cm"
+            <HeightField
+              ft={form.height_ft}
+              inches={form.height_in}
+              onChange={(ft, inches) => {
+                set("height_ft", ft);
+                set("height_in", inches);
+              }}
             />
             <NumberField
               label="weight"
-              value={form.weight_kg}
-              onChange={(v) => set("weight_kg", v)}
-              min={30}
-              max={250}
-              suffix="kg"
+              value={form.weight_lb}
+              onChange={(v) => set("weight_lb", v)}
+              min={60}
+              max={550}
+              suffix="lb"
             />
           </Step>
         )}
@@ -357,6 +365,52 @@ function NumberField({
         {suffix ? (
           <span className="font-mono text-[12px] text-ink-3">{suffix}</span>
         ) : null}
+      </div>
+    </label>
+  );
+}
+
+function HeightField({
+  ft,
+  inches,
+  onChange,
+}: {
+  ft: number | "";
+  inches: number | "";
+  onChange: (ft: number | "", inches: number | "") => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 px-4 py-3 rounded-thumb border border-ink-l bg-card focus-within:border-accent transition-colors">
+      <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3">
+        height
+      </span>
+      <div className="flex items-baseline gap-2">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={3}
+          max={8}
+          value={ft}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(v === "" ? "" : Number(v), inches);
+          }}
+          className="bg-transparent text-ink font-mono text-[18px] outline-none w-10 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="font-mono text-[12px] text-ink-3">ft</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={11}
+          value={inches}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(ft, v === "" ? "" : Number(v));
+          }}
+          className="bg-transparent text-ink font-mono text-[18px] outline-none w-10 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="font-mono text-[12px] text-ink-3">in</span>
       </div>
     </label>
   );

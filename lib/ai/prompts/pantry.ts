@@ -36,6 +36,7 @@ Rules:
 - Combine duplicates ("eggs ×6" + "1 dozen eggs" → 1 entry, qty 18, unit each).
 - Skip non-food items (bags, receipts numbers, store names).
 - If qty isn't given, default to 1.
+- US-based user: prefer US units (cup, tbsp, tsp, oz, lb, can, box, bag, bottle, each). Avoid metric unless the source clearly uses it.
 
 Input:
 """

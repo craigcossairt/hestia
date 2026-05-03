@@ -56,6 +56,7 @@ that matches the user's request. The recipe must be:
 
 - Realistic, written in plain prose, no marketing fluff.
 - Tight ingredient list, ${dietary_restrictions.length ? "respecting these dietary preferences: " + dietary_restrictions.join(", ") + "." : "with no allergen concerns."}
+- US-based user: prefer US units (cup, tbsp, tsp, oz, lb, each) for ingredients. Use grams only for macros.
 - Macros must be honest. Don't pad with "optional toppings" to hit a number.
 ${goal ? `- Aligned with this goal: ${goal}.` : ""}
 ${protein_target ? `- Bias protein density when reasonable; daily protein target is ${protein_target} g.` : ""}
