@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -48,13 +49,40 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Read appearance preferences from the signed-in user's profile so the
+  // theme is correct on the very first paint (no flash on page change).
+  let dark = false;
+  let accent: string | null = null;
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("dark_mode, accent_preset")
+          .eq("id", user.id)
+          .maybeSingle();
+        dark = data?.dark_mode ?? false;
+        accent = data?.accent_preset && data.accent_preset !== "charcoal"
+          ? data.accent_preset
+          : null;
+      }
+    } catch {
+      // Pre-onboarding or unauthenticated — defaults are fine.
+    }
+  }
+
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}${dark ? " dark" : ""}`}
+      data-accent={accent ?? undefined}
     >
       <body className="bg-paper text-ink-2 min-h-full">
         <Providers>{children}</Providers>

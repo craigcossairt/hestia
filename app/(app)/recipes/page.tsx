@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RecipeCard } from "@/components/recipe/recipe-card";
 import { LibraryTabs, type RecipeTab } from "@/components/recipe/library-tabs";
 import { AddRecipeFab } from "@/components/recipe/add-recipe-fab";
+import { LoadStarterButton } from "@/components/recipe/load-starter-button";
 
 interface PageProps {
   searchParams: Promise<{ tab?: string }>;
@@ -88,14 +89,15 @@ export default async function RecipesPage({ searchParams }: PageProps) {
       <LibraryTabs />
 
       {recipes.length === 0 ? (
-        <div className="rounded-card border border-dashed border-ink-l p-10 text-center">
+        <div className="rounded-card border border-dashed border-ink-l p-10 flex flex-col items-center text-center gap-4">
           <Body dim>
             {tab === "saved"
               ? "Nothing bookmarked yet. Tap the bookmark on any recipe to save it."
               : tab === "rated"
                 ? "No ratings yet. Open a recipe and tap the stars."
-                : "No recipes yet. Use the + button to add one."}
+                : "No recipes yet — start with our curated starter library, then add your own."}
           </Body>
+          {tab === "all" && user ? <LoadStarterButton /> : null}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">

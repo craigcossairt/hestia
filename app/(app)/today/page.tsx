@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import { H, Body, Label, Mono, Ring, Bar } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { InsightCard } from "@/components/today/insight-card";
-import { MealCard, EmptyMealCard } from "@/components/today/meal-card";
+import {
+  PlannedMealCard,
+  EmptyMealCard,
+  LogAnythingButton,
+} from "@/components/today/meal-card";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 
@@ -23,7 +27,6 @@ export default async function TodayPage() {
   const supabase = isSupabaseConfigured() ? await createClient() : null;
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
 
-  // Allow visiting /today unauthenticated for demo, but show empty state.
   let profile: {
     name: string | null;
     kcal_target: number | null;
@@ -38,9 +41,24 @@ export default async function TodayPage() {
     id: string;
     slot: string;
     status: string;
-    recipes: { name: string; kcal: number | null; protein: number | null; photo_url: string | null } | null;
+    recipe_id: string | null;
+    recipes: {
+      name: string;
+      kcal: number | null;
+      protein: number | null;
+      photo_url: string | null;
+    } | null;
   };
   let plan: PlanRow[] = [];
+  type LogRow = {
+    id: string;
+    custom_name: string | null;
+    kcal: number | null;
+    protein: number | null;
+    recipe_id: string | null;
+    recipes: { name: string } | null;
+  };
+  let logs: LogRow[] = [];
 
   if (user && supabase) {
     const { data } = await supabase
@@ -57,19 +75,21 @@ export default async function TodayPage() {
     const { data: planRows } = await supabase
       .from("meal_plan_entries")
       .select(
-        "id, slot, status, recipes:recipe_id(name, kcal, protein, photo_url)",
+        "id, slot, status, recipe_id, recipes:recipe_id(name, kcal, protein, photo_url)",
       )
       .eq("user_id", user.id)
       .eq("date", today);
     plan = (planRows ?? []) as unknown as PlanRow[];
 
-    const { data: logs } = await supabase
+    const { data: logRows } = await supabase
       .from("meal_logs")
-      .select("kcal, protein, carbs, fat")
+      .select("id, custom_name, kcal, protein, carbs, fat, recipe_id, recipes:recipe_id(name)")
       .eq("user_id", user.id)
       .gte("logged_at", `${today}T00:00:00`)
-      .lt("logged_at", `${today}T23:59:59`);
-    totals = (logs ?? []).reduce(
+      .lt("logged_at", `${today}T23:59:59`)
+      .order("logged_at", { ascending: false });
+    logs = (logRows ?? []) as unknown as LogRow[];
+    totals = (logRows ?? []).reduce(
       (acc, r) => ({
         kcal: acc.kcal + (r.kcal ?? 0),
         protein: acc.protein + (r.protein ?? 0),
@@ -107,7 +127,6 @@ export default async function TodayPage() {
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
-      {/* greeting */}
       <header className="flex flex-col gap-2">
         <Label>{DAY_FMT.format(now).toLowerCase()}</Label>
         <H size="xl" as="h1">
@@ -115,7 +134,6 @@ export default async function TodayPage() {
         </H>
       </header>
 
-      {/* target + macros */}
       <section className="grid md:grid-cols-[auto_1fr] gap-10 items-center">
         <Ring
           value={Math.min(1, totals.kcal / kcalTarget)}
@@ -128,27 +146,32 @@ export default async function TodayPage() {
           <MacroRow label="protein" value={totals.protein} target={proteinTarget} unit="g" />
           <MacroRow label="carbs" value={totals.carbs} target={carbsTarget} unit="g" />
           <MacroRow label="fat" value={totals.fat} target={fatTarget} unit="g" />
+          {user ? (
+            <div className="pt-2">
+              <LogAnythingButton />
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {/* meals */}
       <section className="flex flex-col gap-4">
         <Label>today&apos;s meals</Label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {SLOTS.map((slot) => {
             const entry = planBySlot[slot];
             const time = schedule[slot];
-            if (entry?.recipes) {
+            if (entry?.recipes && entry.recipe_id) {
               return (
-                <MealCard
+                <PlannedMealCard
                   key={slot}
+                  planEntryId={entry.id}
                   slot={slot}
                   time={time}
                   name={entry.recipes.name}
                   kcal={entry.recipes.kcal}
                   protein={entry.recipes.protein}
                   status={entry.status as "planned" | "logged" | "skipped"}
-                  href={`/recipes/${entry.id}`}
+                  recipeId={entry.recipe_id}
                   photoUrl={entry.recipes.photo_url}
                 />
               );
@@ -158,7 +181,28 @@ export default async function TodayPage() {
         </div>
       </section>
 
-      {/* insight */}
+      {logs.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <Label>logged today</Label>
+          <ul className="flex flex-col rounded-card border border-ink-l overflow-hidden bg-card">
+            {logs.map((log) => (
+              <li
+                key={log.id}
+                className="flex items-center justify-between px-4 py-3 border-b border-ink-l/40 last:border-b-0"
+              >
+                <Body size="sm" className="text-ink">
+                  {log.recipes?.name ?? log.custom_name ?? "untitled meal"}
+                </Body>
+                <Mono className="text-ink-3 text-[12px]">
+                  {log.kcal ?? 0} kcal
+                  {log.protein != null ? ` · ${log.protein}g protein` : ""}
+                </Mono>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {insight ? (
         <section>
           <InsightCard id={insight.id} body={insight.body} />
