@@ -45,7 +45,7 @@ export function AppearanceSection({
 
   return (
     <Card className="p-6 flex flex-col gap-4">
-      <Label>appearance</Label>
+      <Label accent>appearance</Label>
 
       <div className="flex items-center justify-between">
         <Body size="sm" className="text-ink">

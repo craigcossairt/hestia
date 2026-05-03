@@ -42,7 +42,7 @@ export function WeightSection({
   return (
     <Card className="p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Label>weight</Label>
+        <Label accent>weight</Label>
         {status ? (
           <Body
             size="xs"

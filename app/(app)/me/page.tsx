@@ -111,7 +111,7 @@ export default async function MePage() {
       />
 
       <Card className="p-6 flex flex-col gap-3">
-        <Label>account</Label>
+        <Label accent>account</Label>
         <Body size="sm">
           Signed in as <Mono className="text-ink">{user.email}</Mono>.
         </Body>

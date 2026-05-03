@@ -111,3 +111,20 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* ─── Native form controls in dark mode ──────────────────────────────
+   The OS-rendered popups for <select>, <input type="time">, etc. only
+   honor color-scheme when it's set on the element itself (a parent
+   color-scheme on :root is unreliable across browsers, especially when
+   the form control has an explicit background). Force dark explicitly. */
+.dark select,
+.dark input[type="time"],
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="number"],
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="search"],
+.dark textarea {
+  color-scheme: dark;
+}

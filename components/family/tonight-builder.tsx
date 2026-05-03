@@ -67,7 +67,7 @@ export function TonightBuilder() {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-5 flex flex-col gap-3">
-        <Label>tonight&apos;s plate builder</Label>
+        <Label accent>tonight&apos;s plate builder</Label>
         <Body size="sm" dim>
           Pick a recipe — Hestia explains how to make it once and have it land
           well for everyone.
