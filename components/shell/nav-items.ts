@@ -17,5 +17,6 @@ export const PRIMARY_NAV: NavItem[] = [
 export const SECONDARY_NAV: NavItem[] = [
   { href: "/recipes", label: "Recipes", icon: "book" },
   { href: "/coach", label: "Coach", icon: "sparkle" },
+  { href: "/programs", label: "Programs", icon: "flag" },
   { href: "/stats", label: "Stats", icon: "scale" },
 ];

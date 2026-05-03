@@ -6,6 +6,7 @@ import { ProfileSection } from "@/components/me/profile-section";
 import { DietSection } from "@/components/me/diet-section";
 import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
+import { WeightSection } from "@/components/me/weight-section";
 import type { AccentPreset } from "@/lib/types/database";
 
 export default async function MePage() {
@@ -22,6 +23,22 @@ export default async function MePage() {
     .maybeSingle();
 
   if (!profile?.onboarded_at) redirect("/onboard");
+
+  // Best-effort: weight_logs table may not exist yet if migration 0002 hasn't
+  // been run. Tolerate the failure — the WeightSection still renders for
+  // logging, just without the recent list.
+  let recentWeights: Array<{ id: string; value_kg: number; logged_at: string }> = [];
+  try {
+    const { data } = await supabase
+      .from("weight_logs")
+      .select("id, value_kg, logged_at")
+      .eq("user_id", user.id)
+      .order("logged_at", { ascending: false })
+      .limit(5);
+    recentWeights = data ?? [];
+  } catch {
+    // table doesn't exist yet — ignore
+  }
 
   const schedule = (profile.schedule_json as {
     breakfast?: string;
@@ -57,6 +74,8 @@ export default async function MePage() {
           fat_target: profile.fat_target,
         }}
       />
+
+      <WeightSection currentKg={profile.weight_kg} recent={recentWeights} />
 
       <DietSection initial={profile.dietary_restrictions ?? []} />
 

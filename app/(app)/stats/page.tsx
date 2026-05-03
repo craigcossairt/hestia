@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { H, Body, Label, Card, Mono, Stat } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { WeekBars } from "@/components/stats/week-bars";
+import { WeightChart } from "@/components/stats/weight-chart";
 
 const WEEKDAY_FMT = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 
@@ -36,6 +37,26 @@ export default async function StatsPage() {
   toDay.setHours(23, 59, 59, 999);
   const toIso = toDay.toISOString();
 
+  // Fetch a wider window for the weight chart (last 90 days).
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  let weightsResData: Array<{ logged_at: string; value_kg: number }> | null = null;
+  try {
+    const weightsRes = await supabase
+      .from("weight_logs")
+      .select("logged_at, value_kg")
+      .eq("user_id", user.id)
+      .gte("logged_at", `${ninetyDaysAgo}T00:00:00`)
+      .order("logged_at", { ascending: true });
+    weightsResData = (weightsRes.data ?? null) as
+      | Array<{ logged_at: string; value_kg: number }>
+      | null;
+  } catch {
+    // weight_logs table may not exist yet — ignore
+  }
+
   const [logsRes, planRes] = await Promise.all([
     supabase
       .from("meal_logs")
@@ -50,6 +71,11 @@ export default async function StatsPage() {
       .gte("date", fromDay)
       .lte("date", days[days.length - 1].date),
   ]);
+
+  const weightPoints = (weightsResData ?? []).map((w) => ({
+    date: w.logged_at,
+    value_kg: w.value_kg,
+  }));
 
   type LogRow = { logged_at: string; kcal: number | null; protein: number | null };
   const logs = (logsRes.data ?? []) as LogRow[];
@@ -120,6 +146,16 @@ export default async function StatsPage() {
         <Card className="p-5 flex flex-col gap-4">
           <Label>protein per day</Label>
           <WeekBars days={dayPoints} target={profile.protein_target ?? 0} metric="protein" />
+        </Card>
+      </section>
+
+      <section>
+        <Card className="p-5 flex flex-col gap-4">
+          <div className="flex items-baseline justify-between">
+            <Label>weight (last 90 days)</Label>
+            <Mono className="text-ink-3 text-[11px]">log on Me</Mono>
+          </div>
+          <WeightChart points={weightPoints} />
         </Card>
       </section>
 

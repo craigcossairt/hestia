@@ -14,6 +14,7 @@ interface CoachContext {
   dietary_restrictions: string[];
   recent_meals: string[];
   pantry_highlights: string[];
+  active_program_context?: string | null;
 }
 
 export function coachSystemPrompt(ctx: CoachContext) {
@@ -41,6 +42,7 @@ Their current state:
 - Dietary preferences: ${ctx.dietary_restrictions.length ? ctx.dietary_restrictions.join(", ") : "none recorded"}
 - Recent logged meals: ${ctx.recent_meals.length ? ctx.recent_meals.slice(0, 6).join(", ") : "nothing yet"}
 - Pantry highlights: ${ctx.pantry_highlights.length ? ctx.pantry_highlights.slice(0, 8).join(", ") : "no inventory recorded"}
+${ctx.active_program_context ? `\nActive program guidance:\n${ctx.active_program_context}` : ""}
 
 Bias your suggestions toward what they already have in the pantry. If a
 recipe makes sense to add to the library, suggest it concisely and offer to

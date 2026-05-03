@@ -128,3 +128,27 @@ export async function updateAppearance(args: {
   await supabase.from("profiles").update(patch).eq("id", user.id);
   revalidatePath("/me");
 }
+
+export async function logWeight(value_kg: number, note?: string) {
+  if (value_kg <= 20 || value_kg >= 300) {
+    return { error: "Weight out of range." };
+  }
+  const { supabase, user } = await getUserOrRedirect();
+
+  const { error } = await supabase.from("weight_logs").insert({
+    user_id: user.id,
+    value_kg,
+    note: note ?? null,
+  });
+  if (error) return { error: error.message };
+
+  // Also update the profile's current weight so Mifflin–St Jeor recompute uses
+  // the latest measurement.
+  await supabase
+    .from("profiles")
+    .update({ weight_kg: value_kg, updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+
+  revalidatePath("/me");
+  revalidatePath("/stats");
+}

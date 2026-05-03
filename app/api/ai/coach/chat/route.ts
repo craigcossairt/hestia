@@ -3,6 +3,7 @@ import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { coachSystemPrompt } from "@/lib/ai/prompts/coach";
+import { getProgram } from "@/lib/programs";
 
 export const maxDuration = 30;
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     supabase
       .from("profiles")
       .select(
-        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions",
+        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_program",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest) {
     .filter(Boolean);
   const pantry_highlights = (pantry ?? []).map((p: { name: string }) => p.name);
 
+  const activeProgramId = (profile as { active_program?: string | null } | null)
+    ?.active_program;
+  const activeProgram = activeProgramId ? getProgram(activeProgramId) : null;
+
   const xai = getXai();
   const result = streamText({
     model: xai(MODELS.fast),
@@ -55,6 +60,7 @@ export async function POST(req: NextRequest) {
       dietary_restrictions: profile?.dietary_restrictions ?? [],
       recent_meals,
       pantry_highlights,
+      active_program_context: activeProgram?.coach_context ?? null,
     }),
     messages: await convertToModelMessages(messages),
   });
