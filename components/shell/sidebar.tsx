@@ -3,63 +3,136 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { Icon, Label } from "@/components/ds";
-import { PRIMARY_NAV, SECONDARY_NAV, type NavItem } from "./nav-items";
+import {
+  SIDEBAR_PRIMARY_NAV,
+  SECONDARY_NAV,
+  type NavItem,
+} from "./nav-items";
+import { ThemeToggle } from "./theme-toggle";
+import { UserMenu } from "./user-menu";
+import { useUi } from "@/lib/store/ui";
 import { cn } from "@/lib/utils";
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+interface SidebarProps {
+  user: { name: string | null; email: string } | null;
+  initialDark: boolean;
+}
+
+export function Sidebar({ user, initialDark }: SidebarProps) {
+  const collapsed = useUi((s) => s.sidebarCollapsed);
+  const toggle = useUi((s) => s.toggleSidebar);
+
   return (
-    <Link
-      href={item.href}
+    <aside
+      data-collapsed={collapsed}
       className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-thumb font-sans text-[14px] transition-colors",
-        active
-          ? "bg-accent-tint text-ink"
-          : "text-ink-2 hover:bg-paper-2 hover:text-ink",
+        "hidden md:flex flex-col fixed left-0 top-0 bottom-0 bg-paper-2 border-r border-ink-l transition-[width] duration-200 z-40",
+        collapsed ? "w-16 px-2 py-4" : "w-60 px-4 py-4",
       )}
     >
-      <Icon name={item.icon} size={18} />
-      <span>{item.label}</span>
-    </Link>
+      {/* Top: theme toggle + collapse button */}
+      <div
+        className={cn(
+          "flex items-center mb-4",
+          collapsed ? "flex-col gap-1" : "justify-between",
+        )}
+      >
+        <ThemeToggle initialDark={initialDark} collapsed={collapsed} />
+        <button
+          type="button"
+          onClick={toggle}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="w-9 h-9 flex items-center justify-center rounded-thumb text-ink-3 hover:text-ink hover:bg-paper-3 transition-colors"
+        >
+          {collapsed ? (
+            <ChevronsRight size={16} strokeWidth={1.5} />
+          ) : (
+            <ChevronsLeft size={16} strokeWidth={1.5} />
+          )}
+        </button>
+      </div>
+
+      {/* Logo */}
+      <Link
+        href="/today"
+        className={cn(
+          "flex items-center mb-6 group",
+          collapsed ? "justify-center" : "px-1",
+        )}
+        aria-label="Hestia home"
+      >
+        {collapsed ? (
+          <Image
+            src="/logos/h-mark.png"
+            alt="Hestia"
+            width={512}
+            height={512}
+            priority
+            className="h-9 w-9 group-hover:opacity-80 transition-opacity"
+          />
+        ) : (
+          <Image
+            src="/logos/wordmark.png"
+            alt="Hestia"
+            width={504}
+            height={212}
+            priority
+            className="h-9 w-auto group-hover:opacity-80 transition-opacity"
+          />
+        )}
+      </Link>
+
+      {/* Primary nav */}
+      <nav className="flex flex-col gap-1">
+        {SIDEBAR_PRIMARY_NAV.map((item) => (
+          <NavLink key={item.href} item={item} collapsed={collapsed} />
+        ))}
+      </nav>
+
+      {/* Library section */}
+      {!collapsed ? (
+        <div className="mt-6 mb-2 px-3">
+          <Label>library</Label>
+        </div>
+      ) : (
+        <div className="my-3 mx-3 border-t border-ink-l/40" />
+      )}
+      <nav className="flex flex-col gap-1">
+        {SECONDARY_NAV.map((item) => (
+          <NavLink key={item.href} item={item} collapsed={collapsed} />
+        ))}
+      </nav>
+
+      {/* Bottom: user menu */}
+      <div className="mt-auto">
+        {user ? (
+          <UserMenu name={user.name} email={user.email} collapsed={collapsed} />
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
-export function Sidebar() {
+function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
-
+  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   return (
-    <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 px-4 py-6 bg-paper-2 border-r border-ink-l">
-      <Link href="/today" className="flex items-center px-1 mb-8 group" aria-label="Hestia home">
-        <Image
-          src="/logos/wordmark.png"
-          alt="Hestia"
-          width={504}
-          height={212}
-          priority
-          className="h-9 w-auto group-hover:opacity-80 transition-opacity"
-        />
-      </Link>
-
-      <nav className="flex flex-col gap-1">
-        {PRIMARY_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
-      </nav>
-
-      <div className="mt-8 mb-2 px-3">
-        <Label>library</Label>
-      </div>
-      <nav className="flex flex-col gap-1">
-        {SECONDARY_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
-      </nav>
-
-      <div className="mt-auto px-3 pt-4 border-t border-ink-l/50">
-        <Label>v0.1 · personal build</Label>
-      </div>
-    </aside>
+    <Link
+      href={item.href}
+      title={collapsed ? item.label : undefined}
+      className={cn(
+        "flex items-center rounded-thumb font-sans text-[14px] transition-colors",
+        collapsed ? "justify-center w-12 h-10 mx-auto" : "gap-3 px-3 py-2",
+        active
+          ? "bg-accent-tint text-ink"
+          : "text-ink-2 hover:bg-paper-3 hover:text-ink",
+      )}
+    >
+      <Icon name={item.icon} size={18} />
+      {!collapsed ? <span>{item.label}</span> : null}
+    </Link>
   );
 }
