@@ -67,6 +67,23 @@ User request: "${prompt}"
 Return ONLY a valid recipe object matching the schema. No commentary.`;
 }
 
+export function parseRecipeFromPhotoPrompt() {
+  return `You are reading a recipe from a photo — a cookbook page, magazine
+clipping, restaurant menu, or screenshot. Extract the recipe into the strict
+schema.
+
+Rules:
+- Use only what you can clearly read on the photo. Don't invent ingredients
+  or steps. If quantity is illegible, use a sensible default (1 cup, 1 tbsp).
+- US-style units when possible (cup, tbsp, tsp, oz, lb, each).
+- If macros aren't on the page, estimate from the ingredients (round to whole numbers).
+- If multiple recipes are visible, pick the most prominent / largest one.
+- Strip extraneous prose ("a family favorite for generations…"). Keep steps
+  imperative and concise.
+
+Return ONLY a valid recipe object matching the schema. No commentary.`;
+}
+
 export function parseRecipeFromUrlPrompt(args: { url: string; htmlExcerpt: string }) {
   return `You are extracting a recipe from a webpage. Parse the page content
 into the strict recipe schema.

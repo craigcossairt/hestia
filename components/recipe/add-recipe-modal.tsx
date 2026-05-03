@@ -1,13 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog, H, Body, Btn, Label, Mono } from "@/components/ds";
 import { saveGeneratedRecipe } from "@/app/(app)/recipes/actions";
 import { cn } from "@/lib/utils";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
 
-type Mode = "ai" | "url" | "manual";
+type Mode = "ai" | "url" | "photo" | "manual";
+
+const MODE_LABELS: Record<Mode, string> = {
+  ai: "Ask Hestia",
+  url: "Paste URL",
+  photo: "Photo",
+  manual: "Write it",
+};
 
 interface AddRecipeModalProps {
   open: boolean;
@@ -29,24 +36,25 @@ export function AddRecipeModal({ open, onClose }: AddRecipeModalProps) {
           Where should the recipe come from?
         </H>
 
-        <div className="grid grid-cols-3 gap-1 p-1 bg-paper-2 rounded-thumb">
-          {(["ai", "url", "manual"] as Mode[]).map((m) => (
+        <div className="grid grid-cols-4 gap-1 p-1 bg-paper-2 rounded-thumb">
+          {(["ai", "url", "photo", "manual"] as Mode[]).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
               className={cn(
-                "px-3 py-2 rounded-thumb font-sans text-[13px] capitalize transition-colors",
+                "px-3 py-2 rounded-thumb font-sans text-[12.5px] transition-colors",
                 mode === m ? "bg-card text-ink shadow-[var(--shadow-1)]" : "text-ink-3",
               )}
             >
-              {m === "ai" ? "Ask Hestia" : m === "url" ? "Paste URL" : "Write it"}
+              {MODE_LABELS[m]}
             </button>
           ))}
         </div>
 
         {mode === "ai" && <AiMode onClose={onClose} />}
         {mode === "url" && <UrlMode onClose={onClose} />}
+        {mode === "photo" && <PhotoMode onClose={onClose} />}
         {mode === "manual" && <ManualMode onClose={onClose} />}
       </div>
     </Dialog>
@@ -177,6 +185,96 @@ function UrlMode({ onClose }: { onClose: () => void }) {
           <Btn variant="outline" onClick={save} disabled={pending}>
             {pending ? "saving…" : "save to library"}
           </Btn>
+        </div>
+      ) : null}
+      {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
+      {recipe ? <RecipePreview recipe={recipe} /> : null}
+    </div>
+  );
+}
+
+function PhotoMode({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setParsing(true);
+    setRecipe(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      setPreviewUrl(dataUrl);
+      const res = await fetch("/api/ai/recipe-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_data_url: dataUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed");
+      setRecipe(json);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function save() {
+    if (!recipe) return;
+    start(async () => {
+      const result = await saveGeneratedRecipe(recipe);
+      if ("error" in result) setError(result.error!);
+      else {
+        onClose();
+        router.push(`/recipes/${result.id}`);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onFile}
+        className="hidden"
+      />
+      <Body size="sm" dim>
+        Snap or upload a cookbook page, magazine clipping, or screenshot.
+        Hestia parses it with vision AI.
+      </Body>
+      <div className="flex gap-2">
+        <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={parsing}>
+          {parsing ? "reading…" : previewUrl ? "another photo" : "upload photo"}
+        </Btn>
+        {recipe ? (
+          <Btn variant="outline" onClick={save} disabled={pending}>
+            {pending ? "saving…" : "save to library"}
+          </Btn>
+        ) : null}
+      </div>
+      {previewUrl ? (
+        <div className="rounded-card overflow-hidden border border-ink-l max-h-64">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt="recipe source"
+            className="w-full max-h-64 object-cover object-top"
+          />
         </div>
       ) : null}
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}

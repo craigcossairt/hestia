@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -86,6 +87,7 @@ export default async function RootLayout({
     >
       <body className="bg-paper text-ink-2 min-h-full">
         <Providers>{children}</Providers>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
