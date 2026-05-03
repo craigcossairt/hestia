@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { H, Body, Label, Btn, Card } from "@/components/ds";
+import { H, Body, Label } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { FamilyCard } from "@/components/family/family-card";
+import { AddMemberForm } from "@/components/family/add-member-form";
 import { TonightBuilder } from "@/components/family/tonight-builder";
 import type { FamilyMember } from "@/lib/family";
 
@@ -13,11 +13,37 @@ export default async function FamilyPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("family_json")
+    .select(
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, family_json, active_programs",
+    )
     .eq("id", user.id)
     .maybeSingle();
+
   const family =
     (profile?.family_json as FamilyMember[] | null | undefined) ?? [];
+
+  // Shape the user's profile as a FamilyMember-equivalent so the same card
+  // component renders both. The "self" card links to /me.
+  const selfAsMember: FamilyMember = {
+    id: "self",
+    name: profile?.name ?? "You",
+    age: profile?.age ?? 0,
+    sex: profile?.sex ?? undefined,
+    height_cm: profile?.height_cm ?? null,
+    weight_kg: profile?.weight_kg ?? null,
+    activity: profile?.activity ?? null,
+    goal: profile?.goal ?? null,
+    kcal_target: profile?.kcal_target ?? null,
+    protein_target: profile?.protein_target ?? null,
+    carbs_target: profile?.carbs_target ?? null,
+    fat_target: profile?.fat_target ?? null,
+    dietary_restrictions: profile?.dietary_restrictions ?? [],
+    allergies: profile?.allergies ?? [],
+    disliked_foods: profile?.disliked_foods ?? [],
+    medical_conditions: profile?.medical_conditions ?? [],
+    portion_modifier: 1,
+    active_programs: profile?.active_programs ?? [],
+  };
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-8">
@@ -27,33 +53,29 @@ export default async function FamilyPage() {
           Family
         </H>
         <Body size="lg" dim>
-          Everyone you cook for. Hestia uses these to plan plates that work
-          for the whole table.
+          Everyone you cook for. Click a card to edit their profile —
+          Hestia uses these to plan plates that work for the whole table.
         </Body>
       </header>
 
-      {family.length === 0 ? (
-        <Card className="p-8 flex flex-col items-center text-center gap-4 border-dashed">
-          <Body dim>
-            No family members yet. Add them on the Me tab to enable per-person
-            portions, picky-eater pathways, and allergen checks.
-          </Body>
-          <Link href="/me">
-            <Btn variant="primary">Add family on Me →</Btn>
-          </Link>
-        </Card>
-      ) : (
-        <>
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {family.map((m) => (
-              <FamilyCard key={m.id} member={m} />
-            ))}
-          </section>
-          <section>
-            <TonightBuilder />
-          </section>
-        </>
-      )}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <FamilyCard member={selfAsMember} href="/me" isSelf />
+        {family
+          .filter((m) => m.name?.trim())
+          .map((m) => (
+            <FamilyCard key={m.id} member={m} href={`/family/${m.id}`} />
+          ))}
+      </section>
+
+      <div>
+        <AddMemberForm />
+      </div>
+
+      {family.length > 0 ? (
+        <section>
+          <TonightBuilder />
+        </section>
+      ) : null}
     </div>
   );
 }

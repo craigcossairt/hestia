@@ -14,6 +14,12 @@ interface PlanWeekArgs {
   goal: string | null;
   protein_target: number | null;
   dietary_restrictions: string[];
+  // Hard rules — never violate. Aggregated across user + family.
+  household_allergies: string[];
+  // Soft preferences — avoid when possible.
+  household_dislikes: string[];
+  // Chronic conditions to factor in.
+  household_medical: string[];
   pantry_hints: string[];
   recent_recipe_names: string[];
   active_program_context?: string | null;
@@ -28,6 +34,9 @@ distinct DINNER recipes for the week. Each must be:
 - US units (cup, tbsp, tsp, oz, lb). Grams only for macros.
 - Honest macros — don't pad to hit numbers.
 ${args.dietary_restrictions.length ? `- Respect dietary preferences: ${args.dietary_restrictions.join(", ")}.` : ""}
+${args.household_allergies.length ? `- ALLERGIES — NEVER include: ${args.household_allergies.join(", ")}. This is a hard rule across the entire household.` : ""}
+${args.household_dislikes.length ? `- Avoid these disliked foods when reasonable: ${args.household_dislikes.join(", ")}. Substitute equivalents.` : ""}
+${args.household_medical.length ? `- Medical context to bias toward: ${args.household_medical.join(", ")}. Lean toward food patterns aligned with these (low-glycemic / gluten-free / low-sodium / low-FODMAP as applicable).` : ""}
 ${args.goal ? `- Aligned with goal: ${args.goal}.` : ""}
 ${args.protein_target ? `- Bias protein density (target ${args.protein_target}g/day).` : ""}
 ${args.pantry_hints.length ? `- Prefer pantry items where natural: ${args.pantry_hints.slice(0, 14).join(", ")}.` : ""}

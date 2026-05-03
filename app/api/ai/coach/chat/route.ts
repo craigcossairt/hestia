@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     supabase
       .from("profiles")
       .select(
-        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_programs, family_json",
+        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, active_programs, family_json",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -68,6 +68,9 @@ export async function POST(req: NextRequest) {
       carbs_target: profile?.carbs_target ?? null,
       fat_target: profile?.fat_target ?? null,
       dietary_restrictions: profile?.dietary_restrictions ?? [],
+      allergies: profile?.allergies ?? [],
+      disliked_foods: profile?.disliked_foods ?? [],
+      medical_conditions: profile?.medical_conditions ?? [],
       recent_meals,
       pantry_highlights,
       active_program_context: programContext,
@@ -75,6 +78,9 @@ export async function POST(req: NextRequest) {
         name: f.name,
         age: f.age,
         dietary_restrictions: f.dietary_restrictions ?? [],
+        allergies: f.allergies ?? [],
+        disliked_foods: f.disliked_foods ?? [],
+        medical_conditions: f.medical_conditions ?? [],
         notes: f.notes,
       })),
     }),

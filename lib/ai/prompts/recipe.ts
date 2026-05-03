@@ -49,13 +49,31 @@ export function generateRecipePrompt(args: {
   pantry_hints: string[];
   goal?: string;
   protein_target?: number;
+  // Hard rules — never violate. Aggregated across user + household.
+  allergies?: string[];
+  // Soft preferences — avoid when possible.
+  disliked_foods?: string[];
+  // Medical conditions to bias for.
+  medical_conditions?: string[];
 }) {
-  const { prompt, dietary_restrictions, pantry_hints, goal, protein_target } = args;
+  const {
+    prompt,
+    dietary_restrictions,
+    pantry_hints,
+    goal,
+    protein_target,
+    allergies,
+    disliked_foods,
+    medical_conditions,
+  } = args;
   return `You are Hestia, a calm meal-planning assistant. Generate ONE recipe
 that matches the user's request. The recipe must be:
 
 - Realistic, written in plain prose, no marketing fluff.
-- Tight ingredient list, ${dietary_restrictions.length ? "respecting these dietary preferences: " + dietary_restrictions.join(", ") + "." : "with no allergen concerns."}
+- Tight ingredient list, ${dietary_restrictions.length ? "respecting these dietary preferences: " + dietary_restrictions.join(", ") + "." : "with no specific dietary preferences set."}
+${allergies?.length ? `- ALLERGIES — NEVER include: ${allergies.join(", ")}. This is a hard rule.` : ""}
+${disliked_foods?.length ? `- Avoid these disliked foods when reasonable: ${disliked_foods.join(", ")}.` : ""}
+${medical_conditions?.length ? `- Lean toward patterns aligned with: ${medical_conditions.join(", ")}.` : ""}
 - US-based user: prefer US units (cup, tbsp, tsp, oz, lb, each) for ingredients. Use grams only for macros.
 - Macros must be honest. Don't pad with "optional toppings" to hit a number.
 ${goal ? `- Aligned with this goal: ${goal}.` : ""}

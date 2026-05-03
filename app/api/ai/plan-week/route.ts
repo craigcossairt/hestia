@@ -32,7 +32,7 @@ export async function POST(_req: NextRequest) {
       supabase
         .from("profiles")
         .select(
-          "goal, protein_target, dietary_restrictions, active_programs, family_json",
+          "goal, protein_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, active_programs, family_json",
         )
         .eq("id", user.id)
         .maybeSingle(),
@@ -58,6 +58,28 @@ export async function POST(_req: NextRequest) {
     members: family,
   });
 
+  // Aggregate hard rules across the household. Allergies = union (one person's
+  // allergy makes the whole shared meal off-limits). Dislikes = soft union;
+  // medical conditions = union.
+  const householdAllergies = Array.from(
+    new Set([
+      ...(profile?.allergies ?? []),
+      ...family.flatMap((f) => f.allergies ?? []),
+    ]),
+  );
+  const householdDislikes = Array.from(
+    new Set([
+      ...(profile?.disliked_foods ?? []),
+      ...family.flatMap((f) => f.disliked_foods ?? []),
+    ]),
+  );
+  const householdMedical = Array.from(
+    new Set([
+      ...(profile?.medical_conditions ?? []),
+      ...family.flatMap((f) => f.medical_conditions ?? []),
+    ]),
+  );
+
   const familySummary = family.length
     ? family
         .map(
@@ -78,6 +100,9 @@ export async function POST(_req: NextRequest) {
         goal: profile?.goal ?? null,
         protein_target: profile?.protein_target ?? null,
         dietary_restrictions: profile?.dietary_restrictions ?? [],
+        household_allergies: householdAllergies,
+        household_dislikes: householdDislikes,
+        household_medical: householdMedical,
         pantry_hints: (pantry ?? []).map((p: { name: string }) => p.name),
         recent_recipe_names: (recent ?? []).map((r: { name: string }) => r.name),
         active_program_context: programContext,

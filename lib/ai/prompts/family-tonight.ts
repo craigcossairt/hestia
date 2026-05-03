@@ -50,8 +50,15 @@ ${args.recipe_summary}
 Household:
 ${args.members
   .map(
-    (m, i) =>
-      `${i + 1}. ${m.name} — age ${m.age}${m.sex ? `, ${m.sex}` : ""}, portion ${m.portion_modifier ?? 1}x${m.dietary_restrictions.length ? `, ${m.dietary_restrictions.join(", ")}` : ""}${m.notes ? `; notes: ${m.notes}` : ""}`,
+    (m, i) => {
+      const meta: string[] = [];
+      if (m.dietary_restrictions.length) meta.push(m.dietary_restrictions.join(", "));
+      if (m.allergies?.length) meta.push(`ALLERGY: ${m.allergies.join(", ")}`);
+      if (m.disliked_foods?.length) meta.push(`dislikes ${m.disliked_foods.join(", ")}`);
+      if (m.medical_conditions?.length) meta.push(`managing ${m.medical_conditions.join(", ")}`);
+      if (m.notes) meta.push(m.notes);
+      return `${i + 1}. ${m.name} — age ${m.age}${m.sex ? `, ${m.sex}` : ""}, portion ${m.portion_modifier ?? 1}x${meta.length ? `; ${meta.join("; ")}` : ""}`;
+    },
   )
   .join("\n")}
 
@@ -63,7 +70,10 @@ with sauces and toppings on the side.
 Rules:
 - US units (cup, tbsp, oz, lb).
 - Each member's portion_text and modifications should be concrete and small.
-- Honor allergen restrictions strictly.
+- ALLERGIES are hard rules — if the base recipe contains an allergen for
+  someone, surface a swap in their modifications and add an allergen_note.
+- Disliked foods: try to swap or omit on that person's plate.
+- Medical conditions: bias their plate toward aligned patterns where simple.
 - Keep prep_tip to one short sentence.
 
 Return ONLY a valid plan object matching the schema.`;

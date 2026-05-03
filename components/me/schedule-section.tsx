@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { Card, Label, Body, Btn } from "@/components/ds";
 import { updateProfile } from "@/app/(app)/me/actions";
+import { updateMember } from "@/app/(app)/family/[id]/actions";
+import type { EditScope } from "@/components/me/profile-section";
 
 interface Schedule {
   breakfast: string;
@@ -10,7 +12,15 @@ interface Schedule {
   dinner: string;
 }
 
-export function ScheduleSection({ initial }: { initial: Schedule }) {
+interface ScheduleSectionProps {
+  scope?: EditScope;
+  initial: Schedule;
+}
+
+export function ScheduleSection({
+  initial,
+  scope = { kind: "user" },
+}: ScheduleSectionProps) {
   const [schedule, setSchedule] = useState<Schedule>({
     breakfast: initial.breakfast ?? "08:00",
     lunch: initial.lunch ?? "12:30",
@@ -22,7 +32,10 @@ export function ScheduleSection({ initial }: { initial: Schedule }) {
   function save() {
     setStatus(null);
     start(async () => {
-      const result = await updateProfile({ schedule });
+      const result =
+        scope.kind === "user"
+          ? await updateProfile({ schedule })
+          : await updateMember(scope.memberId, { schedule_json: schedule });
       setStatus(result?.error ? `Error: ${result.error}` : "Saved.");
     });
   }
@@ -38,7 +51,9 @@ export function ScheduleSection({ initial }: { initial: Schedule }) {
         ) : null}
       </div>
       <Body size="sm" dim>
-        Default times shown on your Today page.
+        {scope.kind === "user"
+          ? "Default times shown on your Today page."
+          : "Per-person eating times. Coach uses these when planning around the household."}
       </Body>
       {(["breakfast", "lunch", "dinner"] as const).map((slot) => (
         <label
