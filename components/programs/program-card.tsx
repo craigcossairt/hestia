@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
 import { Check } from "lucide-react";
 import { Card, H, Body, Btn, Label, Mono } from "@/components/ds";
@@ -26,9 +27,11 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
           <Label>{program.category}</Label>
           <Mono className="text-ink-3 text-[11px]">{program.duration_days}d</Mono>
         </div>
-        <H size="md" as="h3">
-          {program.name}
-        </H>
+        <Link href={`/programs/${program.id}`}>
+          <H size="md" as="h3" className="hover:underline">
+            {program.name}
+          </H>
+        </Link>
         <Body size="sm" dim className="flex-1">
           {program.short}
         </Body>
@@ -43,7 +46,7 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
             </li>
           ))}
         </ul>
-        <div className="pt-2">
+        <div className="pt-2 flex gap-2">
           {active ? (
             <Btn
               variant="outline"
@@ -71,6 +74,11 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
               {pending ? "activating…" : "activate"}
             </Btn>
           )}
+          <Link href={`/programs/${program.id}`}>
+            <Btn variant="ghost" size="sm">
+              learn more →
+            </Btn>
+          </Link>
         </div>
       </div>
     </Card>
