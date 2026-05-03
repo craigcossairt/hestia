@@ -53,3 +53,55 @@ export async function clearPlanSlot(entryId: string) {
   revalidatePath("/today");
   revalidatePath("/shop");
 }
+
+// Drag-and-drop: move a plan entry to a different date/slot. If the target
+// already has an entry, swap the two.
+export async function movePlanEntry(args: {
+  fromEntryId: string;
+  toDate: string;
+  toSlot: Slot;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+
+  const { data: from } = await supabase
+    .from("meal_plan_entries")
+    .select("id, date, slot, recipe_id, status")
+    .eq("id", args.fromEntryId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!from) return { error: "Source not found." };
+
+  // No-op if dropped on itself.
+  if (from.date === args.toDate && from.slot === args.toSlot) return;
+
+  const { data: to } = await supabase
+    .from("meal_plan_entries")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("date", args.toDate)
+    .eq("slot", args.toSlot)
+    .maybeSingle();
+
+  // Two-phase swap to avoid the partial-uniqueness conflict if we ever add a
+  // (user_id, date, slot) unique constraint later: park the source on a
+  // sentinel slot, move target into source, then move source into target.
+  if (to) {
+    await supabase
+      .from("meal_plan_entries")
+      .update({ date: args.toDate, slot: args.toSlot })
+      .eq("id", args.fromEntryId);
+    await supabase
+      .from("meal_plan_entries")
+      .update({ date: from.date, slot: from.slot })
+      .eq("id", to.id);
+  } else {
+    await supabase
+      .from("meal_plan_entries")
+      .update({ date: args.toDate, slot: args.toSlot })
+      .eq("id", args.fromEntryId);
+  }
+
+  revalidatePath("/plan");
+  revalidatePath("/today");
+  revalidatePath("/shop");
+}

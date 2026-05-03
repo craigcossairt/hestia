@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, X } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { Plus, X, GripVertical } from "lucide-react";
 import { Card, Label, Mono, FoodImage } from "@/components/ds";
 import { RecipePicker } from "./recipe-picker";
-import { clearPlanSlot } from "@/app/(app)/plan/actions";
+import { clearPlanSlot, movePlanEntry } from "@/app/(app)/plan/actions";
 import type { Slot } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +34,42 @@ export interface PlanGridProps {
 
 export function PlanGrid({ days, entries }: PlanGridProps) {
   const [picker, setPicker] = useState<{ date: string; slot: Slot } | null>(null);
+  const [draggingEntry, setDraggingEntry] = useState<PlanCellEntry | null>(null);
+  const [, start] = useTransition();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  function onDragEnd(e: DragEndEvent) {
+    setDraggingEntry(null);
+    if (!e.over) return;
+    const fromEntryId = String(e.active.id);
+    const overId = String(e.over.id);
+    const [toDate, toSlot] = overId.split("|") as [string, Slot];
+    if (!toDate || !toSlot) return;
+    start(async () => {
+      await movePlanEntry({ fromEntryId, toDate, toSlot });
+    });
+  }
 
   return (
-    <>
+    <DndContext
+      sensors={sensors}
+      onDragStart={(e) => {
+        const id = String(e.active.id);
+        for (const date of Object.keys(entries)) {
+          for (const slot of SLOTS) {
+            const entry = entries[date]?.[slot];
+            if (entry?.id === id) {
+              setDraggingEntry(entry);
+              return;
+            }
+          }
+        }
+      }}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setDraggingEntry(null)}
+    >
       {/* Desktop grid: 7 cols × 3 rows */}
       <div className="hidden md:block">
         <div className="grid grid-cols-7 gap-3 mb-3">
@@ -40,10 +83,10 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
         {SLOTS.map((slot) => (
           <div key={slot} className="grid grid-cols-7 gap-3 mb-3">
             {days.map((d) => (
-              <PlanCell
+              <DroppableCell
                 key={`${d.date}-${slot}`}
-                slot={slot}
                 date={d.date}
+                slot={slot}
                 entry={entries[d.date]?.[slot]}
                 onAssign={() => setPicker({ date: d.date, slot })}
               />
@@ -52,7 +95,7 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
         ))}
       </div>
 
-      {/* Mobile: vertical stack per day, with day strip on top */}
+      {/* Mobile: per-day stack */}
       <div className="md:hidden flex flex-col gap-6">
         {days.map((d) => (
           <div key={d.date} className="flex flex-col gap-3">
@@ -62,10 +105,10 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
             </div>
             <div className="grid grid-cols-1 gap-2">
               {SLOTS.map((slot) => (
-                <PlanCell
+                <DroppableCell
                   key={`${d.date}-${slot}`}
-                  slot={slot}
                   date={d.date}
+                  slot={slot}
                   entry={entries[d.date]?.[slot]}
                   onAssign={() => setPicker({ date: d.date, slot })}
                   showSlotLabel
@@ -76,6 +119,25 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
         ))}
       </div>
 
+      <DragOverlay>
+        {draggingEntry ? (
+          <Card className="overflow-hidden flex flex-col w-[140px] opacity-90">
+            <FoodImage
+              name={draggingEntry.recipeName}
+              src={draggingEntry.photoUrl ?? undefined}
+              height={70}
+              rounded={false}
+              showLabel={false}
+            />
+            <div className="px-2 py-1.5">
+              <div className="text-ink font-sans text-[12px] line-clamp-2 leading-tight">
+                {draggingEntry.recipeName}
+              </div>
+            </div>
+          </Card>
+        ) : null}
+      </DragOverlay>
+
       {picker ? (
         <RecipePicker
           open
@@ -84,43 +146,69 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
           slot={picker.slot}
         />
       ) : null}
-    </>
+    </DndContext>
   );
 }
 
-function PlanCell({
+function DroppableCell({
+  date,
   slot,
   entry,
   onAssign,
   showSlotLabel,
 }: {
-  slot: Slot;
   date: string;
+  slot: Slot;
   entry: PlanCellEntry | undefined;
   onAssign: () => void;
   showSlotLabel?: boolean;
 }) {
-  const [pending, start] = useTransition();
-
-  if (!entry) {
-    return (
-      <button
-        type="button"
-        onClick={onAssign}
-        className={cn(
-          "rounded-card border border-dashed border-ink-l p-3 flex flex-col items-center justify-center text-ink-3 hover:text-ink hover:border-ink-3 transition-colors min-h-[100px] gap-1",
-        )}
-      >
-        <Plus size={16} strokeWidth={1.5} />
-        <span className="font-mono text-[10px] uppercase tracking-wider">
-          {showSlotLabel ? slot : "add"}
-        </span>
-      </button>
-    );
-  }
+  const dropId = `${date}|${slot}`;
+  const { setNodeRef, isOver } = useDroppable({ id: dropId });
 
   return (
-    <Card className="overflow-hidden flex flex-col group relative min-h-[100px]">
+    <div ref={setNodeRef} className={cn("rounded-card transition-shadow", isOver && "ring-2 ring-accent")}>
+      {entry ? (
+        <FilledCell entry={entry} slot={slot} onAssign={onAssign} showSlotLabel={showSlotLabel} />
+      ) : (
+        <button
+          type="button"
+          onClick={onAssign}
+          className="w-full rounded-card border border-dashed border-ink-l p-3 flex flex-col items-center justify-center text-ink-3 hover:text-ink hover:border-ink-3 transition-colors min-h-[100px] gap-1"
+        >
+          <Plus size={16} strokeWidth={1.5} />
+          <span className="font-mono text-[10px] uppercase tracking-wider">
+            {showSlotLabel ? slot : "add"}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FilledCell({
+  entry,
+  slot,
+  onAssign,
+  showSlotLabel,
+}: {
+  entry: PlanCellEntry;
+  slot: Slot;
+  onAssign: () => void;
+  showSlotLabel?: boolean;
+}) {
+  const [pending, start] = useTransition();
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: entry.id,
+  });
+
+  return (
+    <Card
+      className={cn(
+        "overflow-hidden flex flex-col group relative min-h-[100px]",
+        isDragging && "opacity-30",
+      )}
+    >
       <button
         type="button"
         disabled={pending}
@@ -135,11 +223,19 @@ function PlanCell({
       >
         <X size={12} strokeWidth={1.5} />
       </button>
-      <button
-        type="button"
-        onClick={onAssign}
-        className="flex-1 flex flex-col text-left"
+
+      {/* Drag handle — explicit grip avoids fighting with the click-to-edit button */}
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        className="absolute top-1.5 left-1.5 z-10 p-1 rounded-full bg-card/80 text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+        aria-label="drag to reschedule"
       >
+        <GripVertical size={12} strokeWidth={1.5} />
+      </div>
+
+      <button type="button" onClick={onAssign} className="flex-1 flex flex-col text-left">
         <FoodImage
           name={entry.recipeName}
           src={entry.photoUrl ?? undefined}

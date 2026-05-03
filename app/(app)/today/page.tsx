@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { H, Body, Label, Mono, Ring, Bar } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { InsightCard } from "@/components/today/insight-card";
+import { InsightSlot } from "@/components/today/insight-slot";
 import {
   PlannedMealCard,
   EmptyMealCard,
@@ -37,6 +37,7 @@ export default async function TodayPage() {
   } | null = null;
   let totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   let insight: { id: string; body: string } | null = null;
+  let insightHoursOld: number | null = null;
   type PlanRow = {
     id: string;
     slot: string;
@@ -101,13 +102,17 @@ export default async function TodayPage() {
 
     const { data: ins } = await supabase
       .from("insights")
-      .select("id, body")
+      .select("id, body, created_at")
       .eq("user_id", user.id)
       .is("dismissed_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (ins) insight = ins;
+    if (ins) {
+      insight = { id: ins.id, body: ins.body };
+      insightHoursOld =
+        (Date.now() - new Date(ins.created_at).getTime()) / (1000 * 60 * 60);
+    }
   }
 
   const now = new Date();
@@ -203,18 +208,18 @@ export default async function TodayPage() {
         </section>
       ) : null}
 
-      {insight ? (
+      {user ? (
         <section>
-          <InsightCard id={insight.id} body={insight.body} />
+          <InsightSlot insight={insight} hoursOld={insightHoursOld} />
         </section>
-      ) : !user ? (
+      ) : (
         <section className="border border-dashed border-ink-l rounded-card p-6">
           <Body size="sm" dim>
             You&apos;re viewing the demo Today screen unauthenticated. Configure
             Supabase + sign in to see your real targets and meals.
           </Body>
         </section>
-      ) : null}
+      )}
     </div>
   );
 }
