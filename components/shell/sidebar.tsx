@@ -32,29 +32,6 @@ export function Sidebar({ user, initialDark }: SidebarProps) {
         collapsed ? "w-16 px-2 py-4" : "w-60 px-4 py-4",
       )}
     >
-      {/* Top: theme toggle + collapse button */}
-      <div
-        className={cn(
-          "flex items-center mb-4",
-          collapsed ? "flex-col gap-1" : "justify-between",
-        )}
-      >
-        <ThemeToggle initialDark={initialDark} collapsed={collapsed} />
-        <button
-          type="button"
-          onClick={toggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="w-9 h-9 flex items-center justify-center rounded-thumb text-ink-3 hover:text-ink hover:bg-paper-3 transition-colors"
-        >
-          {collapsed ? (
-            <ChevronsRight size={16} strokeWidth={1.5} />
-          ) : (
-            <ChevronsLeft size={16} strokeWidth={1.5} />
-          )}
-        </button>
-      </div>
-
       {/* Logo */}
       <Link
         href="/today"
@@ -106,8 +83,30 @@ export function Sidebar({ user, initialDark }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Bottom: user menu */}
-      <div className="mt-auto">
+      {/* Bottom: theme + collapse toolbar, then user menu */}
+      <div className="mt-auto flex flex-col">
+        <div
+          className={cn(
+            "flex items-center pb-2",
+            collapsed ? "flex-col gap-1" : "justify-between px-1",
+          )}
+        >
+          <ThemeToggle initialDark={initialDark} collapsed={collapsed} />
+          <button
+            type="button"
+            onClick={toggle}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="w-9 h-9 flex items-center justify-center rounded-thumb text-ink-3 hover:text-ink hover:bg-paper-3 transition-colors"
+          >
+            {collapsed ? (
+              <ChevronsRight size={16} strokeWidth={1.5} />
+            ) : (
+              <ChevronsLeft size={16} strokeWidth={1.5} />
+            )}
+          </button>
+        </div>
+
         {user ? (
           <UserMenu name={user.name} email={user.email} collapsed={collapsed} />
         ) : null}
