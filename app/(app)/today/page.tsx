@@ -11,10 +11,11 @@ import {
   RemoveLogButton,
 } from "@/components/today/meal-card";
 import { MemberSwitcher } from "@/components/family/member-switcher";
+import { DateNavigator } from "@/components/today/date-navigator";
 import { getProgram } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
-const SLOTS = ["breakfast", "lunch", "dinner"] as const;
+const SLOTS = ["breakfast", "lunch", "dinner", "dessert", "snack"] as const;
 
 function greet(now: Date): string {
   const h = now.getHours();
@@ -23,19 +24,23 @@ function greet(now: Date): string {
   return "Good evening";
 }
 
-const DAY_FMT = new Intl.DateTimeFormat("en-US", {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-});
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isValidDate(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+}
 
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ as?: string }>;
+  searchParams: Promise<{ as?: string; date?: string }>;
 }) {
   const sp = await searchParams;
   const viewAs = sp?.as ?? null;
+  const date = sp?.date && isValidDate(sp.date) ? sp.date : todayStr();
+  const isToday = date === todayStr();
 
   const supabase = isSupabaseConfigured() ? await createClient() : null;
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
@@ -49,7 +54,7 @@ export default async function TodayPage({
     schedule_json: Record<string, string> | null;
   } | null = null;
   let totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-  let activeProgramIds: string[] = [];
+  let userActiveProgramIds: string[] = [];
   let family: FamilyMember[] = [];
   type PlanRow = {
     id: string;
@@ -75,7 +80,6 @@ export default async function TodayPage({
   };
   let logs: LogRow[] = [];
 
-  // Resolve which subject we're viewing (self or a named member).
   let viewedMember: FamilyMember | null = null;
   let viewedScopeLabel: string | null = null;
 
@@ -111,13 +115,9 @@ export default async function TodayPage({
     } else {
       profile = data;
     }
-    activeProgramIds =
+    userActiveProgramIds =
       (data as { active_programs?: string[] | null }).active_programs ?? [];
 
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Plan entries are household-level (no per-member plan in v1) — only
-    // load them when viewing self.
     if (!viewedMember) {
       const { data: planRows } = await supabase
         .from("meal_plan_entries")
@@ -125,7 +125,7 @@ export default async function TodayPage({
           "id, slot, status, recipe_id, recipes:recipe_id(name, kcal, protein, photo_url)",
         )
         .eq("user_id", user.id)
-        .eq("date", today);
+        .eq("date", date);
       plan = (planRows ?? []) as unknown as PlanRow[];
     }
 
@@ -135,8 +135,8 @@ export default async function TodayPage({
         "id, custom_name, slot, kcal, protein, carbs, fat, recipe_id, recipes:recipe_id(name)",
       )
       .eq("user_id", user.id)
-      .gte("logged_at", `${today}T00:00:00`)
-      .lt("logged_at", `${today}T23:59:59`)
+      .gte("logged_at", `${date}T00:00:00`)
+      .lt("logged_at", `${date}T23:59:59`)
       .order("logged_at", { ascending: false });
     logQuery = viewedMember
       ? logQuery.eq("family_member_id", viewedMember.id)
@@ -170,9 +170,6 @@ export default async function TodayPage({
     plan.map((p) => [p.slot, p]),
   ) as Record<(typeof SLOTS)[number], PlanRow | undefined>;
 
-  // First slot-attached log per slot — drives the "logged" slot card variant
-  // when there's no plan entry. Logs are ordered desc; we want the most
-  // recent one per slot.
   const logBySlot: Partial<Record<(typeof SLOTS)[number], LogRow>> = {};
   for (const log of logs) {
     if (
@@ -184,7 +181,13 @@ export default async function TodayPage({
     }
   }
 
-  const activePrograms = activeProgramIds
+  // Active programs to surface in the header. When viewing a member, show
+  // the programs assigned to them; otherwise the user's own.
+  const activeProgramsForView = (
+    viewedMember
+      ? (viewedMember.active_programs ?? [])
+      : userActiveProgramIds
+  )
     .map((id) => getProgram(id))
     .filter((p): p is NonNullable<ReturnType<typeof getProgram>> => !!p);
 
@@ -192,13 +195,13 @@ export default async function TodayPage({
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
-      {activePrograms.length > 0 && !viewedMember ? (
+      {activeProgramsForView.length > 0 ? (
         <div className="flex items-center flex-wrap gap-2 -mb-4">
           <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
           <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3 mr-1">
-            Active
+            {viewedMember ? `${headerName}'s programs` : "Active"}
           </span>
-          {activePrograms.map((p) => (
+          {activeProgramsForView.map((p) => (
             <Link
               key={p.id}
               href={`/programs/${p.id}`}
@@ -218,14 +221,16 @@ export default async function TodayPage({
 
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <Label>{DAY_FMT.format(now).toLowerCase()}</Label>
+          <DateNavigator date={date} />
           <MemberSwitcher
             selectedId={viewedMember?.id ?? null}
             members={family.map((m) => ({ id: m.id, name: m.name }))}
           />
         </div>
         <H size="xl" as="h1">
-          {viewedMember ? (
+          {!isToday ? (
+            <>{viewedMember ? `${headerName}` : "Looking back"}</>
+          ) : viewedMember ? (
             <>Today, <span className="text-accent">{headerName}</span>.</>
           ) : (
             <>{greet(now)}, {headerName}.</>
@@ -258,13 +263,11 @@ export default async function TodayPage({
 
       <section className="flex flex-col gap-4">
         <Label>{viewedMember ? `${headerName}'s meals` : "today's meals"}</Label>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {SLOTS.map((slot) => {
             const entry = planBySlot[slot];
             const logged = logBySlot[slot];
             const time = schedule[slot];
-            // Plan + recipe wins (priority). Logged ad-hoc is next.
-            // Otherwise empty.
             if (entry?.recipes && entry.recipe_id) {
               return (
                 <PlannedMealCard
@@ -309,16 +312,21 @@ export default async function TodayPage({
 
       {logs.length > 0 ? (
         <section className="flex flex-col gap-3">
-          <Label>logged today</Label>
+          <Label>logged {isToday ? "today" : "that day"}</Label>
           <ul className="flex flex-col rounded-card border border-ink-l overflow-hidden bg-card">
             {logs.map((log) => (
               <li
                 key={log.id}
                 className="flex items-center justify-between gap-3 px-4 py-3 border-b border-ink-l/40 last:border-b-0"
               >
-                <Body size="sm" className="text-ink flex-1 min-w-0">
-                  {log.recipes?.name ?? log.custom_name ?? "untitled meal"}
-                </Body>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <Body size="sm" className="text-ink truncate">
+                    {log.recipes?.name ?? log.custom_name ?? "untitled meal"}
+                  </Body>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3">
+                    {log.slot ?? "unsorted"}
+                  </span>
+                </div>
                 <Mono className="text-ink-3 text-[12px] shrink-0">
                   {log.kcal ?? 0} kcal
                   {log.protein != null ? ` · ${log.protein}g protein` : ""}

@@ -82,15 +82,15 @@ export default async function ShopPage() {
           Shop
         </H>
         <Body size="lg" dim>
-          {list.total} items · {list.inPantry} already in pantry
+          {list.total} items · {list.inPantry} already in inventory
         </Body>
       </header>
 
       {list.sections.length === 0 ? (
         <Card className="p-8 text-center">
           <Body dim>
-            No groceries needed. Either nothing is planned yet, or your pantry
-            covers everything.
+            No groceries needed. Either nothing is planned yet, or your
+            inventory covers everything.
           </Body>
         </Card>
       ) : (
