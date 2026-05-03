@@ -1,12 +1,16 @@
 // 8 curated meal-planning programs. Each maps to one of the source thread's
 // 12 nutrition prompts (https://threadreaderapp.com/thread/2045826159636824423.html).
-// "Activating" a program records it on the user's profile and feeds extra
-// context into the Coach + insight prompts.
+// Activating a program records it on the user's profile (or a family member's
+// entry) and feeds extra context into the Coach + plan-week prompts.
+
+export type ProgramKind = "workflow" | "pattern" | "focus";
 
 export interface Program {
   id: string;
   name: string;
   category: string;
+  // Conflict bucket — see below.
+  kind: ProgramKind;
   short: string;
   long: string;
   duration_days: number;
@@ -16,11 +20,23 @@ export interface Program {
   coach_context: string;
 }
 
+// Conflict policy:
+//   workflow → stackable (no limit). Household-level only (cooking pattern
+//             that affects how meals are made, not what or when). Cannot be
+//             assigned to individual family members.
+//   pattern  → max 1 per scope. Affects when you eat / overall eating
+//             structure. Two would contradict on timing.
+//   focus    → max 1 per scope. Single therapeutic / performance intent.
+//             Two would contradict on dietary framing.
+// "Per scope" = the user themselves OR a single family member. So Sam can be
+// on Workout Fuel while you're on Gut Repair — independent scopes.
+
 export const PROGRAMS: Program[] = [
   {
     id: "sunday-prep",
     name: "Sunday Meal Prep",
     category: "system",
+    kind: "workflow",
     short: "One 90-minute Sunday session covers 5 lunches and 3 dinners.",
     long: "A simultaneous-cooking protocol: oven, stovetop, and prep counter running in parallel. Hestia plans the timing so everything finishes within 90 minutes.",
     duration_days: 7,
@@ -38,6 +54,7 @@ export const PROGRAMS: Program[] = [
     id: "16-8-fasting",
     name: "16:8 Intermittent Fasting",
     category: "protocol",
+    kind: "pattern",
     short: "Compress eating into an 8-hour window. Preserve muscle, build the habit.",
     long: "Selects an eating window aligned with the user's training and work schedule. Manages hunger adaptation in week 1 and protein distribution to preserve lean mass.",
     duration_days: 30,
@@ -55,6 +72,7 @@ export const PROGRAMS: Program[] = [
     id: "habit-rewire",
     name: "Habit Rewire",
     category: "behavior",
+    kind: "focus",
     short: "Map your triggers, redesign your environment, build accountability.",
     long: "30 days of behavioural psychology — emotional eating triggers mapped, environment shifts identified, weekly accountability check-ins. Less restriction, more architecture.",
     duration_days: 30,
@@ -72,6 +90,7 @@ export const PROGRAMS: Program[] = [
     id: "gut-repair",
     name: "Gut Repair (30-day)",
     category: "therapeutic",
+    kind: "focus",
     short: "Trigger elimination → fiber progression → probiotic integration.",
     long: "A 30-day staged protocol. Days 1–10: pull triggers. Days 11–20: progressive fiber + fermented foods. Days 21–30: stabilize and reintroduce systematically.",
     duration_days: 30,
@@ -89,6 +108,7 @@ export const PROGRAMS: Program[] = [
     id: "family-meals",
     name: "Family Meals",
     category: "household",
+    kind: "workflow",
     short: "One menu, multiple plates. Picky-eater strategies built in.",
     long: "Designs unified family meals with per-person portion + protein scaling. Includes picky-eater pathways (decompose dishes into kid-friendly components) and allergen safety checks.",
     duration_days: 7,
@@ -106,6 +126,7 @@ export const PROGRAMS: Program[] = [
     id: "workout-fuel",
     name: "Workout Fuel",
     category: "performance",
+    kind: "focus",
     short: "Pre, intra, post — the right fuel at the right window.",
     long: "Stanford-style sports timing: pre-workout (60-90min before), intra (long sessions), post (anabolic window). Macro splits adjusted to training day vs rest day.",
     duration_days: 14,
@@ -123,6 +144,7 @@ export const PROGRAMS: Program[] = [
     id: "30-day-reset",
     name: "30-Day Reset",
     category: "system",
+    kind: "pattern",
     short: "Kitchen cleanup, foundation building, habit lock-in.",
     long: "Week 1: reset kitchen + remove temptations. Week 2: foundation meals on repeat. Week 3: build flexibility. Week 4: lock in routines that survive without the program.",
     duration_days: 30,
@@ -140,6 +162,7 @@ export const PROGRAMS: Program[] = [
     id: "therapeutic",
     name: "Therapeutic (clinician-aligned)",
     category: "medical",
+    kind: "focus",
     short: "Lab-aware nutrition for a chronic condition you're managing.",
     long: "Customized for a single chronic condition (high cholesterol, type 2 diabetes, hypertension, IBS). Reads recent lab values you share, designs a pattern, and surfaces medication–food interactions.",
     duration_days: 90,
@@ -157,4 +180,88 @@ export const PROGRAMS: Program[] = [
 
 export function getProgram(id: string): Program | undefined {
   return PROGRAMS.find((p) => p.id === id);
+}
+
+// Workflow programs apply at the household level only — they describe how
+// meals get cooked, not what an individual eats. Pattern + focus programs
+// can be assigned per-person (you, or a specific family member).
+export function assignableToMembers(kind: ProgramKind): boolean {
+  return kind !== "workflow";
+}
+
+// Within a single scope (the user OR one member), activating a program of a
+// non-stackable kind replaces the existing program of the same kind.
+// Returns the id that should be removed (if any).
+export function findConflict(
+  newId: string,
+  activeIds: string[],
+): { replacedId: string; replacedName: string } | null {
+  const incoming = getProgram(newId);
+  if (!incoming || incoming.kind === "workflow") return null;
+  for (const existingId of activeIds) {
+    if (existingId === newId) continue; // already active
+    const existing = getProgram(existingId);
+    if (existing && existing.kind === incoming.kind) {
+      return { replacedId: existing.id, replacedName: existing.name };
+    }
+  }
+  return null;
+}
+
+// Order programs so the most prescriptive guidance appears first in the
+// merged Coach context (focus → pattern → workflow). Used when concatenating
+// coach_context fragments.
+export function sortByGuidanceWeight(ids: string[]): Program[] {
+  const order: Record<ProgramKind, number> = {
+    focus: 0,
+    pattern: 1,
+    workflow: 2,
+  };
+  return ids
+    .map(getProgram)
+    .filter((p): p is Program => !!p)
+    .sort((a, b) => order[a.kind] - order[b.kind]);
+}
+
+// Build the system-prompt fragment that goes into Coach + plan-week. Lists
+// the user's active programs first, then per-family-member assignments.
+// Returns null if nothing is active.
+export function buildProgramContext(args: {
+  userProgramIds: string[];
+  members: Array<{ name: string; active_programs?: string[] }>;
+}): string | null {
+  const userPrograms = sortByGuidanceWeight(args.userProgramIds);
+  const memberWithPrograms = args.members
+    .map((m) => ({
+      ...m,
+      programs: sortByGuidanceWeight(m.active_programs ?? []),
+    }))
+    .filter((m) => m.programs.length > 0 && m.name?.trim());
+
+  if (userPrograms.length === 0 && memberWithPrograms.length === 0) {
+    return null;
+  }
+
+  const sections: string[] = [];
+
+  if (userPrograms.length > 0) {
+    sections.push(
+      "You are following these programs:\n" +
+        userPrograms.map((p) => `- ${p.name}: ${p.coach_context}`).join("\n"),
+    );
+  }
+
+  if (memberWithPrograms.length > 0) {
+    sections.push(
+      "Household members are also on programs (factor each into per-person plates):\n" +
+        memberWithPrograms
+          .map(
+            (m) =>
+              `- ${m.name}: ${m.programs.map((p) => p.name).join(", ")}. ${m.programs.map((p) => p.coach_context).join(" ")}`,
+          )
+          .join("\n"),
+    );
+  }
+
+  return sections.join("\n\n");
 }

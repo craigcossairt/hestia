@@ -5,7 +5,15 @@ import { Trash2 } from "lucide-react";
 import { Card, Label, Body, Btn, Mono, Chip } from "@/components/ds";
 import { updateFamily } from "@/app/(app)/me/actions";
 import { newFamilyMember, type FamilyMember } from "@/lib/family";
+import {
+  PROGRAMS,
+  assignableToMembers,
+  findConflict,
+  getProgram,
+} from "@/lib/programs";
 import { cn } from "@/lib/utils";
+
+const MEMBER_PROGRAMS = PROGRAMS.filter((p) => assignableToMembers(p.kind));
 
 const DIET_TAGS = [
   "vegetarian",
@@ -213,6 +221,50 @@ function MemberRow({
         placeholder="Notes (e.g. 'soccer practice Tues/Thurs', 'loves spicy')"
         className="px-3 py-1.5 rounded-thumb border border-ink-l bg-card text-ink-2 font-sans text-[13px] outline-none focus:border-accent"
       />
+
+      <div className="border-t border-ink-l/40 pt-3 flex flex-col gap-2">
+        <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3">
+          active programs
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {MEMBER_PROGRAMS.map((p) => {
+            const active = (member.active_programs ?? []).includes(p.id);
+            const conflict = !active
+              ? findConflict(p.id, member.active_programs ?? [])
+              : null;
+            return (
+              <Chip
+                key={p.id}
+                variant={active ? "fill" : "default"}
+                interactive
+                onClick={() => {
+                  const current = member.active_programs ?? [];
+                  if (active) {
+                    onUpdate({
+                      active_programs: current.filter((id) => id !== p.id),
+                    });
+                  } else {
+                    const next = current
+                      .filter((id) => id !== conflict?.replacedId)
+                      .concat(p.id);
+                    onUpdate({ active_programs: next });
+                  }
+                }}
+                title={
+                  conflict
+                    ? `Replaces ${conflict.replacedName}`
+                    : `${p.kind} program`
+                }
+              >
+                {p.name}
+              </Chip>
+            );
+          })}
+        </div>
+        <Body size="xs" dim>
+          Persisted when you click <span className="text-ink">Save family</span>.
+        </Body>
+      </div>
     </div>
   );
 }

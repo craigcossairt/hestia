@@ -3,12 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { Check } from "lucide-react";
 import { H, Body, Label, Btn, Card, Mono } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import {
-  activateProgram,
-  deactivateProgram,
-} from "@/app/(app)/programs/actions";
+import { ScopePicker } from "@/components/programs/scope-picker";
 import { SundayPrepTimeline } from "@/components/programs/sunday-prep-timeline";
 import { getProgram } from "@/lib/programs";
+import type { FamilyMember } from "@/lib/family";
 
 export default async function ProgramDetailPage({
   params,
@@ -25,11 +23,26 @@ export default async function ProgramDetailPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("active_program")
+    .select("active_programs, family_json")
     .eq("id", user.id)
     .maybeSingle();
-  const isActive =
-    (profile as { active_program?: string | null } | null)?.active_program === id;
+  const userPrograms =
+    ((profile as { active_programs?: string[] | null } | null)?.active_programs) ??
+    [];
+  const family =
+    ((profile as { family_json?: FamilyMember[] | null } | null)?.family_json) ??
+    [];
+
+  const options = [
+    { label: "You", scope: { kind: "user" as const }, active: userPrograms.includes(id) },
+    ...family
+      .filter((m) => m.name?.trim())
+      .map((m) => ({
+        label: m.name,
+        scope: { kind: "member" as const, memberId: m.id },
+        active: (m.active_programs ?? []).includes(id),
+      })),
+  ];
 
   return (
     <div className="flex flex-col">
@@ -57,9 +70,9 @@ export default async function ProgramDetailPage({
           </Body>
         </header>
 
-        <Card className="p-6 flex flex-col gap-3">
+        <Card className="p-6 flex flex-col gap-4">
           <Label>what&apos;s included</Label>
-          <ul className="flex flex-col gap-2 mt-2">
+          <ul className="flex flex-col gap-2 mt-1">
             {program.features.map((f) => (
               <li
                 key={f}
@@ -74,30 +87,15 @@ export default async function ProgramDetailPage({
               </li>
             ))}
           </ul>
-          <div className="flex gap-2 pt-3 border-t border-ink-l/40 mt-2">
-            {isActive ? (
-              <form
-                action={async () => {
-                  "use server";
-                  await deactivateProgram();
-                }}
-              >
-                <Btn variant="outline" type="submit">
-                  Active · end program
-                </Btn>
-              </form>
-            ) : (
-              <form
-                action={async () => {
-                  "use server";
-                  await activateProgram(id);
-                }}
-              >
-                <Btn variant="primary" type="submit">
-                  Activate program
-                </Btn>
-              </form>
-            )}
+          <div className="border-t border-ink-l/40 pt-4">
+            <ScopePicker
+              programId={id}
+              programName={program.name}
+              programKind={program.kind}
+              options={options}
+            />
+          </div>
+          <div className="flex gap-2 pt-3 border-t border-ink-l/40">
             <Link href="/programs">
               <Btn variant="ghost">All programs</Btn>
             </Link>

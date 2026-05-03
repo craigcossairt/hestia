@@ -41,7 +41,7 @@ export default async function TodayPage() {
   let totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   let insight: { id: string; body: string } | null = null;
   let insightHoursOld: number | null = null;
-  let activeProgramId: string | null = null;
+  let activeProgramIds: string[] = [];
   type PlanRow = {
     id: string;
     slot: string;
@@ -69,14 +69,14 @@ export default async function TodayPage() {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at, active_program",
+        "name, kcal_target, protein_target, carbs_target, fat_target, schedule_json, onboarded_at, active_programs",
       )
       .eq("id", user.id)
       .maybeSingle();
     if (!data?.onboarded_at) redirect("/onboard");
     profile = data;
-    activeProgramId =
-      (data as { active_program?: string | null }).active_program ?? null;
+    activeProgramIds =
+      (data as { active_programs?: string[] | null }).active_programs ?? [];
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: planRows } = await supabase
@@ -135,28 +135,34 @@ export default async function TodayPage() {
   const planBySlot = Object.fromEntries(
     plan.map((p) => [p.slot, p]),
   ) as Record<(typeof SLOTS)[number], PlanRow | undefined>;
-  const activeProgram = activeProgramId ? getProgram(activeProgramId) : null;
+  const activePrograms = activeProgramIds
+    .map((id) => getProgram(id))
+    .filter((p): p is NonNullable<ReturnType<typeof getProgram>> => !!p);
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-5xl mx-auto flex flex-col gap-10">
-      {activeProgram ? (
-        <Link
-          href={`/programs/${activeProgram.id}`}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-card border border-accent bg-accent-tint hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] transition-colors -mb-4 self-start"
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ background: activeProgram.hero_color }}
-          />
+      {activePrograms.length > 0 ? (
+        <div className="flex items-center flex-wrap gap-2 -mb-4">
           <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
-          <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3">
-            active program
+          <span className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3 mr-1">
+            Active
           </span>
-          <span className="font-sans text-[13px] text-ink font-medium">
-            {activeProgram.name}
-          </span>
-          <span className="text-ink-3 text-[12px]">→</span>
-        </Link>
+          {activePrograms.map((p) => (
+            <Link
+              key={p.id}
+              href={`/programs/${p.id}`}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-full border border-accent bg-accent-tint hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] transition-colors"
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: p.hero_color }}
+              />
+              <span className="font-sans text-[12px] text-ink font-medium">
+                {p.name}
+              </span>
+            </Link>
+          ))}
+        </div>
       ) : null}
 
       <header className="flex flex-col gap-2">

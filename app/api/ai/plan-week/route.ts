@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { PlanWeekSchema, planWeekPrompt } from "@/lib/ai/prompts/plan-week";
-import { getProgram } from "@/lib/programs";
+import { buildProgramContext } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
 export const maxDuration = 60;
@@ -32,7 +32,7 @@ export async function POST(_req: NextRequest) {
       supabase
         .from("profiles")
         .select(
-          "goal, protein_target, dietary_restrictions, active_program, family_json",
+          "goal, protein_target, dietary_restrictions, active_programs, family_json",
         )
         .eq("id", user.id)
         .maybeSingle(),
@@ -45,12 +45,18 @@ export async function POST(_req: NextRequest) {
         .limit(20),
     ]);
 
-  const activeProgramId =
-    (profile as { active_program?: string | null } | null)?.active_program;
-  const program = activeProgramId ? getProgram(activeProgramId) : null;
+  const userProgramIds =
+    ((profile as { active_programs?: string[] | null } | null)?.active_programs) ??
+    [];
   const family =
-    ((profile as { family_json?: FamilyMember[] | null } | null)?.family_json ?? [])
-      .filter((f) => f.name && f.name.trim().length > 0);
+    (
+      (profile as { family_json?: FamilyMember[] | null } | null)?.family_json ?? []
+    ).filter((f) => f.name && f.name.trim().length > 0);
+
+  const programContext = buildProgramContext({
+    userProgramIds,
+    members: family,
+  });
 
   const familySummary = family.length
     ? family
@@ -74,7 +80,7 @@ export async function POST(_req: NextRequest) {
         dietary_restrictions: profile?.dietary_restrictions ?? [],
         pantry_hints: (pantry ?? []).map((p: { name: string }) => p.name),
         recent_recipe_names: (recent ?? []).map((r: { name: string }) => r.name),
-        active_program_context: program?.coach_context ?? null,
+        active_program_context: programContext,
         family_summary: familySummary,
       }),
     });

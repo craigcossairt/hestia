@@ -3,7 +3,8 @@ import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { coachSystemPrompt } from "@/lib/ai/prompts/coach";
-import { getProgram } from "@/lib/programs";
+import { buildProgramContext } from "@/lib/programs";
+import type { FamilyMember } from "@/lib/family";
 
 export const maxDuration = 30;
 
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     supabase
       .from("profiles")
       .select(
-        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_program, family_json",
+        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_programs, family_json",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -43,25 +44,18 @@ export async function POST(req: NextRequest) {
     .filter(Boolean);
   const pantry_highlights = (pantry ?? []).map((p: { name: string }) => p.name);
 
-  const activeProgramId = (profile as { active_program?: string | null } | null)
-    ?.active_program;
-  const activeProgram = activeProgramId ? getProgram(activeProgramId) : null;
+  const userProgramIds =
+    ((profile as { active_programs?: string[] | null } | null)?.active_programs) ??
+    [];
+  const familyRaw =
+    ((profile as { family_json?: FamilyMember[] | null } | null)?.family_json) ??
+    [];
+  const family = familyRaw.filter((f) => f.name && f.name.trim().length > 0);
 
-  type FamilyRaw = {
-    name: string;
-    age: number;
-    dietary_restrictions: string[];
-    notes?: string;
-  };
-  const family =
-    ((profile as { family_json?: FamilyRaw[] | null } | null)?.family_json ?? [])
-      .filter((f) => f.name && f.name.trim().length > 0)
-      .map((f) => ({
-        name: f.name,
-        age: f.age,
-        dietary_restrictions: f.dietary_restrictions ?? [],
-        notes: f.notes,
-      }));
+  const programContext = buildProgramContext({
+    userProgramIds,
+    members: family,
+  });
 
   const xai = getXai();
   const result = streamText({
@@ -76,8 +70,13 @@ export async function POST(req: NextRequest) {
       dietary_restrictions: profile?.dietary_restrictions ?? [],
       recent_meals,
       pantry_highlights,
-      active_program_context: activeProgram?.coach_context ?? null,
-      family,
+      active_program_context: programContext,
+      family: family.map((f) => ({
+        name: f.name,
+        age: f.age,
+        dietary_restrictions: f.dietary_restrictions ?? [],
+        notes: f.notes,
+      })),
     }),
     messages: await convertToModelMessages(messages),
   });

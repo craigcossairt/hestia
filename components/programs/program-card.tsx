@@ -1,19 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { Card, H, Body, Btn, Label, Mono } from "@/components/ds";
-import { activateProgram, deactivateProgram } from "@/app/(app)/programs/actions";
+import {
+  activateProgram,
+  deactivateProgram,
+} from "@/app/(app)/programs/actions";
 import type { Program } from "@/lib/programs";
+import { assignableToMembers } from "@/lib/programs";
 
 interface ProgramCardProps {
   program: Program;
-  active: boolean;
+  // The scopes this program is currently active on. Empty array = inactive.
+  // Each entry is "you" or a family member's display name.
+  activeScopes: string[];
+  // Whether the user is on this program (controls primary toggle text).
+  activeForUser: boolean;
 }
 
-export function ProgramCard({ program, active }: ProgramCardProps) {
+export function ProgramCard({
+  program,
+  activeScopes,
+  activeForUser,
+}: ProgramCardProps) {
   const [pending, start] = useTransition();
+  const [status, setStatus] = useState<string | null>(null);
+
+  function toggleUserScope() {
+    setStatus(null);
+    start(async () => {
+      const result = activeForUser
+        ? await deactivateProgram(program.id, { kind: "user" })
+        : await activateProgram(program.id, { kind: "user" });
+      if (result?.error) setStatus(`Error: ${result.error}`);
+      else if (result?.replaced) {
+        setStatus(`Replaced ${result.replaced.name}.`);
+      }
+    });
+  }
+
   return (
     <Card className="overflow-hidden flex flex-col">
       <div
@@ -46,40 +73,56 @@ export function ProgramCard({ program, active }: ProgramCardProps) {
             </li>
           ))}
         </ul>
-        <div className="pt-2 flex gap-2">
-          {active ? (
-            <Btn
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  await deactivateProgram();
-                })
-              }
-            >
-              {pending ? "Ending…" : "Active · end"}
-            </Btn>
+        {activeScopes.length > 0 ? (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <Mono className="text-ink-3 text-[10px] uppercase tracking-wider">
+              Active for
+            </Mono>
+            {activeScopes.map((s) => (
+              <span
+                key={s}
+                className="px-2 py-0.5 rounded-full bg-accent-tint text-accent font-sans text-[11px]"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="pt-2 flex flex-wrap gap-2">
+          <Btn
+            variant={activeForUser ? "outline" : "primary"}
+            size="sm"
+            disabled={pending}
+            onClick={toggleUserScope}
+          >
+            {pending
+              ? "…"
+              : activeForUser
+                ? "Active · end"
+                : "Activate"}
+          </Btn>
+          {assignableToMembers(program.kind) ? (
+            <Link href={`/programs/${program.id}`}>
+              <Btn variant="ghost" size="sm">
+                Assign to family →
+              </Btn>
+            </Link>
           ) : (
-            <Btn
-              variant="primary"
-              size="sm"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  await activateProgram(program.id);
-                })
-              }
-            >
-              {pending ? "Activating…" : "Activate"}
-            </Btn>
+            <Link href={`/programs/${program.id}`}>
+              <Btn variant="ghost" size="sm">
+                Learn more →
+              </Btn>
+            </Link>
           )}
-          <Link href={`/programs/${program.id}`}>
-            <Btn variant="ghost" size="sm">
-              Learn more →
-            </Btn>
-          </Link>
         </div>
+        {status ? (
+          <Body
+            size="xs"
+            className={status.startsWith("Error") ? "text-danger" : "text-ink-3"}
+          >
+            {status}
+          </Body>
+        ) : null}
       </div>
     </Card>
   );
