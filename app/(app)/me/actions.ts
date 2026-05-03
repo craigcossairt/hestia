@@ -129,6 +129,31 @@ export async function updateAppearance(args: {
   revalidatePath("/me");
 }
 
+export async function updateFamily(
+  members: Array<{
+    id: string;
+    name: string;
+    age: number;
+    sex?: "male" | "female" | "other";
+    dietary_restrictions: string[];
+    notes?: string;
+    portion_modifier?: number;
+  }>,
+) {
+  const { supabase, user } = await getUserOrRedirect();
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      family_json: members,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/me");
+  revalidatePath("/family");
+  revalidatePath("/coach");
+}
+
 export async function logWeight(value_kg: number, note?: string) {
   if (value_kg <= 20 || value_kg >= 300) {
     return { error: "Weight out of range." };

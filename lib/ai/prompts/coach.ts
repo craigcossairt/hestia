@@ -4,6 +4,13 @@
 // Noom psychology, USDA family planning, IF protocols, 30-day reset, etc.)
 // into one composite voice — calm, evidence-based, specific.
 
+interface FamilyForCoach {
+  name: string;
+  age: number;
+  dietary_restrictions: string[];
+  notes?: string;
+}
+
 interface CoachContext {
   name?: string | null;
   goal: string | null;
@@ -15,6 +22,7 @@ interface CoachContext {
   recent_meals: string[];
   pantry_highlights: string[];
   active_program_context?: string | null;
+  family?: FamilyForCoach[];
 }
 
 export function coachSystemPrompt(ctx: CoachContext) {
@@ -42,6 +50,7 @@ Their current state:
 - Dietary preferences: ${ctx.dietary_restrictions.length ? ctx.dietary_restrictions.join(", ") : "none recorded"}
 - Recent logged meals: ${ctx.recent_meals.length ? ctx.recent_meals.slice(0, 6).join(", ") : "nothing yet"}
 - Pantry highlights: ${ctx.pantry_highlights.length ? ctx.pantry_highlights.slice(0, 8).join(", ") : "no inventory recorded"}
+${ctx.family && ctx.family.length > 0 ? `\nHousehold being cooked for:\n${ctx.family.map((f) => `- ${f.name}, age ${f.age}${f.dietary_restrictions.length ? ` (${f.dietary_restrictions.join(", ")})` : ""}${f.notes ? ` — ${f.notes}` : ""}`).join("\n")}\nWhen suggesting meals, factor in everyone. Use decompose-to-components style (taco bar, sheet pan + sauces on the side) for picky eaters.` : ""}
 ${ctx.active_program_context ? `\nActive program guidance:\n${ctx.active_program_context}` : ""}
 
 Bias your suggestions toward what they already have in the pantry. If a

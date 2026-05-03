@@ -7,7 +7,9 @@ import { DietSection } from "@/components/me/diet-section";
 import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
 import { WeightSection } from "@/components/me/weight-section";
+import { FamilySection } from "@/components/me/family-section";
 import type { AccentPreset } from "@/lib/types/database";
+import type { FamilyMember } from "@/lib/family";
 
 export default async function MePage() {
   const supabase = isSupabaseConfigured() ? await createClient() : null;
@@ -17,10 +19,13 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, schedule_json, accent_preset, dark_mode, onboarded_at",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, schedule_json, accent_preset, dark_mode, onboarded_at, family_json",
     )
     .eq("id", user.id)
     .maybeSingle();
+
+  const family =
+    (profile?.family_json as FamilyMember[] | null | undefined) ?? [];
 
   if (!profile?.onboarded_at) redirect("/onboard");
 
@@ -76,6 +81,8 @@ export default async function MePage() {
       />
 
       <WeightSection currentKg={profile.weight_kg} recent={recentWeights} />
+
+      <FamilySection initial={family} />
 
       <DietSection initial={profile.dietary_restrictions ?? []} />
 

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     supabase
       .from("profiles")
       .select(
-        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_program",
+        "name, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, active_program, family_json",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -47,6 +47,22 @@ export async function POST(req: NextRequest) {
     ?.active_program;
   const activeProgram = activeProgramId ? getProgram(activeProgramId) : null;
 
+  type FamilyRaw = {
+    name: string;
+    age: number;
+    dietary_restrictions: string[];
+    notes?: string;
+  };
+  const family =
+    ((profile as { family_json?: FamilyRaw[] | null } | null)?.family_json ?? [])
+      .filter((f) => f.name && f.name.trim().length > 0)
+      .map((f) => ({
+        name: f.name,
+        age: f.age,
+        dietary_restrictions: f.dietary_restrictions ?? [],
+        notes: f.notes,
+      }));
+
   const xai = getXai();
   const result = streamText({
     model: xai(MODELS.fast),
@@ -61,6 +77,7 @@ export async function POST(req: NextRequest) {
       recent_meals,
       pantry_highlights,
       active_program_context: activeProgram?.coach_context ?? null,
+      family,
     }),
     messages: await convertToModelMessages(messages),
   });

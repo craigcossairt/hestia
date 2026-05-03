@@ -18,5 +18,6 @@ export const SECONDARY_NAV: NavItem[] = [
   { href: "/recipes", label: "Recipes", icon: "book" },
   { href: "/coach", label: "Coach", icon: "sparkle" },
   { href: "/programs", label: "Programs", icon: "flag" },
+  { href: "/family", label: "Family", icon: "heart" },
   { href: "/stats", label: "Stats", icon: "scale" },
 ];
