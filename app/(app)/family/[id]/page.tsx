@@ -128,7 +128,7 @@ export default async function MemberDetailPage({
       <ScheduleSection scope={scope} initial={schedule} />
 
       <Card className="p-6 flex flex-col gap-3">
-        <Label>danger zone</Label>
+        <Label accent>danger zone</Label>
         <Body size="sm" dim>
           Removes {member.name || "this member"} from the household and deletes
           their weight history. Programs assigned to them are dropped.

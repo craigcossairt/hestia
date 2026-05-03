@@ -88,7 +88,7 @@ export function ProfileSection({
   return (
     <Card className="p-6 flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <Label>profile</Label>
+        <Label accent>profile</Label>
         {status ? (
           <Body size="xs" className={status.startsWith("Error") ? "text-danger" : "text-success"}>
             {status}

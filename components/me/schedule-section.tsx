@@ -43,7 +43,7 @@ export function ScheduleSection({
   return (
     <Card className="p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Label>schedule</Label>
+        <Label accent>schedule</Label>
         {status ? (
           <Body size="xs" className={status.startsWith("Error") ? "text-danger" : "text-success"}>
             {status}

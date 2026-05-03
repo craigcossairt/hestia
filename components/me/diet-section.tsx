@@ -50,7 +50,7 @@ export function DietSection({
   return (
     <Card className="p-6 flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <Label>diet</Label>
+        <Label accent>diet</Label>
         {status ? (
           <Body
             size="xs"

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { H, Body, Label, Mono } from "@/components/ds";
+import { H, Body, Label } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { ProgramCard } from "@/components/programs/program-card";
 import { PROGRAMS, type ProgramKind } from "@/lib/programs";
@@ -87,16 +87,10 @@ export default async function ProgramsPage() {
         if (programs.length === 0) return null;
         return (
           <section key={section.kind} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2 border-l-2 border-ink-l pl-4">
-              <div className="flex items-center gap-2">
-                <Mono className="text-ink-3 text-[10.5px] uppercase tracking-[1.4px]">
-                  {section.kind}
-                </Mono>
-                <span className="text-ink-3 font-mono text-[10.5px]">·</span>
-                <H size="sm" as="h2" className="text-ink">
-                  {section.title}
-                </H>
-              </div>
+            <div className="flex flex-col gap-2 border-l-2 border-accent pl-4">
+              <H size="sm" as="h2" className="text-ink">
+                {section.title}
+              </H>
               <Body size="sm" dim className="max-w-2xl">
                 {section.blurb}
               </Body>

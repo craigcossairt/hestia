@@ -56,7 +56,7 @@ export function HealthSection({
   return (
     <Card className="p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Label>health</Label>
+        <Label accent>health</Label>
         {status ? (
           <Body
             size="xs"
