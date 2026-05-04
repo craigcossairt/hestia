@@ -27,6 +27,9 @@ export interface PlanCellEntry {
   recipeName: string;
   kcal: number | null;
   photoUrl: string | null;
+  // When set, this slot is leftovers from another cook session — render
+  // a small "leftover from {label}" pill on the card.
+  leftoverOfLabel?: string | null;
 }
 
 export interface PlanGridProps {
@@ -267,19 +270,30 @@ function FilledCell({
         href={`/recipes/${entry.recipeId}`}
         className="flex-1 flex flex-col text-left hover:opacity-90 transition-opacity"
       >
-        <FoodImage
-          name={entry.recipeName}
-          src={entry.photoUrl ?? undefined}
-          height={70}
-          rounded={false}
-          showLabel={false}
-        />
+        <div className="relative">
+          <FoodImage
+            name={entry.recipeName}
+            src={entry.photoUrl ?? undefined}
+            height={70}
+            rounded={false}
+            showLabel={false}
+          />
+          {entry.leftoverOfLabel ? (
+            <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-full bg-ink/70 text-paper font-mono text-[9px] uppercase tracking-wider">
+              leftover
+            </span>
+          ) : null}
+        </div>
         <div className="px-2 py-1.5 flex flex-col gap-0.5">
           {showSlotLabel ? <Label>{slot}</Label> : null}
           <div className="text-ink font-sans text-[12px] line-clamp-2 leading-tight">
             {entry.recipeName}
           </div>
-          {entry.kcal != null ? (
+          {entry.leftoverOfLabel ? (
+            <Mono className="text-ink-3 text-[10px]">
+              from {entry.leftoverOfLabel}
+            </Mono>
+          ) : entry.kcal != null ? (
             <Mono className="text-ink-3 text-[10px]">{entry.kcal} kcal</Mono>
           ) : null}
         </div>
