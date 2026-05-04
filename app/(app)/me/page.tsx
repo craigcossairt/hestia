@@ -9,6 +9,7 @@ import { HealthSection } from "@/components/me/health-section";
 import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
 import { CookingSection } from "@/components/me/cooking-section";
+import { KrogerSection } from "@/components/me/kroger-section";
 import { WeightSection } from "@/components/me/weight-section";
 import type { AccentPreset } from "@/lib/types/database";
 
@@ -20,7 +21,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at, preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_zip",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -112,6 +113,21 @@ export default async function MePage() {
       />
 
       <CookingSection initialAutoDecrement={profile.auto_decrement_pantry ?? false} />
+
+      <KrogerSection
+        initialLocationId={
+          (profile as { preferred_kroger_location_id?: string | null })
+            .preferred_kroger_location_id ?? null
+        }
+        initialLocationName={
+          (profile as { preferred_kroger_location_name?: string | null })
+            .preferred_kroger_location_name ?? null
+        }
+        initialZip={
+          (profile as { preferred_kroger_zip?: string | null }).preferred_kroger_zip ??
+          null
+        }
+      />
 
       <Card className="p-6 flex flex-col gap-3">
         <Label accent>account</Label>
