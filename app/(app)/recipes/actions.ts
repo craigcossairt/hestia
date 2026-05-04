@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
+import { maybeRefineRecipe } from "@/lib/nutrition/recipe-macros";
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -23,25 +24,30 @@ export async function saveGeneratedRecipe(
 ) {
   const { supabase, user } = await getUserOrRedirect();
 
+  // Refine the AI's per-serving macros against USDA FoodData Central
+  // when USDA_API_KEY is configured. No-op (returns input unchanged) when
+  // the key is missing or coverage is too low to trust.
+  const refined = await maybeRefineRecipe(recipe);
+
   const { data, error } = await supabase
     .from("recipes")
     .insert({
       owner_id: user.id,
-      name: recipe.name,
-      photo_url: recipe.photo_url ?? null,
-      source_url: recipe.source_url ?? null,
-      source_image_url: recipe.source_image_url ?? null,
-      ingredients_json: recipe.ingredients,
-      steps_json: recipe.steps,
-      kcal: recipe.kcal,
-      protein: recipe.protein,
-      carbs: recipe.carbs,
-      fat: recipe.fat,
-      time_min: recipe.time_min,
-      servings: recipe.servings ?? 4,
-      family_notes_json: recipe.family_modifications ?? [],
-      tips_json: recipe.tips ?? [],
-      tags: recipe.tags,
+      name: refined.name,
+      photo_url: refined.photo_url ?? null,
+      source_url: refined.source_url ?? null,
+      source_image_url: refined.source_image_url ?? null,
+      ingredients_json: refined.ingredients,
+      steps_json: refined.steps,
+      kcal: refined.kcal,
+      protein: refined.protein,
+      carbs: refined.carbs,
+      fat: refined.fat,
+      time_min: refined.time_min,
+      servings: refined.servings ?? 4,
+      family_notes_json: refined.family_modifications ?? [],
+      tips_json: refined.tips ?? [],
+      tags: refined.tags,
     })
     .select("id")
     .single();
