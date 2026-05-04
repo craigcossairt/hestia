@@ -11,6 +11,7 @@ import {
   Mono,
   Chip,
 } from "@/components/ds";
+import { Select } from "@/components/ds/select";
 import {
   addOrIncrementPantryItem,
   addPantryItem,
@@ -334,6 +335,46 @@ function BulkMode({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+// Canonical units the parsed grid offers in the dropdown. The AI parser
+// occasionally invents oddballs ("doz", "head", "container") — those
+// are kept as the row's current value and prepended to the option list
+// so the user sees their item correctly while still being able to pick
+// one of the canonical units instead.
+const PARSED_UNIT_OPTIONS = [
+  "each",
+  "g",
+  "kg",
+  "oz",
+  "lb",
+  "ml",
+  "l",
+  "gallon",
+  "fl oz",
+  "cup",
+  "tbsp",
+  "tsp",
+  "can",
+  "jar",
+  "bottle",
+  "bag",
+  "box",
+] as const;
+
+const PARSED_LOCATION_OPTIONS = [
+  { value: "pantry" as PantryLocation, label: "Pantry" },
+  { value: "fridge" as PantryLocation, label: "Fridge" },
+  { value: "freezer" as PantryLocation, label: "Freezer" },
+  { value: "spices" as PantryLocation, label: "Spices" },
+];
+
+function unitOptionsFor(currentUnit: string) {
+  const includes = (PARSED_UNIT_OPTIONS as readonly string[]).includes(currentUnit);
+  const list = includes
+    ? [...PARSED_UNIT_OPTIONS]
+    : [currentUnit, ...PARSED_UNIT_OPTIONS];
+  return list.map((u) => ({ value: u, label: u }));
+}
+
 function ParsedItemsGrid({
   items,
   setItems,
@@ -346,7 +387,7 @@ function ParsedItemsGrid({
       {items.map((it, i) => (
         <div
           key={i}
-          className="grid grid-cols-[2fr_60px_80px_100px_30px] gap-2 px-3 py-2 border-b border-ink-l/40 last:border-b-0 items-center"
+          className="grid grid-cols-[minmax(0,2fr)_50px_70px_90px_24px] gap-2 px-3 py-2 border-b border-ink-l/40 last:border-b-0 items-center"
         >
           <input
             value={it.name}
@@ -355,7 +396,7 @@ function ParsedItemsGrid({
               next[i] = { ...it, name: e.target.value };
               setItems(next);
             }}
-            className="bg-transparent text-ink font-sans text-[13px] outline-none"
+            className="bg-transparent text-ink font-sans text-[13px] outline-none min-w-0"
           />
           <input
             value={it.qty}
@@ -365,33 +406,35 @@ function ParsedItemsGrid({
               setItems(next);
             }}
             inputMode="decimal"
-            className="bg-transparent text-ink font-mono text-[13px] outline-none text-center"
+            aria-label="Quantity"
+            className="bg-transparent text-ink font-mono text-[13px] outline-none text-center min-w-0"
           />
-          <input
+          <Select<string>
             value={it.unit}
-            onChange={(e) => {
+            onChange={(unit) => {
               const next = [...items];
-              next[i] = { ...it, unit: e.target.value };
+              next[i] = { ...it, unit };
               setItems(next);
             }}
-            className="bg-transparent text-ink font-mono text-[12px] outline-none"
+            options={unitOptionsFor(it.unit)}
+            ariaLabel="Unit"
+            align="left"
+            fullWidth
+            className="text-[12px] font-mono min-w-0"
           />
-          <select
+          <Select<PantryLocation>
             value={it.location}
-            onChange={(e) => {
+            onChange={(location) => {
               const next = [...items];
-              next[i] = {
-                ...it,
-                location: e.target.value as PantryLocation,
-              };
+              next[i] = { ...it, location };
               setItems(next);
             }}
-            className="bg-transparent text-ink font-sans text-[12px] outline-none capitalize"
-          >
-            {(["pantry", "fridge", "freezer", "spices"] as const).map((l) => (
-              <option key={l}>{l}</option>
-            ))}
-          </select>
+            options={PARSED_LOCATION_OPTIONS}
+            ariaLabel="Location"
+            align="left"
+            fullWidth
+            className="text-[12px] min-w-0"
+          />
           <button
             type="button"
             onClick={() => setItems(items.filter((_, j) => j !== i))}
@@ -424,6 +467,9 @@ function BarcodeMode({ onSaved }: { onSaved: () => void }) {
           unit: item.unit,
           location: item.location,
           source: item.source,
+          // Pass the OFF photo so the inserted row gets it. The server
+          // action preserves any existing photo on the increment path.
+          photo_url: item.photoUrl,
         });
         if (result?.error) {
           return { ok: false as const, error: result.error };
@@ -578,8 +624,6 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
     });
   }
 
-  const haveSomething = previewUrl !== null || pdfFilename !== null;
-
   return (
     <div className="flex flex-col gap-3">
       <input
@@ -590,19 +634,43 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
         onChange={onFile}
         className="hidden"
       />
-      <div className="flex gap-2">
-        <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={parsing}>
-          {parsing ? "Reading…" : haveSomething ? "Another receipt" : "Upload receipt"}
-        </Btn>
+      {/* Buttons are scoped to the current state. Pre-parse: Upload.
+          During parse: disabled "Reading…". Post-parse: primary becomes
+          "Add N items" (the obvious next action) + an explicit
+          "Discard & upload another" outline button so the user knows
+          picking a new file replaces the current parse.
+          Previously a single "Another receipt" button sat next to "Add"
+          with the same primary style — users couldn't tell which one
+          actually saved the data. */}
+      <div className="flex gap-2 flex-wrap">
         {parsed ? (
-          <Btn variant="outline" onClick={save} disabled={pending}>
-            {pending ? "Adding…" : `Add ${parsed.length} items`}
+          <>
+            <Btn variant="primary" onClick={save} disabled={pending}>
+              {pending ? "Adding…" : `Add ${parsed.length} items`}
+            </Btn>
+            <Btn
+              variant="outline"
+              onClick={() => inputRef.current?.click()}
+              disabled={pending || parsing}
+            >
+              Discard & upload another
+            </Btn>
+          </>
+        ) : (
+          <Btn
+            variant="primary"
+            onClick={() => inputRef.current?.click()}
+            disabled={parsing}
+          >
+            {parsing ? "Reading…" : "Upload receipt"}
           </Btn>
-        ) : null}
+        )}
       </div>
-      <Body size="xs" dim>
-        Image (PNG/JPG) of a paper receipt, or a digital receipt saved as PDF.
-      </Body>
+      {!parsed && !parsing ? (
+        <Body size="xs" dim>
+          Image (PNG/JPG) of a paper receipt, or a digital receipt saved as PDF.
+        </Body>
+      ) : null}
       {pdfFilename ? (
         <div className="rounded-card border border-ink-l bg-paper-2 px-3 py-2 flex items-center gap-2">
           <Body size="sm">📄</Body>

@@ -321,24 +321,30 @@ function PreviewCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-[2fr_60px_90px] gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Item name"
-          className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent"
-          autoFocus={!result.found}
-        />
+      {/* Name on its own row — keeps the input wide enough to actually
+          edit on a phone. Qty + unit go on a second row where they
+          always fit even at 360px viewport widths. The previous 3-col
+          grid pushed the unit dropdown off-screen on iPhone Mini. */}
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Item name"
+        className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent w-full"
+        autoFocus={!result.found}
+      />
+      <div className="grid grid-cols-[80px_1fr] gap-2">
         <input
           value={qty}
           onChange={(e) => setQty(e.target.value)}
           inputMode="decimal"
-          className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent text-center"
+          aria-label="Quantity"
+          className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent text-center min-w-0"
         />
         <select
           value={unit}
           onChange={(e) => setUnit(e.target.value)}
-          className="px-2 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[12px] outline-none focus:border-accent"
+          aria-label="Unit"
+          className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[13px] outline-none focus:border-accent min-w-0"
         >
           {UNIT_OPTIONS.map((u) => (
             <option key={u}>{u}</option>
