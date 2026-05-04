@@ -106,6 +106,60 @@ function normalizeRaw(unit: string): string {
     .replace(/\beach\.?s?$/, "each");
 }
 
+// Size-adjective "units" the AI sometimes emits ("medium", "large",
+// "small"). They tell us nothing material about the quantity — "1
+// medium apple" and "1 apple" should merge — so we drop them entirely
+// and treat the entry as plain count. Without this, "apple / medium"
+// and "apples / each" produce different rows on /shop.
+const SIZE_ADJECTIVE_UNITS = new Set([
+  "small",
+  "medium",
+  "med",
+  "large",
+  "lg",
+  "xl",
+  "extra large",
+  "jumbo",
+]);
+
+// Singularise an ingredient name so "apples" and "apple" merge on the
+// shopping list. Conservative — only the common English suffix
+// transforms — and leaves words shorter than 4 chars alone (oil, egg,
+// rib) plus a small block-list of words that look plural but aren't
+// (oats, greens). False negatives are fine; the user can edit the
+// recipe to clean it up.
+function singularizeNoun(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.length < 4) return name;
+  const KEEP_AS_IS = /(oats|greens|grits|chips|sprouts|leaves|seeds|nuts|peas|berries)$/;
+  if (KEEP_AS_IS.test(lower)) return name;
+  if (lower.endsWith("ies")) return name.slice(0, -3) + "y"; // berries → berry
+  if (lower.endsWith("ches") || lower.endsWith("shes") || lower.endsWith("xes")) {
+    return name.slice(0, -2); // peaches → peach
+  }
+  if (lower.endsWith("oes")) return name.slice(0, -2); // tomatoes → tomato
+  if (lower.endsWith("s") && !lower.endsWith("ss")) return name.slice(0, -1);
+  return name;
+}
+
+// Apply singularization to every word in a multi-word name so
+// "medium apples" and "medium apple" both land on "medium apple".
+// Whitespace-collapsed for stable keying.
+function normalizeName(name: string): string {
+  const cleaned = name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned
+    .split(" ")
+    .map((w) => singularizeNoun(w))
+    .join(" ")
+    .trim();
+}
+
 export interface CanonicalIngredient {
   // The (possibly augmented) ingredient name.
   name: string;
@@ -119,14 +173,16 @@ export interface CanonicalIngredient {
 }
 
 // Returns a canonical (name, unit, category, baseQty) tuple. For garbage
-// units, hoists the descriptor into the name.
+// units, hoists the descriptor into the name. Always singularises the
+// name so "apples" / "apple" / "medium apples" / "medium apple" all
+// converge on a single grocery row.
 export function canonicalize(
   rawName: string,
   rawUnit: string,
   qty: number,
 ): CanonicalIngredient {
   const u = normalizeRaw(rawUnit);
-  const name = rawName.trim();
+  const name = normalizeName(rawName);
 
   if (u in VOLUMES_TSP) {
     return { name, unit: u, category: "volume", baseQty: qty * VOLUMES_TSP[u] };
@@ -142,12 +198,20 @@ export function canonicalize(
     return { name, unit: u, category: "package", baseQty: qty };
   }
 
-  // Unknown — likely a descriptor (e.g. "hard boiled", "raw", "diced").
-  // Hoist it into the name so different descriptors don't get merged
-  // accidentally, and treat the count as "each".
+  // Size adjectives ("medium", "large") are descriptive, not material —
+  // drop them entirely and treat as plain count. Otherwise "1 medium
+  // apple" and "1 apple" stay split forever.
+  if (SIZE_ADJECTIVE_UNITS.has(u)) {
+    return { name, unit: "each", category: "count", baseQty: qty };
+  }
+
+  // Unknown — likely a descriptor (e.g. "hard boiled", "raw", "diced",
+  // "cloves", "sprigs"). Hoist it into the name (singularised, so
+  // "cloves garlic" and "clove garlic" merge) and treat as count.
   if (u && u !== "each") {
+    const hoisted = singularizeNoun(u);
     return {
-      name: `${u} ${name}`.replace(/\s+/g, " ").trim(),
+      name: `${hoisted} ${name}`.replace(/\s+/g, " ").trim(),
       unit: "each",
       category: "count",
       baseQty: qty,
