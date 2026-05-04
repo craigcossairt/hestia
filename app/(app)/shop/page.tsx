@@ -91,7 +91,7 @@ export default async function ShopPage() {
     supabase
       .from("profiles")
       .select(
-        "preferred_kroger_location_id, preferred_kroger_location_name",
+        "preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_chain",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -103,6 +103,9 @@ export default async function ShopPage() {
   const krogerLocationName =
     (profileRes.data as { preferred_kroger_location_name?: string | null } | null)
       ?.preferred_kroger_location_name ?? null;
+  const krogerChain =
+    (profileRes.data as { preferred_kroger_chain?: string | null } | null)
+      ?.preferred_kroger_chain ?? null;
 
   type PlanRow = { recipes: { name: string; ingredients_json: Ingredient[] } | null };
   const plan = ((planRes.data ?? []) as unknown as PlanRow[])
@@ -196,6 +199,7 @@ export default async function ShopPage() {
             <SendToCart
               itemNames={allItemNames}
               isConnected={isKrogerConnected}
+              chain={krogerChain}
             />
           </div>
         ) : null}

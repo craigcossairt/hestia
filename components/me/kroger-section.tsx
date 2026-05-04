@@ -88,6 +88,7 @@ export function KrogerSection({
         locationId: loc.locationId,
         locationName: `${loc.name} — ${loc.address}, ${loc.city}`,
         zip: zip.trim(),
+        chain: loc.chain,
       });
       if (r?.error) {
         setError(r.error);

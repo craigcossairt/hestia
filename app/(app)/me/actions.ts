@@ -203,6 +203,12 @@ export async function savePreferredKrogerLocation(args: {
   locationId: string;
   locationName: string;
   zip: string;
+  // Kroger banner code from the locations API ("SMITHS", "KROGER",
+  // "FRYS", etc.). Persisted so /shop's "open cart" link can deep-
+  // link to the user's actual banner site instead of generic
+  // kroger.com (which routes to a default Texas store and can confuse
+  // out-of-state users).
+  chain?: string | null;
 }) {
   const { supabase, user } = await getUserOrRedirect();
   const { error } = await supabase
@@ -211,6 +217,7 @@ export async function savePreferredKrogerLocation(args: {
       preferred_kroger_location_id: args.locationId,
       preferred_kroger_location_name: args.locationName,
       preferred_kroger_zip: args.zip,
+      preferred_kroger_chain: args.chain ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);
