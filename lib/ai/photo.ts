@@ -2,18 +2,21 @@
 // and falls back through several layers — every layer is best-effort and
 // returns null on failure so callers can handle "no photo" gracefully.
 //
-// Order:
+// Order (cheapest → most expensive):
 //   0. AI-provided image URL — when the model has live search enabled
 //      (e.g. Grok), it can return a representative real-photo URL with
 //      the recipe. Skipping this would mean paying for two searches
 //      (the AI's + ours) for the same recipe.
 //   1. og:image extraction — when a recipe was parsed from a webpage,
 //      the page's own marketing image is the gold standard.
-//   2. Web image search (Brave Search API; env-gated) — broad coverage,
-//      good for niche dishes where Pexels has nothing.
-//   3. Pexels search — fast, free, generous tier; great for common foods.
-//   4. AI image generation — most expensive, slowest; used as a creative
-//      fallback when search fails.
+//   2. Pexels search — free with a generous tier (~200 req/hour). Try
+//      this BEFORE Brave so a 21-recipe plan doesn't burn through
+//      paid Brave quota on common dishes Pexels covers fine.
+//   3. Brave web image search — better at niche/specific dish names but
+//      paid (~$0.10 per query at the entry tier; $5 free monthly burns
+//      after ~50 queries). Fallback only.
+//   4. AI image generation — slowest + most expensive; creative
+//      fallback when search misses.
 //   5. null — caller renders a FoodImage SVG fallback.
 
 import { experimental_generateImage } from "ai";
@@ -49,15 +52,15 @@ export async function resolveRecipePhoto(args: {
     if (og) return { url: og, source: "og" };
   }
 
-  // 2. Web image search
-  const web = await tryWebImageSearch(recipeName, promptHint);
-  if (web) return { url: web, source: "web" };
-
-  // 3. Pexels
+  // 2. Pexels (free, generous quota — try first to spare Brave $$).
   const pex = await tryPexelsSearch(recipeName);
   if (pex) return { url: pex, source: "pexels" };
 
-  // 4. AI image generation
+  // 3. Brave web image search (paid, but better at niche/specific names).
+  const web = await tryWebImageSearch(recipeName, promptHint);
+  if (web) return { url: web, source: "web" };
+
+  // 4. AI image generation (slowest + most expensive).
   const ai = await tryGenerateAiPhoto(recipeName, promptHint);
   if (ai) return { url: ai, source: "ai_gen" };
 
