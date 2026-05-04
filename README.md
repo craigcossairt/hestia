@@ -19,7 +19,7 @@ The visual design lives in [`design_handoff_meal_planner/`](./design_handoff_mea
 | Styling | Tailwind v4 (CSS-first config in `app/globals.css`) |
 | UI primitives | Custom design system in `components/ds/` |
 | Data | Supabase Postgres + Auth + Storage + RLS |
-| AI | xAI Grok via Vercel AI SDK (`@ai-sdk/xai`) |
+| AI | Pluggable provider via Vercel AI SDK — defaults to xAI Grok, swap to OpenAI / Anthropic / Google / Vercel AI Gateway with one env var |
 | Server state | TanStack Query |
 | Barcode | `@zxing/browser` + Open Food Facts API |
 | Hosting | Vercel (Hobby tier) |
@@ -38,7 +38,9 @@ The visual design lives in [`design_handoff_meal_planner/`](./design_handoff_mea
    - Authentication → URL Configuration → add `http://localhost:3000/auth/callback`
      (and your production URL once deployed).
 
-3. **Get an xAI API key** at https://console.x.ai (free credits on signup).
+3. **Get an AI API key.** Hestia ships with xAI Grok by default — get a key
+   at https://console.x.ai (free credits on signup). To use a different
+   provider, see [Choosing an AI provider](#choosing-an-ai-provider) below.
 
 4. **Configure env vars**: copy `.env.local.example` to `.env.local` and fill
    in:
@@ -48,6 +50,31 @@ The visual design lives in [`design_handoff_meal_planner/`](./design_handoff_mea
    XAI_API_KEY=xai-...
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    ```
+
+### Choosing an AI provider
+
+Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
+provider based on `AI_PROVIDER`. Defaults to `xai`.
+
+| `AI_PROVIDER` | Required env | Default fast model | Default vision model |
+|---|---|---|---|
+| `xai` (default) | `XAI_API_KEY` | `grok-4-fast-reasoning` | `grok-2-vision-1212` |
+| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
+| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4-fast-reasoning` | `xai/grok-2-vision-1212` |
+
+Override the model per role with `AI_MODEL_FAST` / `AI_MODEL_VISION`. With the
+Vercel AI Gateway, model strings use the `provider/model-id` form (e.g.
+`openai/gpt-4o-mini`) so you can pick from any supported provider with a
+single key.
+
+Example for OpenAI:
+```
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+AI_MODEL_FAST=gpt-4o-mini       # optional override
+```
 
 5. **Run**:
    ```bash
