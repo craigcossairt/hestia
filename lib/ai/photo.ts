@@ -5,23 +5,25 @@
 // Order:
 //   1. og:image extraction — when a recipe was parsed from a webpage,
 //      the page's own marketing image is the gold standard.
-//   2. AI image generation — if the configured provider has an image
-//      model (xai grok-2-image, openai dall-e, google imagen).
-//   3. Pexels search — free, fast, generous tier. Set PEXELS_API_KEY.
-//   4. null — caller should render a FoodImage SVG fallback.
+//   2. Web image search (Brave Search API; env-gated) — broad coverage,
+//      good for niche dishes where Pexels has nothing.
+//   3. Pexels search — fast, free, generous tier; great for common foods.
+//   4. AI image generation — most expensive, slowest; used as a creative
+//      fallback when search fails.
+//   5. null — caller renders a FoodImage SVG fallback.
 
 import { experimental_generateImage } from "ai";
 import { getImageModel } from "./provider";
 
 export interface ResolvedPhoto {
   url: string;
-  source: "og" | "ai" | "pexels";
+  source: "og" | "web" | "pexels" | "ai";
 }
 
 export async function resolveRecipePhoto(args: {
   recipeName: string;
   sourceUrl?: string | null;
-  // Short cuisine / style hint for the image-gen prompt
+  // Short cuisine / style hint for AI image gen and search refinement
   // (e.g. "creamy pasta dish, Italian, photographed from above").
   promptHint?: string;
 }): Promise<ResolvedPhoto | null> {
@@ -33,13 +35,17 @@ export async function resolveRecipePhoto(args: {
     if (og) return { url: og, source: "og" };
   }
 
-  // 2. AI image generation
-  const ai = await tryGenerateAiPhoto(recipeName, promptHint);
-  if (ai) return { url: ai, source: "ai" };
+  // 2. Web image search
+  const web = await tryWebImageSearch(recipeName, promptHint);
+  if (web) return { url: web, source: "web" };
 
-  // 3. Pexels search
+  // 3. Pexels
   const pex = await tryPexelsSearch(recipeName);
   if (pex) return { url: pex, source: "pexels" };
+
+  // 4. AI image generation
+  const ai = await tryGenerateAiPhoto(recipeName, promptHint);
+  if (ai) return { url: ai, source: "ai" };
 
   return null;
 }
@@ -84,35 +90,45 @@ async function tryExtractOgImage(url: string): Promise<string | null> {
   }
 }
 
-// Returns a data: URL or remote URL for the generated image. Generated
-// images are returned as base64 by most providers; we encode as data: URL
-// so the client can render directly without a CDN.
-async function tryGenerateAiPhoto(
-  name: string,
+interface BraveImageResponse {
+  results?: Array<{
+    properties?: { url?: string };
+    thumbnail?: { src?: string };
+    url?: string;
+  }>;
+}
+
+// Brave Search Image API. Free tier 2k queries/month — generous for our
+// needs (one query per generated recipe). Set BRAVE_SEARCH_API_KEY.
+async function tryWebImageSearch(
+  query: string,
   hint?: string,
 ): Promise<string | null> {
-  const model = getImageModel();
-  if (!model) return null;
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) return null;
   try {
-    const description = hint ? `${name}. ${hint}` : name;
-    const result = await experimental_generateImage({
-      model,
-      prompt:
-        `Appetizing food photograph of: ${description}. Top-down or three-quarter angle, ` +
-        `natural light, shallow depth of field, no text, no watermarks, ` +
-        `editorial style on a clean surface.`,
-      n: 1,
-      size: "1024x1024",
-    });
-    const image = result.image;
-    if (!image) return null;
-    // Image SDK returns either a base64 string or { base64, mimeType }
-    const base64 = (image as { base64?: string; mimeType?: string }).base64
-      ?? (typeof image === "string" ? image : null);
-    if (!base64) return null;
-    const mime =
-      (image as { mimeType?: string }).mimeType ?? "image/png";
-    return `data:${mime};base64,${base64}`;
+    const refined = hint ? `${query} ${hint}` : `${query} food recipe`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(refined)}&count=5&safesearch=strict`,
+      {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "X-Subscription-Token": apiKey,
+        },
+      },
+    );
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const json = (await res.json()) as BraveImageResponse;
+    // Prefer a full-size result over the thumbnail.
+    for (const r of json.results ?? []) {
+      const url = r.properties?.url ?? r.url ?? r.thumbnail?.src;
+      if (url && /^https?:\/\//.test(url)) return url;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -142,6 +158,38 @@ async function tryPexelsSearch(query: string): Promise<string | null> {
     const json = (await res.json()) as PexelsResponse;
     const first = json.photos?.[0];
     return first?.src?.large ?? first?.src?.original ?? first?.src?.medium ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns a data: URL or remote URL for the generated image. Generated
+// images are returned as base64 by most providers; we encode as data: URL
+// so the client can render directly without a CDN.
+async function tryGenerateAiPhoto(
+  name: string,
+  hint?: string,
+): Promise<string | null> {
+  const model = getImageModel();
+  if (!model) return null;
+  try {
+    const description = hint ? `${name}. ${hint}` : name;
+    const result = await experimental_generateImage({
+      model,
+      prompt:
+        `Appetizing food photograph of: ${description}. Top-down or three-quarter angle, ` +
+        `natural light, shallow depth of field, no text, no watermarks, ` +
+        `editorial style on a clean surface.`,
+      n: 1,
+      size: "1024x1024",
+    });
+    const image = result.image;
+    if (!image) return null;
+    const base64 = (image as { base64?: string; mimeType?: string }).base64
+      ?? (typeof image === "string" ? image : null);
+    if (!base64) return null;
+    const mime = (image as { mimeType?: string }).mimeType ?? "image/png";
+    return `data:${mime};base64,${base64}`;
   } catch {
     return null;
   }
