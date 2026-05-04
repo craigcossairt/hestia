@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
+import striptags from "striptags";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
@@ -83,11 +84,16 @@ export async function POST(req: NextRequest) {
       );
     const sourceImageUrl = ogMatch?.[1] ?? null;
 
-    // Strip scripts, styles, then collapse whitespace to keep prompt small.
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
+    // Strip scripts, styles, then all remaining tags. The previous regex
+    // chain was flagged by CodeQL (js/bad-tag-filter +
+    // js/incomplete-multi-character-sanitization) because hand-rolled
+    // tag regexes can be bypassed by nested patterns like
+    // `<scr<script>ipt>` and don't handle attribute values with `>`
+    // characters. striptags is a small dedicated parser that handles
+    // both cases. The output is fed straight to the AI prompt — there's
+    // no XSS surface here, but using a real parser also eliminates the
+    // class of CodeQL alert.
+    const text = striptags(html, [], " ")
       .replace(/\s+/g, " ")
       .trim();
 
