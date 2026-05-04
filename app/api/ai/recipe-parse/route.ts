@@ -40,17 +40,32 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
-        return NextResponse.json(
-          { error: `Couldn't fetch URL (${res.status})` },
-          { status: 422 },
-        );
+        // Friendlier per-status messages so the modal doesn't surface
+        // bare codes like "Gone" or "Forbidden".
+        const friendly =
+          res.status === 410
+            ? "That recipe page is gone — the site removed it. Try a different URL."
+            : res.status === 404
+              ? "Couldn't find that page (404). Double-check the URL."
+              : res.status === 403 || res.status === 401
+                ? "That site blocked the request. Try a different recipe source."
+                : res.status === 429
+                  ? "That site is rate-limiting requests. Try again in a minute."
+                  : res.status >= 500
+                    ? "The recipe site is having issues right now. Try again later."
+                    : `Couldn't fetch the page (${res.status} ${res.statusText || ""}).`;
+        return NextResponse.json({ error: friendly }, { status: 422 });
       }
       html = await res.text();
     } catch (err) {
-      return NextResponse.json(
-        { error: `Fetch failed: ${(err as Error).message}` },
-        { status: 422 },
-      );
+      const msg = (err as Error).message;
+      const friendly =
+        /timeout|aborted/i.test(msg)
+          ? "The recipe page took too long to load. Try again, or pick a faster source."
+          : /enotfound|getaddrinfo/i.test(msg)
+            ? "Couldn't reach that domain. Check the URL is correct."
+            : `Couldn't fetch the page: ${msg}`;
+      return NextResponse.json({ error: friendly }, { status: 422 });
     }
 
     // Pull og:image before stripping markup so the parser keeps the
