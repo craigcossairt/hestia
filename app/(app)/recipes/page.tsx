@@ -27,6 +27,8 @@ export default async function RecipesPage({ searchParams }: PageProps) {
     protein: number | null;
     tags: string[];
     ingredients_json: Array<{ name: string }>;
+    owner_id: string | null;
+    source_url: string | null;
   };
   let recipes: RecipeRow[] = [];
   let savedSet = new Set<string>();
@@ -46,7 +48,7 @@ export default async function RecipesPage({ searchParams }: PageProps) {
     pantryNames = (pantryRes.data ?? []).map((p: { name: string }) => p.name);
 
     const select =
-      "id, name, photo_url, kcal, time_min, protein, tags, ingredients_json";
+      "id, name, photo_url, kcal, time_min, protein, tags, ingredients_json, owner_id, source_url";
 
     if (tab === "saved") {
       const ids = [...savedSet];
@@ -113,6 +115,7 @@ export default async function RecipesPage({ searchParams }: PageProps) {
           ratings={ratings}
           pantryNames={pantryNames}
           emptyMessage={emptyMessage}
+          currentUserId={user?.id ?? null}
         />
       )}
 

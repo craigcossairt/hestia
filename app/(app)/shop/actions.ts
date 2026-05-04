@@ -39,6 +39,30 @@ export async function clearCheckedGroceryItems() {
   revalidatePath("/shop");
 }
 
+// Bulk-toggle a list of grocery item keys. Used by the "Select all" /
+// "Clear section" affordances on /shop.
+export async function setGroceryItemsChecked(
+  itemKeys: string[],
+  nextChecked: boolean,
+) {
+  if (itemKeys.length === 0) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  await supabase.from("grocery_overrides").upsert(
+    itemKeys.map((k) => ({
+      user_id: user.id,
+      item_key: k,
+      checked: nextChecked,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: "user_id,item_key" },
+  );
+  revalidatePath("/shop");
+}
+
 // Log a single grocery trip's total. Stored in cents to avoid float drift.
 export async function logGroceryPurchase(payload: {
   amountDollars: number;

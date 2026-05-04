@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 type AttrFilterId = "under-30min" | "high-protein" | "vegetarian" | "pantry-ready";
 type MealTypeId = "breakfast" | "lunch" | "dinner" | "dessert" | "snack" | "beverage";
+type SourceId = "ai" | "url" | "manual" | "seed";
 
 const ATTR_FILTERS: Array<{ id: AttrFilterId; label: string }> = [
   { id: "under-30min", label: "Under 30 min" },
@@ -25,6 +26,13 @@ const MEAL_TYPES: Array<{ id: MealTypeId; label: string }> = [
   { id: "beverage", label: "Beverage" },
 ];
 
+const SOURCES: Array<{ id: SourceId; label: string }> = [
+  { id: "ai", label: "AI generated" },
+  { id: "url", label: "From URL" },
+  { id: "manual", label: "Manual" },
+  { id: "seed", label: "Starter library" },
+];
+
 interface RecipeRow {
   id: string;
   name: string;
@@ -34,6 +42,8 @@ interface RecipeRow {
   protein: number | null;
   tags: string[];
   ingredients_json?: Array<{ name: string }>;
+  owner_id?: string | null;
+  source_url?: string | null;
 }
 
 interface LibraryControlsProps {
@@ -42,6 +52,20 @@ interface LibraryControlsProps {
   ratings: Map<string, number>;
   pantryNames: string[];
   emptyMessage: string;
+  // Used to identify which user owns each recipe — drives the Manual /
+  // AI / URL / Seed source filter.
+  currentUserId?: string | null;
+}
+
+function recipeSource(r: RecipeRow, currentUserId: string | null): SourceId {
+  if (r.owner_id == null) return "seed";
+  if ((r.tags ?? []).map((t) => t.toLowerCase()).includes("auto-generated"))
+    return "ai";
+  if (r.source_url) return "url";
+  // owner_id matches current user, no auto-gen tag, no source_url → manual.
+  if (currentUserId && r.owner_id === currentUserId) return "manual";
+  // Owned by someone else (shouldn't happen given RLS, but bucket sanely).
+  return "manual";
 }
 
 export function LibraryControls({
@@ -50,10 +74,12 @@ export function LibraryControls({
   ratings,
   pantryNames,
   emptyMessage,
+  currentUserId = null,
 }: LibraryControlsProps) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Set<AttrFilterId>>(new Set());
   const [mealTypes, setMealTypes] = useState<Set<MealTypeId>>(new Set());
+  const [sources, setSources] = useState<Set<SourceId>>(new Set());
   const pantrySet = useMemo(
     () => new Set(pantryNames.map((n) => n.toLowerCase())),
     [pantryNames],
@@ -70,6 +96,15 @@ export function LibraryControls({
 
   function toggleMealType(id: MealTypeId) {
     setMealTypes((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSource(id: SourceId) {
+    setSources((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -95,6 +130,9 @@ export function LibraryControls({
         }
         if (!matched) return false;
       }
+      if (sources.size > 0 && !sources.has(recipeSource(r, currentUserId))) {
+        return false;
+      }
       if (filters.has("under-30min") && (r.time_min ?? 999) > 30) return false;
       if (filters.has("high-protein") && (r.protein ?? 0) < 25) return false;
       if (
@@ -113,9 +151,9 @@ export function LibraryControls({
       }
       return true;
     });
-  }, [recipes, query, filters, mealTypes, pantrySet]);
+  }, [recipes, query, filters, mealTypes, sources, pantrySet, currentUserId]);
 
-  const totalFilters = filters.size + mealTypes.size;
+  const totalFilters = filters.size + mealTypes.size + sources.size;
 
   return (
     <div className="flex flex-col gap-5">
@@ -153,6 +191,22 @@ export function LibraryControls({
             {f.label}
           </Chip>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mr-1">
+          source
+        </span>
+        {SOURCES.map((s) => (
+          <Chip
+            key={s.id}
+            variant={sources.has(s.id) ? "fill" : "default"}
+            interactive
+            onClick={() => toggleSource(s.id)}
+          >
+            {s.label}
+          </Chip>
+        ))}
         {totalFilters > 0 ? (
           <Chip
             variant="dim"
@@ -160,6 +214,7 @@ export function LibraryControls({
             onClick={() => {
               setFilters(new Set());
               setMealTypes(new Set());
+              setSources(new Set());
             }}
           >
             Clear ×

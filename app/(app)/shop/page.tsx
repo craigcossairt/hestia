@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { deriveGroceryList } from "@/lib/grocery/derive";
 import { GroceryRow } from "@/components/grocery/grocery-row";
 import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
+import { BulkActionLink } from "@/components/grocery/bulk-actions";
 import { clearCheckedGroceryItems } from "./actions";
 import type { Ingredient } from "@/lib/types/database";
 
@@ -126,35 +127,57 @@ export default async function ShopPage() {
         </Card>
       ) : (
         <>
-          {list.sections.map(({ aisle, items }) => (
-            <section key={aisle} className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <Label>{AISLE_LABELS[aisle] ?? aisle}</Label>
-                <Mono className="text-ink-3 text-[11px]">{items.length}</Mono>
-              </div>
-              <ul className="flex flex-col">
-                {items.map((it) => (
-                  <GroceryRow
-                    key={it.key}
-                    itemKey={it.key}
-                    name={it.name}
-                    qty={it.qty}
-                    unit={it.unit}
-                    fromRecipes={it.fromRecipes}
-                    initialChecked={list.checked.has(it.key)}
-                  />
-                ))}
-              </ul>
-            </section>
-          ))}
-
-          {list.checked.size > 0 ? (
-            <form action={clearCheckedGroceryItems}>
-              <Btn variant="ghost" size="sm" type="submit">
-                clear {list.checked.size} checked
-              </Btn>
-            </form>
-          ) : null}
+          <div className="flex items-center justify-between gap-2 flex-wrap -mb-2">
+            <BulkActionLink
+              itemKeys={list.sections.flatMap((s) => s.items.map((i) => i.key))}
+              action="check"
+              className="font-mono text-[10.5px] uppercase tracking-[1.4px] text-ink-3 hover:text-ink transition-colors"
+            >
+              Select all
+            </BulkActionLink>
+            {list.checked.size > 0 ? (
+              <form action={clearCheckedGroceryItems}>
+                <Btn variant="ghost" size="sm" type="submit">
+                  clear {list.checked.size} checked
+                </Btn>
+              </form>
+            ) : null}
+          </div>
+          {list.sections.map(({ aisle, items }) => {
+            const allKeys = items.map((i) => i.key);
+            const allChecked = allKeys.every((k) => list.checked.has(k));
+            return (
+              <section key={aisle} className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-3">
+                    <Label>{AISLE_LABELS[aisle] ?? aisle}</Label>
+                    <Mono className="text-ink-3 text-[11px]">
+                      {items.length}
+                    </Mono>
+                  </div>
+                  <BulkActionLink
+                    itemKeys={allKeys}
+                    action={allChecked ? "uncheck" : "check"}
+                  >
+                    {allChecked ? "deselect" : "select"}
+                  </BulkActionLink>
+                </div>
+                <ul className="flex flex-col">
+                  {items.map((it) => (
+                    <GroceryRow
+                      key={it.key}
+                      itemKey={it.key}
+                      name={it.name}
+                      qty={it.qty}
+                      unit={it.unit}
+                      fromRecipes={it.fromRecipes}
+                      initialChecked={list.checked.has(it.key)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
         </>
       )}
 
