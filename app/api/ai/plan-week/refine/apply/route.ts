@@ -1,0 +1,216 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { resolveRecipePhoto } from "@/lib/ai/photo";
+import { PlanRefinementSchema } from "@/lib/ai/prompts/refine-plan";
+import type { FamilyMember } from "@/lib/family";
+
+// Applies a previously-streamed plan refinement: deletes the listed
+// entries, then inserts the additions (with photo resolution + leftover
+// resolution).
+
+export const maxDuration = 90;
+
+const Body = z.object({
+  diff: PlanRefinementSchema,
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const json = await req.json().catch(() => null);
+    const parsed = Body.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: `Invalid body: ${parsed.error.message}` },
+        { status: 400 },
+      );
+    }
+    const { diff } = parsed.data;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_json")
+      .eq("id", user.id)
+      .maybeSingle();
+    const family = (
+      (profile as { family_json?: FamilyMember[] | null } | null)?.family_json ??
+      []
+    ).filter((f) => f.name && f.name.trim().length > 0);
+
+    // Phase 1: removals. Only ever touches rows owned by this user.
+    let removed = 0;
+    if (diff.remove.length > 0) {
+      const { count } = await supabase
+        .from("meal_plan_entries")
+        .delete({ count: "exact" })
+        .eq("user_id", user.id)
+        .in("id", diff.remove);
+      removed = count ?? 0;
+    }
+
+    // Phase 2: photo resolution for additions that include a recipe.
+    const photoTargets: Array<{
+      index: number;
+      recipeName: string;
+      aiImageUrl: string | null;
+      promptHint: string;
+    }> = [];
+    diff.add.forEach((a, i) => {
+      if (a.recipe) {
+        photoTargets.push({
+          index: i,
+          recipeName: a.recipe.name,
+          aiImageUrl: a.recipe.image_url ?? null,
+          promptHint: a.recipe.tags?.slice(0, 3).join(", ") ?? "",
+        });
+      }
+    });
+    const resolved = await Promise.all(
+      photoTargets.map((t) =>
+        resolveRecipePhoto({
+          recipeName: t.recipeName,
+          aiImageUrl: t.aiImageUrl,
+          promptHint: t.promptHint,
+        }).catch(() => null),
+      ),
+    );
+    const photoByIndex = new Map<number, string | null>();
+    photoTargets.forEach((t, j) => {
+      photoByIndex.set(t.index, resolved[j]?.url ?? null);
+    });
+
+    // Phase 3: insertions. Process in order so add-array index references
+    // can be resolved into entry IDs.
+    const entryIdByAddIndex = new Map<number, string>();
+    const recipeIdByAddIndex = new Map<number, string>();
+    let added = 0;
+
+    for (let i = 0; i < diff.add.length; i++) {
+      const a = diff.add[i];
+
+      // Branch 1: leftover of an existing (un-removed) entry.
+      if (a.is_leftover_of_existing_entry_id) {
+        const sourceId = a.is_leftover_of_existing_entry_id;
+        // Don't allow leftovers pointing at entries we're about to remove
+        // or entries that don't exist for this user.
+        if (diff.remove.includes(sourceId)) continue;
+        const { data: source } = await supabase
+          .from("meal_plan_entries")
+          .select("id, recipe_id")
+          .eq("id", sourceId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!source?.recipe_id) continue;
+
+        const { data: entry } = await supabase
+          .from("meal_plan_entries")
+          .insert({
+            user_id: user.id,
+            date: a.date,
+            slot: a.slot,
+            recipe_id: source.recipe_id,
+            status: "planned",
+            is_leftover_of: source.id,
+          })
+          .select("id")
+          .single();
+        if (entry) {
+          added++;
+          entryIdByAddIndex.set(i, entry.id);
+          recipeIdByAddIndex.set(i, source.recipe_id);
+        }
+        continue;
+      }
+
+      // Branch 2: leftover of another addition in this same diff.
+      if (typeof a.is_leftover_of_add_index === "number") {
+        const sourceIdx = a.is_leftover_of_add_index;
+        if (sourceIdx >= i) continue; // forward refs blocked
+        const sourceEntry = entryIdByAddIndex.get(sourceIdx);
+        const sourceRecipe = recipeIdByAddIndex.get(sourceIdx);
+        if (!sourceEntry || !sourceRecipe) continue;
+        const { data: entry } = await supabase
+          .from("meal_plan_entries")
+          .insert({
+            user_id: user.id,
+            date: a.date,
+            slot: a.slot,
+            recipe_id: sourceRecipe,
+            status: "planned",
+            is_leftover_of: sourceEntry,
+          })
+          .select("id")
+          .single();
+        if (entry) {
+          added++;
+          entryIdByAddIndex.set(i, entry.id);
+          recipeIdByAddIndex.set(i, sourceRecipe);
+        }
+        continue;
+      }
+
+      // Branch 3: fresh recipe.
+      const r = a.recipe;
+      if (!r) continue;
+      const { data: recipeRow, error: recipeErr } = await supabase
+        .from("recipes")
+        .insert({
+          owner_id: user.id,
+          name: r.name,
+          photo_url: photoByIndex.get(i) ?? null,
+          source_url: null,
+          ingredients_json: r.ingredients,
+          steps_json: r.steps,
+          kcal: r.kcal,
+          protein: r.protein,
+          carbs: r.carbs,
+          fat: r.fat,
+          time_min: r.time_min,
+          servings: r.servings ?? 1 + family.length,
+          family_notes_json: r.family_modifications ?? [],
+          tips_json: r.tips ?? [],
+          tags: [...new Set([...(r.tags ?? []), "auto-generated"])],
+        })
+        .select("id")
+        .single();
+      if (recipeErr || !recipeRow) continue;
+
+      const { data: entry } = await supabase
+        .from("meal_plan_entries")
+        .insert({
+          user_id: user.id,
+          date: a.date,
+          slot: a.slot,
+          recipe_id: recipeRow.id,
+          status: "planned",
+        })
+        .select("id")
+        .single();
+      if (entry) {
+        added++;
+        entryIdByAddIndex.set(i, entry.id);
+        recipeIdByAddIndex.set(i, recipeRow.id);
+      }
+    }
+
+    revalidatePath("/plan");
+    revalidatePath("/today");
+    revalidatePath("/recipes");
+    revalidatePath("/shop");
+
+    return NextResponse.json({ ok: true, removed, added });
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Server error: ${(err as Error).message ?? "unknown"}` },
+      { status: 500 },
+    );
+  }
+}

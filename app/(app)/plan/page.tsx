@@ -2,6 +2,7 @@ import { H, Body, Label, Mono, Stat } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { PlanGrid, type PlanCellEntry } from "@/components/plan/plan-grid";
 import { GenerateWeekButton } from "@/components/plan/generate-week-button";
+import { RefinePlanForm } from "@/components/plan/refine-plan-form";
 import { WeekNavigator } from "@/components/plan/week-navigator";
 import { inferSlotDefaults } from "@/lib/programs";
 import type { Slot } from "@/lib/types/database";
@@ -70,6 +71,8 @@ export default async function PlanPage({
   const weekStats = { kcal: 0, planned: 0 };
   const slotsWithEntries = new Set<Slot>();
   let userActivePrograms: string[] = [];
+  // entry id → "Mon dinner — Sheet pan chicken" (for the Refine diff preview).
+  const entryLabels: Record<string, string> = {};
 
   if (user) {
     const { data: profileRow } = await supabase
@@ -133,6 +136,11 @@ export default async function PlanPage({
       if (row.recipes?.kcal && !row.is_leftover_of)
         weekStats.kcal += row.recipes.kcal;
       if (cell) weekStats.planned += 1;
+      const dateLabel = new Date(`${row.date}T00:00:00`).toLocaleDateString(
+        "en-US",
+        { weekday: "short" },
+      );
+      entryLabels[row.id] = `${dateLabel.toLowerCase()} ${row.slot} — ${row.recipes?.name ?? "?"}`;
     }
   }
 
@@ -168,6 +176,14 @@ export default async function PlanPage({
         <GenerateWeekButton
           weekStart={weekStartStr}
           inferredDefaults={inferSlotDefaults(userActivePrograms)}
+        />
+      ) : null}
+
+      {user ? (
+        <RefinePlanForm
+          weekStart={weekStartStr}
+          entryLabels={entryLabels}
+          hasEntries={weekStats.planned > 0}
         />
       ) : null}
 
