@@ -88,6 +88,40 @@ export default async function StatsPage({
     // weight_logs table or family_member_id column may not exist yet — ignore
   }
 
+  // Grocery spend over the same window. Household-level (no member scope) —
+  // we don't track per-person grocery contributions.
+  let weeklySpendCents = 0;
+  let monthlySpendCents = 0;
+  let recentTripCount = 0;
+  if (!viewedMember) {
+    try {
+      const sinceMonth = new Date();
+      sinceMonth.setDate(sinceMonth.getDate() - 30);
+      const { data: spendRows } = await supabase
+        .from("grocery_purchases")
+        .select("amount_cents, purchased_at")
+        .eq("user_id", user.id)
+        .gte("purchased_at", sinceMonth.toISOString())
+        .order("purchased_at", { ascending: false });
+      const rows = (spendRows ?? []) as Array<{
+        amount_cents: number;
+        purchased_at: string;
+      }>;
+      const sevenAgo = new Date();
+      sevenAgo.setDate(sevenAgo.getDate() - 7);
+      const sevenAgoIso = sevenAgo.toISOString();
+      for (const row of rows) {
+        monthlySpendCents += row.amount_cents ?? 0;
+        if (row.purchased_at >= sevenAgoIso) {
+          weeklySpendCents += row.amount_cents ?? 0;
+          recentTripCount += 1;
+        }
+      }
+    } catch {
+      // grocery_purchases may not exist yet — leave totals at 0
+    }
+  }
+
   let logsQuery = supabase
     .from("meal_logs")
     .select("logged_at, kcal, protein")
@@ -226,6 +260,56 @@ export default async function StatsPage({
         </Card>
       </section>
 
+      {viewedMember ? null : (
+        <section>
+          <Card className="p-5 flex flex-col gap-4">
+            <div className="flex items-baseline justify-between">
+              <Label accent>grocery spend</Label>
+              <Mono className="text-ink-3 text-[11px]">
+                household · log on Shop
+              </Mono>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <SpendTile
+                label="this week"
+                value={
+                  weeklySpendCents
+                    ? `$${(weeklySpendCents / 100).toFixed(0)}`
+                    : "—"
+                }
+                sub={recentTripCount ? `${recentTripCount} trip${recentTripCount === 1 ? "" : "s"}` : "no trips logged"}
+              />
+              <SpendTile
+                label="last 30 days"
+                value={
+                  monthlySpendCents
+                    ? `$${(monthlySpendCents / 100).toFixed(0)}`
+                    : "—"
+                }
+                sub={
+                  monthlySpendCents
+                    ? `~$${(monthlySpendCents / 100 / 30).toFixed(2)} / day`
+                    : "log a trip to start"
+                }
+              />
+              <SpendTile
+                label="weekly avg"
+                value={
+                  monthlySpendCents
+                    ? `$${(monthlySpendCents / 100 / 4.3).toFixed(0)}`
+                    : "—"
+                }
+                sub={
+                  monthlySpendCents
+                    ? "rolling 30-day average"
+                    : "—"
+                }
+              />
+            </div>
+          </Card>
+        </section>
+      )}
+
       {dayPoints.every((d) => d.kcal === 0) ? (
         <Card className="p-6 flex flex-col gap-2 border-dashed">
           <Label>no data yet</Label>
@@ -253,5 +337,25 @@ function KpiCard({
     <Card className="p-4">
       <Stat label={label} value={value} sub={sub} />
     </Card>
+  );
+}
+
+function SpendTile({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 p-3 rounded-thumb bg-paper-2/60">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3">
+        {label}
+      </span>
+      <Mono className="text-ink text-[20px] font-medium">{value}</Mono>
+      <span className="font-sans text-[11px] text-ink-3">{sub}</span>
+    </div>
   );
 }

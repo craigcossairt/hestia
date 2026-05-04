@@ -2,6 +2,7 @@ import { H, Body, Label, Mono, Stat } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { PlanGrid, type PlanCellEntry } from "@/components/plan/plan-grid";
 import { GenerateWeekButton } from "@/components/plan/generate-week-button";
+import { WeekNavigator } from "@/components/plan/week-navigator";
 import type { Slot } from "@/lib/types/database";
 
 const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
@@ -9,11 +10,20 @@ const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 function startOfWeek(d: Date): Date {
   // Monday-anchored
   const day = d.getDay(); // 0 = Sun
-  const diff = (day === 0 ? -6 : 1 - day);
+  const diff = day === 0 ? -6 : 1 - day;
   const out = new Date(d);
   out.setDate(d.getDate() + diff);
   out.setHours(0, 0, 0, 0);
   return out;
+}
+
+function isValidDate(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+}
+
+function snapToMonday(dateStr: string): Date {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return startOfWeek(d);
 }
 
 function nextDays(start: Date, n: number) {
@@ -28,18 +38,28 @@ function nextDays(start: Date, n: number) {
   });
 }
 
-export default async function PlanPage() {
+export default async function PlanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const start = startOfWeek(new Date());
+  const start = sp?.week && isValidDate(sp.week)
+    ? snapToMonday(sp.week)
+    : startOfWeek(new Date());
   const days = nextDays(start, 7);
   const dateRange = { from: days[0].date, to: days[6].date };
+  const weekStartStr = days[0].date;
+  const thisWeekStr = startOfWeek(new Date()).toISOString().slice(0, 10);
+  const isCurrentWeek = weekStartStr === thisWeekStr;
 
-  let entries: Record<string, Record<Slot, PlanCellEntry | undefined>> = {};
-  let weekStats = { kcal: 0, planned: 0 };
+  const entries: Record<string, Record<Slot, PlanCellEntry | undefined>> = {};
+  const weekStats = { kcal: 0, planned: 0 };
 
   if (user) {
     const { data } = await supabase
@@ -80,23 +100,25 @@ export default async function PlanPage() {
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-6xl mx-auto flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <Label>this week</Label>
+      <header className="flex flex-col gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <Label>plan</Label>
+          <WeekNavigator weekStart={weekStartStr} />
+        </div>
         <H size="xl" as="h1">
-          Plan
+          {isCurrentWeek ? "Plan" : "Week ahead"}
         </H>
         <Body size="lg" dim>
           Tap any slot to assign a recipe. Hover the card to remove.
         </Body>
       </header>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <Stat label="meals planned" value={`${weekStats.planned}/21`} />
-        <Stat label="avg kcal" value={avgKcal ? <><Mono>{avgKcal}</Mono></> : "—"} />
-        <Stat label="week of" value={new Date(dateRange.from).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+        <Stat label="avg kcal" value={avgKcal ? <Mono>{avgKcal}</Mono> : "—"} />
       </div>
 
-      {user ? <GenerateWeekButton /> : null}
+      {user ? <GenerateWeekButton weekStart={weekStartStr} /> : null}
 
       <PlanGrid days={days} entries={entries} />
     </div>

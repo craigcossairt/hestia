@@ -14,7 +14,10 @@ export const RecipeSchema = z.object({
     .array(z.string())
     .max(6)
     .describe(
-      "Lowercase tags like 'vegetarian', 'high-protein', 'under-30min', 'one-pan'.",
+      "Lowercase tags. ALWAYS include exactly one meal type from " +
+        "[breakfast, lunch, dinner, dessert, snack, beverage]. " +
+        "Then add up to 5 attribute tags like 'vegetarian', 'high-protein', " +
+        "'under-30min', 'one-pan'.",
     ),
   ingredients: z
     .array(

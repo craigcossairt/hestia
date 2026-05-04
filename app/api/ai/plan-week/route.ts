@@ -19,7 +19,14 @@ function startOfWeek(d: Date): Date {
   return out;
 }
 
-export async function POST(_req: NextRequest) {
+function isValidDate(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+}
+
+export async function POST(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as
+    | { week_start?: string }
+    | null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -117,8 +124,12 @@ export async function POST(_req: NextRequest) {
     );
   }
 
-  // Compute the 7 days: start of current week + 6.
-  const start = startOfWeek(new Date());
+  // Compute the 7 days: caller-supplied Monday or current week's Monday.
+  const requestedWeek =
+    body?.week_start && isValidDate(body.week_start)
+      ? new Date(`${body.week_start}T00:00:00`)
+      : new Date();
+  const start = startOfWeek(requestedWeek);
   const dates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);

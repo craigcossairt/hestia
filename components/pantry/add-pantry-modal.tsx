@@ -18,7 +18,7 @@ import {
 } from "@/app/(app)/inventory/actions";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
-import { QUICK_ADDS } from "@/lib/inventory/quick-adds";
+import { quickAddsForLocation } from "@/lib/inventory/quick-adds";
 import type { PantryLocation } from "@/lib/types/database";
 
 type Mode = "manual" | "bulk" | "barcode" | "receipt";
@@ -221,18 +221,37 @@ function ManualMode({
           {pending ? "Saving…" : "Add"}
         </Btn>
       </div>
-      <div className="border-t border-ink-l/40 pt-3">
-        <div className="flex items-baseline justify-between">
-          <Label>quick add</Label>
-          <Mono className="text-ink-3 text-[10px]">→ {location}</Mono>
-        </div>
+      <QuickAddSection location={location} onQuickAdd={quickAdd} />
+    </div>
+  );
+}
+
+function QuickAddSection({
+  location,
+  onQuickAdd,
+}: {
+  location: PantryLocation;
+  onQuickAdd: (preset: { name: string; qty: number; unit: string }) => void;
+}) {
+  const presets = quickAddsForLocation(location);
+  return (
+    <div className="border-t border-ink-l/40 pt-3">
+      <div className="flex items-baseline justify-between">
+        <Label>quick add</Label>
+        <Mono className="text-ink-3 text-[10px]">→ {location}</Mono>
+      </div>
+      {presets.length === 0 ? (
+        <Body size="xs" dim className="mt-2">
+          No quick presets for {location} yet — type the item name above.
+        </Body>
+      ) : (
         <div className="flex flex-wrap gap-1.5 mt-2">
-          {QUICK_ADDS.map((q) => (
+          {presets.map((q) => (
             <Chip
-              key={q.name}
+              key={`${q.name}-${q.unit}`}
               variant="default"
               interactive
-              onClick={() => quickAdd(q)}
+              onClick={() => onQuickAdd(q)}
               title={`Adds ${q.qty} ${q.unit} → ${location}`}
             >
               + {q.name}{" "}
@@ -242,7 +261,7 @@ function ManualMode({
             </Chip>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

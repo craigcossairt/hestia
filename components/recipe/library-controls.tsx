@@ -6,13 +6,23 @@ import { Chip, Body } from "@/components/ds";
 import { RecipeCard } from "./recipe-card";
 import { cn } from "@/lib/utils";
 
-type FilterId = "under-30min" | "high-protein" | "vegetarian" | "pantry-ready";
+type AttrFilterId = "under-30min" | "high-protein" | "vegetarian" | "pantry-ready";
+type MealTypeId = "breakfast" | "lunch" | "dinner" | "dessert" | "snack" | "beverage";
 
-const FILTERS: Array<{ id: FilterId; label: string }> = [
+const ATTR_FILTERS: Array<{ id: AttrFilterId; label: string }> = [
   { id: "under-30min", label: "Under 30 min" },
   { id: "high-protein", label: "High protein" },
   { id: "vegetarian", label: "Vegetarian" },
   { id: "pantry-ready", label: "In stock" },
+];
+
+const MEAL_TYPES: Array<{ id: MealTypeId; label: string }> = [
+  { id: "breakfast", label: "Breakfast" },
+  { id: "lunch", label: "Lunch" },
+  { id: "dinner", label: "Dinner" },
+  { id: "dessert", label: "Dessert" },
+  { id: "snack", label: "Snack" },
+  { id: "beverage", label: "Beverage" },
 ];
 
 interface RecipeRow {
@@ -42,14 +52,24 @@ export function LibraryControls({
   emptyMessage,
 }: LibraryControlsProps) {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<Set<FilterId>>(new Set());
+  const [filters, setFilters] = useState<Set<AttrFilterId>>(new Set());
+  const [mealTypes, setMealTypes] = useState<Set<MealTypeId>>(new Set());
   const pantrySet = useMemo(
     () => new Set(pantryNames.map((n) => n.toLowerCase())),
     [pantryNames],
   );
 
-  function toggle(id: FilterId) {
+  function toggle(id: AttrFilterId) {
     setFilters((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleMealType(id: MealTypeId) {
+    setMealTypes((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -63,6 +83,17 @@ export function LibraryControls({
       if (q) {
         const haystack = `${r.name} ${(r.tags ?? []).join(" ")}`.toLowerCase();
         if (!haystack.includes(q)) return false;
+      }
+      if (mealTypes.size > 0) {
+        const tagSet = new Set((r.tags ?? []).map((t) => t.toLowerCase()));
+        let matched = false;
+        for (const mt of mealTypes) {
+          if (tagSet.has(mt)) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
       }
       if (filters.has("under-30min") && (r.time_min ?? 999) > 30) return false;
       if (filters.has("high-protein") && (r.protein ?? 0) < 25) return false;
@@ -82,7 +113,9 @@ export function LibraryControls({
       }
       return true;
     });
-  }, [recipes, query, filters, pantrySet]);
+  }, [recipes, query, filters, mealTypes, pantrySet]);
+
+  const totalFilters = filters.size + mealTypes.size;
 
   return (
     <div className="flex flex-col gap-5">
@@ -90,8 +123,27 @@ export function LibraryControls({
         <SearchInput value={query} onChange={setQuery} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mr-1">
+          meal
+        </span>
+        {MEAL_TYPES.map((m) => (
+          <Chip
+            key={m.id}
+            variant={mealTypes.has(m.id) ? "fill" : "default"}
+            interactive
+            onClick={() => toggleMealType(m.id)}
+          >
+            {m.label}
+          </Chip>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mr-1">
+          attributes
+        </span>
+        {ATTR_FILTERS.map((f) => (
           <Chip
             key={f.id}
             variant={filters.has(f.id) ? "fill" : "default"}
@@ -101,8 +153,15 @@ export function LibraryControls({
             {f.label}
           </Chip>
         ))}
-        {filters.size > 0 ? (
-          <Chip variant="dim" interactive onClick={() => setFilters(new Set())}>
+        {totalFilters > 0 ? (
+          <Chip
+            variant="dim"
+            interactive
+            onClick={() => {
+              setFilters(new Set());
+              setMealTypes(new Set());
+            }}
+          >
             Clear ×
           </Chip>
         ) : null}

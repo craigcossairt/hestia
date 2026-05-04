@@ -2,8 +2,16 @@ import { H, Body, Label, Btn, Card, Mono } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { deriveGroceryList } from "@/lib/grocery/derive";
 import { GroceryRow } from "@/components/grocery/grocery-row";
+import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
 import { clearCheckedGroceryItems } from "./actions";
 import type { Ingredient } from "@/lib/types/database";
+
+interface GroceryPurchaseRow {
+  id: string;
+  amount_cents: number;
+  note: string | null;
+  purchased_at: string;
+}
 
 const AISLE_LABELS: Record<string, string> = {
   produce: "produce",
@@ -39,6 +47,29 @@ export default async function ShopPage() {
   const toDate = new Date(today);
   toDate.setDate(today.getDate() + 7);
   const to = toDate.toISOString().slice(0, 10);
+
+  // Span back 7 days for the "this week's spend" tally that frames the
+  // log-purchase form.
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - 7);
+
+  let purchases: GroceryPurchaseRow[] = [];
+  let weekTotalCents = 0;
+  try {
+    const { data: purchaseRows } = await supabase
+      .from("grocery_purchases")
+      .select("id, amount_cents, note, purchased_at")
+      .eq("user_id", user.id)
+      .order("purchased_at", { ascending: false })
+      .limit(8);
+    purchases = (purchaseRows ?? []) as GroceryPurchaseRow[];
+    const sinceIso = weekStart.toISOString();
+    weekTotalCents = purchases
+      .filter((p) => p.purchased_at >= sinceIso)
+      .reduce((a, p) => a + (p.amount_cents ?? 0), 0);
+  } catch {
+    // grocery_purchases table may not exist yet — silently fall back to empty
+  }
 
   const [planRes, pantryRes, overridesRes] = await Promise.all([
     supabase
@@ -126,6 +157,8 @@ export default async function ShopPage() {
           ) : null}
         </>
       )}
+
+      <LogPurchaseForm recent={purchases} weekTotalCents={weekTotalCents} />
     </div>
   );
 }
