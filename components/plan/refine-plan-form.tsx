@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Wand2 } from "lucide-react";
 import { Btn, Body, Mono } from "@/components/ds";
 import { RefinePlanModal } from "./refine-plan-modal";
@@ -12,6 +12,12 @@ interface RefinePlanFormProps {
   entryLabels: Record<string, string>;
   // Disable when the plan is empty — there's nothing to refine.
   hasEntries: boolean;
+  // Pre-fill the input from a deep link. Set by /plan when navigated
+  // from the plan-stale prompt (`/plan?refine=...`). When non-empty
+  // and the plan has entries, the refine modal auto-opens with this
+  // text submitted, so the user lands on the streaming preview
+  // directly without retyping.
+  initialRefineText?: string;
 }
 
 const EXAMPLES = [
@@ -25,8 +31,9 @@ export function RefinePlanForm({
   weekStart,
   entryLabels,
   hasEntries,
+  initialRefineText,
 }: RefinePlanFormProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialRefineText ?? "");
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState("");
 
@@ -36,6 +43,20 @@ export function RefinePlanForm({
     setSubmitted(trimmed);
     setOpen(true);
   }
+
+  // Auto-fire when arriving via the plan-stale prompt deep link. Only
+  // runs once per mount, guarded on hasEntries so we don't hit a
+  // disabled state. The setState calls are intentional here — we
+  // need to react to a query-string-driven prop on mount, which is
+  // exactly the "synchronise to external system" exception the
+  // react-hooks/set-state-in-effect rule allows.
+  useEffect(() => {
+    if (!initialRefineText || !hasEntries) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSubmitted(initialRefineText);
+    setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>

@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/shell/app-shell";
+import { PlanStalePrompt } from "@/components/plan/plan-stale-prompt";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { readPlanStaleHintCookie } from "@/lib/plans/staleness";
 
 export default async function AppLayout({
   children,
@@ -32,9 +34,16 @@ export default async function AppLayout({
     }
   }
 
+  // Mounted globally so any mutating action that sets the cookie gets
+  // its prompt rendered on the next page load (including after the
+  // redirect that removeMember triggers). The dialog itself dismisses
+  // + clears the cookie when the user picks an option.
+  const planStaleHint = user ? await readPlanStaleHintCookie() : null;
+
   return (
     <AppShell user={user} initialDark={initialDark}>
       {children}
+      {planStaleHint ? <PlanStalePrompt hint={planStaleHint} /> : null}
     </AppShell>
   );
 }

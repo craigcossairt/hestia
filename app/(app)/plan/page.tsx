@@ -49,9 +49,10 @@ function nextDays(start: Date, n: number) {
 export default async function PlanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; refine?: string }>;
 }) {
   const sp = await searchParams;
+  const initialRefineText = sp?.refine?.trim() || undefined;
   const supabase = await createClient();
   const {
     data: { user },
@@ -184,6 +185,7 @@ export default async function PlanPage({
           weekStart={weekStartStr}
           entryLabels={entryLabels}
           hasEntries={weekStats.planned > 0}
+          initialRefineText={initialRefineText}
         />
       ) : null}
 
