@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, X, Play, Pause, ChevronDown, ChevronUp } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Play,
+  Pause,
+  ChevronDown,
+  ChevronUp,
+  Camera,
+  Check,
+} from "lucide-react";
 import { Btn, H, Body, Label, Mono, Chip } from "@/components/ds";
 import {
   matchIngredientsInStep,
   formatIngredientChip,
 } from "@/lib/recipes/match-ingredients";
+import { uploadRecipePhoto } from "@/app/(app)/recipes/actions";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 interface CookShellProps {
@@ -23,9 +35,14 @@ export function CookShell({
   steps,
   ingredients,
 }: CookShellProps) {
+  const router = useRouter();
   const [i, setI] = useState(0);
   const step = steps[i];
   const [showAllIngredients, setShowAllIngredients] = useState(false);
+  // Set when the user clicks Done on the last step. Triggers the
+  // post-cook overlay where they can optionally upload a photo of the
+  // finished plate to replace the recipe's photo.
+  const [finished, setFinished] = useState(false);
 
   // Cache the per-step ingredient matches so flipping pages stays
   // instant — matching is O(steps × ingredients × text length) which
@@ -177,11 +194,14 @@ export function CookShell({
           <ChevronLeft size={16} /> Back
         </Btn>
         {last ? (
-          <Link href={`/recipes/${recipeId}`}>
-            <Btn variant="primary" size="lg" full>
-              Done
-            </Btn>
-          </Link>
+          <Btn
+            variant="primary"
+            size="lg"
+            onClick={() => setFinished(true)}
+            full
+          >
+            Done
+          </Btn>
         ) : (
           <Btn
             variant="primary"
@@ -193,6 +213,169 @@ export function CookShell({
           </Btn>
         )}
       </footer>
+
+      {finished ? (
+        <FinishOverlay
+          recipeId={recipeId}
+          onClose={() => router.push(`/recipes/${recipeId}`)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+// Post-cook overlay. Asks the user if they want to capture a photo of
+// the finished dish — if they do, it replaces the recipe's photo. Pure
+// upgrade for AI-photo recipes that don't quite look right; the user
+// gets a real photo of what they actually made into their library.
+//
+// On mobile the file input's `capture="environment"` attribute opens
+// the rear camera directly. On desktop it falls back to the file
+// picker.
+function FinishOverlay({
+  recipeId,
+  onClose,
+}: {
+  recipeId: string;
+  onClose: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [base64, setBase64] = useState<string | null>(null);
+  const [filename, setFilename] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  function pickFile(file: File) {
+    setError(null);
+    setFilename(file.name);
+    setContentType(file.type);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setPreviewUrl(result);
+      setBase64(result.split(",")[1] ?? "");
+    };
+    reader.onerror = () => setError("Couldn't read that file.");
+    reader.readAsDataURL(file);
+  }
+
+  function save() {
+    if (!base64 || !filename) return;
+    setError(null);
+    start(async () => {
+      const r = await uploadRecipePhoto({
+        recipeId,
+        filename,
+        base64,
+        contentType: contentType ?? "image/jpeg",
+      });
+      if ("error" in r && r.error) {
+        setError(r.error);
+        return;
+      }
+      setSaved(true);
+      // Brief beat so the user sees the "saved" state before the route
+      // change snaps them back to the recipe.
+      setTimeout(onClose, 600);
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-paper/95 backdrop-blur-sm flex items-center justify-center px-6 py-10">
+      <div className="max-w-md w-full flex flex-col items-center gap-6 text-center">
+        <Label>finished cooking</Label>
+        <H size="lg">Nice work.</H>
+        <Body size="sm" dim>
+          Snap a quick photo of what you made — it&apos;ll replace the
+          recipe&apos;s photo so your library shows the real thing.
+          Skip if you&apos;re not feeling it.
+        </Body>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pickFile(f);
+            e.target.value = "";
+          }}
+        />
+
+        {previewUrl ? (
+          <div className="w-full flex flex-col gap-3">
+            <div className="w-full aspect-square rounded-card overflow-hidden border border-ink-l bg-paper-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl}
+                alt="finished dish"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Btn
+                variant="primary"
+                onClick={save}
+                disabled={pending || saved}
+                full
+              >
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  {saved ? (
+                    <>
+                      <Check size={16} /> Saved
+                    </>
+                  ) : (
+                    <>{pending ? "Saving…" : "Use as recipe photo"}</>
+                  )}
+                </span>
+              </Btn>
+              <Btn
+                variant="outline"
+                onClick={() => {
+                  setPreviewUrl(null);
+                  setBase64(null);
+                  setFilename(null);
+                  setContentType(null);
+                }}
+                disabled={pending || saved}
+              >
+                Retake
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <Btn
+            variant="primary"
+            size="lg"
+            onClick={() => fileRef.current?.click()}
+            full
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              <Camera size={18} /> Take a photo
+            </span>
+          </Btn>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          className="text-ink-3 hover:text-ink text-[13px] underline underline-offset-2 disabled:opacity-50"
+        >
+          Skip — close cook mode
+        </button>
+
+        {error ? (
+          <Body size="xs" className="text-danger">
+            {error}
+          </Body>
+        ) : null}
+      </div>
+    </div>
   );
 }
