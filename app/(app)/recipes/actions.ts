@@ -15,7 +15,11 @@ async function getUserOrRedirect() {
 }
 
 export async function saveGeneratedRecipe(
-  recipe: GeneratedRecipe & { source_url?: string | null; photo_url?: string | null },
+  recipe: GeneratedRecipe & {
+    source_url?: string | null;
+    source_image_url?: string | null;
+    photo_url?: string | null;
+  },
 ) {
   const { supabase, user } = await getUserOrRedirect();
 
@@ -26,6 +30,7 @@ export async function saveGeneratedRecipe(
       name: recipe.name,
       photo_url: recipe.photo_url ?? null,
       source_url: recipe.source_url ?? null,
+      source_image_url: recipe.source_image_url ?? null,
       ingredients_json: recipe.ingredients,
       steps_json: recipe.steps,
       kcal: recipe.kcal,
@@ -33,6 +38,7 @@ export async function saveGeneratedRecipe(
       carbs: recipe.carbs,
       fat: recipe.fat,
       time_min: recipe.time_min,
+      servings: recipe.servings ?? 4,
       tags: recipe.tags,
     })
     .select("id")

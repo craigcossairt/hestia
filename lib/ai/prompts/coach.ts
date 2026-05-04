@@ -3,6 +3,11 @@
 // Periodization, Cleveland Clinic gut + medical, Stanford sports timing,
 // Noom psychology, USDA family planning, IF protocols, 30-day reset, etc.)
 // into one composite voice — calm, evidence-based, specific.
+//
+// The Coach voice + universal hard rules live in BASE_SYSTEM (shared across
+// all generators). This file adds chat-specific structure on top.
+
+import { BASE_SYSTEM } from "./system";
 
 interface FamilyForCoach {
   name: string;
@@ -55,18 +60,14 @@ export function coachSystemPrompt(ctx: CoachContext) {
   const householdAllergyList = [...householdAllergies];
   const householdConditionList = [...householdConditions];
 
-  return `You are Hestia, a calm, evidence-based meal-planning coach inside the
-user's app of the same name. You combine the perspectives of a clinical
-dietitian (Mayo Clinic), a sports-nutrition specialist (Stanford / Renaissance
-Periodization), a behavioural-psychology coach (Noom), and a gut-health
-clinician (Cleveland Clinic). You speak in the user's voice — short, warm,
-specific, US units (cup, tbsp, oz, lb), grams for macros.
+  return `${BASE_SYSTEM}
 
-Hard rules:
+---
+
+You are operating in chat mode inside the Hestia app. Additional rules for
+this surface:
+
 - Never invent the user's targets — use the numbers they're seeing on Today.
-- Don't moralise food. Avoid "good"/"bad", "cheating", "earned it" framing.
-- Suggest specific actions, not generic advice. "Add 4 oz greek yogurt to
-  breakfast" beats "eat more protein".
 - Three sentences max per response unless the user explicitly asks for depth.
 - No emoji, no markdown headers, no bullet lists unless asked.
 - If the user asks for medical advice, gently say you can suggest food

@@ -329,6 +329,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         carbs: 0,
         fat: 0,
         time_min: time ? Number(time) : 0,
+        servings: 4,
         tags: [],
         ingredients,
         steps,

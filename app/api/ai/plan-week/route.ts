@@ -2,12 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getModel } from "@/lib/ai/provider";
+import { getModel, getModelOpts } from "@/lib/ai/provider";
+import { resolveRecipePhoto } from "@/lib/ai/photo";
 import { PlanWeekSchema, planWeekPrompt } from "@/lib/ai/prompts/plan-week";
 import { buildProgramContext } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
-export const maxDuration = 60;
+// Photos add ~5–15s on top of dinner generation; 90s gives headroom.
+export const maxDuration = 90;
 
 function startOfWeek(d: Date): Date {
   // Monday-anchored, matches /plan page logic.
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: PlanWeekSchema,
+        ...getModelOpts(),
         prompt: planWeekPrompt({
           goal: profile?.goal ?? null,
           protein_target: profile?.protein_target ?? null,
@@ -156,6 +159,24 @@ export async function POST(req: NextRequest) {
       ((existingPlans ?? []) as Array<{ date: string }>).map((p) => p.date),
     );
 
+    // Resolve photos for the dinners we'll actually create, in parallel.
+    const targetIndices: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      if (!filled.has(dates[i]) && dinners[i]) targetIndices.push(i);
+    }
+    const photos = await Promise.all(
+      targetIndices.map((i) =>
+        resolveRecipePhoto({
+          recipeName: dinners[i].name,
+          promptHint: dinners[i].tags?.slice(0, 3).join(", "),
+        }).catch(() => null),
+      ),
+    );
+    const photoByIndex = new Map<number, string | null>();
+    targetIndices.forEach((i, j) => {
+      photoByIndex.set(i, photos[j]?.url ?? null);
+    });
+
     const created: Array<{ date: string; recipe_name: string }> = [];
     let skipped = 0;
 
@@ -173,7 +194,7 @@ export async function POST(req: NextRequest) {
         .insert({
           owner_id: user.id,
           name: r.name,
-          photo_url: null,
+          photo_url: photoByIndex.get(i) ?? null,
           source_url: null,
           ingredients_json: r.ingredients,
           steps_json: r.steps,
@@ -182,6 +203,7 @@ export async function POST(req: NextRequest) {
           carbs: r.carbs,
           fat: r.fat,
           time_min: r.time_min,
+          servings: r.servings ?? 4,
           tags: [...new Set([...(r.tags ?? []), "auto-generated"])],
         })
         .select("id")

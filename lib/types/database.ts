@@ -58,6 +58,7 @@ export interface Recipe {
   name: string;
   photo_url: string | null;
   source_url: string | null;
+  source_image_url: string | null;
   ingredients_json: Ingredient[];
   steps_json: Step[];
   kcal: number | null;
@@ -65,6 +66,7 @@ export interface Recipe {
   carbs: number | null;
   fat: number | null;
   time_min: number | null;
+  servings: number;
   tags: string[];
   created_at: string;
 }
@@ -89,6 +91,8 @@ export interface MealPlanEntry {
   slot: Slot;
   recipe_id: string | null;
   status: PlanStatus;
+  is_leftover_of: string | null;
+  servings_used: number;
   created_at: string;
 }
 

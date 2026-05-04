@@ -2,14 +2,29 @@
 // 7-day meal plan generator — single-recipe variant) in the source thread.
 
 import { z } from "zod";
+import { withBaseSystem } from "./system";
 
 export const RecipeSchema = z.object({
   name: z.string().describe("A concise recipe name, sentence case, no fluff."),
   time_min: z.number().int().min(1).max(480),
-  kcal: z.number().int().min(50).max(2000),
-  protein: z.number().int().min(0).max(200),
-  carbs: z.number().int().min(0).max(300),
-  fat: z.number().int().min(0).max(150),
+  servings: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .describe(
+      "How many adult servings the full recipe yields. Used by the planner " +
+        "for leftovers — e.g. 4 servings + a 2-person household → 2 days of food.",
+    ),
+  kcal: z
+    .number()
+    .int()
+    .min(50)
+    .max(2000)
+    .describe("Per-serving calories."),
+  protein: z.number().int().min(0).max(200).describe("Per-serving grams."),
+  carbs: z.number().int().min(0).max(300).describe("Per-serving grams."),
+  fat: z.number().int().min(0).max(150).describe("Per-serving grams."),
   tags: z
     .array(z.string())
     .max(6)
@@ -69,8 +84,8 @@ export function generateRecipePrompt(args: {
     disliked_foods,
     medical_conditions,
   } = args;
-  return `You are Hestia, a calm meal-planning assistant. Generate ONE recipe
-that matches the user's request. The recipe must be:
+  return withBaseSystem(`Generate ONE recipe that matches the user's request.
+The recipe must be:
 
 - Realistic, written in plain prose, no marketing fluff.
 - Tight ingredient list, ${dietary_restrictions.length ? "respecting these dietary preferences: " + dietary_restrictions.join(", ") + "." : "with no specific dietary preferences set."}
@@ -85,13 +100,13 @@ ${pantry_hints.length ? `- Prefer ingredients the user already has when natural:
 
 User request: "${prompt}"
 
-Return ONLY a valid recipe object matching the schema. No commentary.`;
+Return ONLY a valid recipe object matching the schema. No commentary.`);
 }
 
 export function parseRecipeFromPhotoPrompt() {
-  return `You are reading a recipe from a photo — a cookbook page, magazine
-clipping, restaurant menu, or screenshot. Extract the recipe into the strict
-schema.
+  return withBaseSystem(`You are reading a recipe from a photo — a cookbook
+page, magazine clipping, restaurant menu, or screenshot. Extract the recipe
+into the strict schema.
 
 Rules:
 - Use only what you can clearly read on the photo. Don't invent ingredients
@@ -102,12 +117,12 @@ Rules:
 - Strip extraneous prose ("a family favorite for generations…"). Keep steps
   imperative and concise.
 
-Return ONLY a valid recipe object matching the schema. No commentary.`;
+Return ONLY a valid recipe object matching the schema. No commentary.`);
 }
 
 export function parseRecipeFromUrlPrompt(args: { url: string; htmlExcerpt: string }) {
-  return `You are extracting a recipe from a webpage. Parse the page content
-into the strict recipe schema.
+  return withBaseSystem(`You are extracting a recipe from a webpage. Parse the
+page content into the strict recipe schema.
 
 Source URL: ${args.url}
 
@@ -122,7 +137,7 @@ Rules:
 - Convert any ambiguous units to common ones (cup, tbsp, tsp, g, kg, oz, lb, ml, l, each).
 - If the page has multiple recipes, pick the primary one.
 
-Return ONLY a valid recipe object matching the schema. No commentary.`;
+Return ONLY a valid recipe object matching the schema. No commentary.`);
 }
 
 export function substitutionPrompt(args: {
@@ -131,15 +146,16 @@ export function substitutionPrompt(args: {
   pantry_hints: string[];
   dietary_restrictions: string[];
 }) {
-  return `Suggest 3 substitutions for "${args.ingredient}" in the recipe
-"${args.recipe_name}". Each substitution should preserve the recipe's purpose.
+  return withBaseSystem(`Suggest 3 substitutions for "${args.ingredient}" in
+the recipe "${args.recipe_name}". Each substitution should preserve the
+recipe's purpose.
 
 User pantry includes: ${args.pantry_hints.join(", ") || "no inventory recorded"}.
 Dietary preferences: ${args.dietary_restrictions.join(", ") || "no restrictions"}.
 
 Return three options. For each: name, equivalent quantity, and a one-sentence
 reason ("uses pantry spinach", "saves $2 vs blueberries", "adds 8g protein").
-Bias the first option toward something already in pantry when sensible.`;
+Bias the first option toward something already in pantry when sensible.`);
 }
 
 export const SubstitutionsSchema = z.object({

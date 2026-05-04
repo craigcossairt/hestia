@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import { RecipeSchema } from "./recipe";
+import { withBaseSystem } from "./system";
 
 export const PlanWeekSchema = z.object({
   dinners: z.array(RecipeSchema).length(7),
@@ -27,8 +28,8 @@ interface PlanWeekArgs {
 }
 
 export function planWeekPrompt(args: PlanWeekArgs) {
-  return `You are Hestia, a calm meal-planning coach. Generate exactly 7
-distinct DINNER recipes for the week. Each must be:
+  return withBaseSystem(`Generate exactly 7 distinct DINNER recipes for the
+week. Each must be:
 
 - Realistic, written as plain prose, no marketing fluff.
 - US units (cup, tbsp, tsp, oz, lb). Grams only for macros.
@@ -51,5 +52,5 @@ Variety rules:
 - At least one quick (<25 min) dish for a busy night.
 - At least one batch-friendly leftover-able dish.
 
-Return ONLY a valid object with a "dinners" array of exactly 7 recipes.`;
+Return ONLY a valid object with a "dinners" array of exactly 7 recipes.`);
 }
