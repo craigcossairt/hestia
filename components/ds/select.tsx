@@ -18,6 +18,11 @@ interface SelectProps<T extends string> {
   // "right" (default) for compact field-row contexts; "left" for a full-width dropdown
   align?: "left" | "right";
   ariaLabel?: string;
+  // Stretch the trigger button to fill its container (for grid-cell
+  // contexts where the cell defines the width and we want the entire
+  // cell to be a tap target — otherwise the button is just inline-flex
+  // sized to its label, which is hard to hit on a phone).
+  fullWidth?: boolean;
 }
 
 // Custom select that fully styles its popover so dark-mode rendering doesn't
@@ -31,6 +36,7 @@ export function Select<T extends string>({
   placeholder,
   align = "right",
   ariaLabel,
+  fullWidth,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState<number>(() =>
@@ -86,7 +92,14 @@ export function Select<T extends string>({
   }
 
   return (
-    <div ref={rootRef} className={cn("relative inline-block", className)}>
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative",
+        fullWidth ? "block w-full" : "inline-block",
+        className,
+      )}
+    >
       <button
         type="button"
         onClick={toggle}
@@ -94,8 +107,12 @@ export function Select<T extends string>({
         aria-expanded={open}
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex items-center gap-1.5 bg-transparent text-ink font-sans text-[14px] outline-none cursor-pointer",
-          align === "right" ? "text-right justify-end" : "text-left justify-start",
+          "items-center gap-1.5 bg-transparent text-ink font-sans text-[14px] outline-none cursor-pointer",
+          fullWidth
+            ? "flex w-full justify-between"
+            : "inline-flex",
+          !fullWidth &&
+            (align === "right" ? "text-right justify-end" : "text-left justify-start"),
         )}
       >
         <span className={cn(!selected && "text-ink-3")}>

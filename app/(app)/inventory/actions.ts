@@ -53,6 +53,11 @@ export async function addOrIncrementPantryItem(item: {
   unit: string;
   location: PantryLocation;
   source?: PantrySource;
+  // Set on insert. On update we preserve the existing row's photo
+  // (incrementing qty shouldn't change the saved image) so re-scanning
+  // an item never overwrites a photo the user might have manually
+  // updated later.
+  photo_url?: string | null;
 }) {
   const { supabase, user } = await getUserOrRedirect();
   const normalizedName = item.name.toLowerCase().trim();
@@ -81,6 +86,7 @@ export async function addOrIncrementPantryItem(item: {
       unit: item.unit,
       location: item.location,
       source: item.source ?? "manual",
+      photo_url: item.photo_url ?? null,
     });
     if (error) return { error: error.message };
   }
