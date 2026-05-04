@@ -21,7 +21,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at, preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_zip",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at, preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_zip, kroger_user_id, kroger_access_token",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -126,6 +126,16 @@ export default async function MePage() {
         initialZip={
           (profile as { preferred_kroger_zip?: string | null }).preferred_kroger_zip ??
           null
+        }
+        // Use the kroger_user_id when present, otherwise fall back to a
+        // stable placeholder string so the UI can detect "connected"
+        // without needing the Kroger user id specifically (the token
+        // alone is enough — kroger_user_id is just for display).
+        initialConnectedKrogerUserId={
+          (profile as { kroger_access_token?: string | null }).kroger_access_token
+            ? ((profile as { kroger_user_id?: string | null }).kroger_user_id ??
+              "connected")
+            : null
         }
       />
 

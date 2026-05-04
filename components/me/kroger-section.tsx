@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Store, MapPin, X } from "lucide-react";
+import { Store, MapPin, X, ShoppingCart } from "lucide-react";
 import { Card, Label, Body, Btn, Mono } from "@/components/ds";
 import {
   searchKrogerLocations,
   savePreferredKrogerLocation,
   clearPreferredKrogerLocation,
+  disconnectKrogerAccount,
 } from "@/app/(app)/me/actions";
 
 interface KrogerLocation {
@@ -23,6 +24,12 @@ interface KrogerSectionProps {
   initialLocationId: string | null;
   initialLocationName: string | null;
   initialZip: string | null;
+  // Phase 2: whether the user has authorised our app on Kroger's side
+  // so we can write to their cart. Independent of having a store
+  // picked — you can pick a store without connecting (read-only
+  // pricing) and you can connect without a store, but Send-to-Cart
+  // needs both.
+  initialConnectedKrogerUserId: string | null;
 }
 
 // Picker for the user's home Kroger / Smith's store. /shop uses this to
@@ -33,6 +40,7 @@ export function KrogerSection({
   initialLocationId,
   initialLocationName,
   initialZip,
+  initialConnectedKrogerUserId,
 }: KrogerSectionProps) {
   const [zip, setZip] = useState(initialZip ?? "");
   const [results, setResults] = useState<KrogerLocation[]>([]);
@@ -40,7 +48,17 @@ export function KrogerSection({
   const [saving, startSave] = useTransition();
   const [savedId, setSavedId] = useState<string | null>(initialLocationId);
   const [savedName, setSavedName] = useState<string | null>(initialLocationName);
+  const [connectedKrogerUserId, setConnectedKrogerUserId] = useState<
+    string | null
+  >(initialConnectedKrogerUserId);
   const [error, setError] = useState<string | null>(null);
+
+  function disconnect() {
+    startSave(async () => {
+      await disconnectKrogerAccount();
+      setConnectedKrogerUserId(null);
+    });
+  }
 
   function search() {
     setError(null);
@@ -183,6 +201,61 @@ export function KrogerSection({
           ) : null}
         </>
       )}
+
+      {/*
+        Cart connection sub-section. Independent of store selection —
+        the OAuth grant gives our app permission to add to the user's
+        cart, which is a separate concern from "which store am I
+        shopping at" (the store picker above).
+      */}
+      <div className="border-t border-ink-l/40 pt-4 mt-2">
+        {connectedKrogerUserId ? (
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2 min-w-0">
+              <ShoppingCart size={16} className="text-accent shrink-0 mt-1" />
+              <div className="min-w-0">
+                <Body size="sm" className="text-ink">
+                  Connected to Kroger cart
+                </Body>
+                <Body size="xs" dim>
+                  Use &ldquo;Send to Kroger Cart&rdquo; on /shop to push your
+                  weekly list. Disconnect any time below.
+                </Body>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={disconnect}
+              disabled={saving}
+              className="text-ink-3 hover:text-danger text-[12px] underline underline-offset-2 shrink-0 mt-1"
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-start gap-2 min-w-0">
+              <ShoppingCart size={16} className="text-ink-3 shrink-0 mt-1" />
+              <div className="min-w-0">
+                <Body size="sm" className="text-ink">
+                  Connect your Kroger account
+                </Body>
+                <Body size="xs" dim>
+                  Optional. Lets /shop send your weekly list straight to
+                  your Kroger cart for pickup.
+                </Body>
+              </div>
+            </div>
+            <a
+              href={`/api/kroger/oauth/start?return=${encodeURIComponent("/me")}`}
+            >
+              <Btn variant="outline" size="sm">
+                Connect
+              </Btn>
+            </a>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
