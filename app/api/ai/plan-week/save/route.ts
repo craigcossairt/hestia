@@ -169,14 +169,25 @@ export async function POST(req: NextRequest) {
         const sourceRecipeId = recipeIdByIndex.get(sourceIdx);
         if (!sourceEntryId || !sourceRecipeId) continue;
 
-        await supabase.from("meal_plan_entries").insert({
-          user_id: user.id,
-          date: m.date,
-          slot: m.slot,
-          recipe_id: sourceRecipeId,
-          status: "planned",
-          is_leftover_of: sourceEntryId,
-        });
+        // Upsert (NOT insert) — concurrent save calls used to race on
+        // empty filledKeys reads and both win, producing thousands of
+        // dupe rows. The (user_id, date, slot) unique constraint added
+        // in migration 0016 backstops this; on conflict we keep the
+        // first writer's row to preserve any user activity that
+        // happened between calls.
+        await supabase
+          .from("meal_plan_entries")
+          .upsert(
+            {
+              user_id: user.id,
+              date: m.date,
+              slot: m.slot,
+              recipe_id: sourceRecipeId,
+              status: "planned",
+              is_leftover_of: sourceEntryId,
+            },
+            { onConflict: "user_id,date,slot", ignoreDuplicates: true },
+          );
         created.push({
           date: m.date,
           slot: m.slot,
@@ -200,18 +211,39 @@ export async function POST(req: NextRequest) {
       if (!recipeId) continue;
       recipeIdByIndex.set(i, recipeId);
 
-      const { data: entryRow } = await supabase
+      // Upsert with ignoreDuplicates: concurrent save calls converge
+      // on a single row per (user_id, date, slot) instead of stacking
+      // hundreds of dupes. We need the resulting row id either way
+      // (for leftover refs further down the loop), so on conflict we
+      // re-select the existing row.
+      const { data: upsertedRow } = await supabase
         .from("meal_plan_entries")
-        .insert({
-          user_id: user.id,
-          date: m.date,
-          slot: m.slot,
-          recipe_id: recipeId,
-          status: "planned",
-        })
+        .upsert(
+          {
+            user_id: user.id,
+            date: m.date,
+            slot: m.slot,
+            recipe_id: recipeId,
+            status: "planned",
+          },
+          { onConflict: "user_id,date,slot", ignoreDuplicates: true },
+        )
         .select("id")
-        .single();
-      if (entryRow) entryIdByIndex.set(i, entryRow.id);
+        .maybeSingle();
+      let entryId = upsertedRow?.id as string | undefined;
+      if (!entryId) {
+        // ignoreDuplicates returns no row when an existing row blocked
+        // our insert. Look it up so leftover refs can still work.
+        const { data: existing } = await supabase
+          .from("meal_plan_entries")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("date", m.date)
+          .eq("slot", m.slot)
+          .maybeSingle();
+        entryId = existing?.id as string | undefined;
+      }
+      if (entryId) entryIdByIndex.set(i, entryId);
 
       created.push({
         date: m.date,
