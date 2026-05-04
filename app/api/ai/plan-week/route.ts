@@ -218,11 +218,13 @@ export async function POST(req: NextRequest) {
         !filledKeys.has(`${m.date}|${m.slot}`),
     );
 
-    // Resolve photos in parallel — every gen recipe gets one.
+    // Resolve photos in parallel — every gen recipe gets one. AI-supplied
+    // image URLs take priority so we don't double-pay for searches.
     const photos = await Promise.all(
       newMeals.map((m) =>
         resolveRecipePhoto({
           recipeName: m.recipe.name,
+          aiImageUrl: m.recipe.image_url ?? null,
           promptHint: m.recipe.tags?.slice(0, 3).join(", "),
         }).catch(() => null),
       ),
@@ -250,6 +252,7 @@ export async function POST(req: NextRequest) {
           time_min: r.time_min,
           servings: r.servings ?? 1 + family.length,
           family_notes_json: r.family_modifications ?? [],
+          tips_json: r.tips ?? [],
           tags: [...new Set([...(r.tags ?? []), "auto-generated"])],
         })
         .select("id")

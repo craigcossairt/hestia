@@ -40,6 +40,7 @@ export async function saveGeneratedRecipe(
       time_min: recipe.time_min,
       servings: recipe.servings ?? 4,
       family_notes_json: recipe.family_modifications ?? [],
+      tips_json: recipe.tips ?? [],
       tags: recipe.tags,
     })
     .select("id")

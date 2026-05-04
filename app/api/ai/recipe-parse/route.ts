@@ -87,10 +87,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Photo: prefer the page's og:image; fall back through ai-gen / pexels.
+    // Photo: AI image url → og:image → web → pexels → ai-gen.
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
       sourceUrl: parsed.data.url,
+      aiImageUrl: object.image_url ?? null,
       promptHint: object.tags?.slice(0, 3).join(", "),
     });
 
