@@ -142,7 +142,9 @@ export async function POST(req: NextRequest) {
   const result = streamObject({
     model: getModel("fast"),
     schema: PlanRefinementSchema,
-    providerOptions: getProviderOptions(),
+    // Refine generates a small diff (typically 1-3 new recipes). Bulk
+    // search would add latency without much payoff — keep search off here.
+    providerOptions: getProviderOptions({ disableSearch: true }),
     ...getModelOpts(),
     prompt: refinePlanPrompt({
       user_request: body.user_request.trim(),

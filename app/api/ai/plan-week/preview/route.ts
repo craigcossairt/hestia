@@ -152,7 +152,12 @@ export async function POST(req: NextRequest) {
   const result = streamObject({
     model: getModel("fast"),
     schema: PlanWeekSchema,
-    providerOptions: getProviderOptions(),
+    // Disable search for the bulk plan generator. With auto-search the
+    // model issues a search per recipe BEFORE streaming any tokens, which
+    // can stack 60+ seconds of dead time. The photo chain still has Brave
+    // + Pexels as fast/free fallbacks. Single-recipe routes keep search
+    // on (one search, much shorter).
+    providerOptions: getProviderOptions({ disableSearch: true }),
     ...getModelOpts(),
     prompt: planWeekPrompt({
       week_dates: dates,

@@ -170,7 +170,10 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: PlanWeekSchema,
-        providerOptions: getProviderOptions(),
+        // Disable search on the bulk generator — auto-search per recipe
+        // stacks 60+ seconds of dead time before any output. Photo chain
+        // still has Brave + Pexels fallbacks.
+        providerOptions: getProviderOptions({ disableSearch: true }),
         ...getModelOpts(),
         prompt: planWeekPrompt({
           week_dates: dates,
