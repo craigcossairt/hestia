@@ -20,6 +20,7 @@
 // Gateway models use "provider/model-id" strings, e.g. "openai/gpt-4o-mini".
 
 import type { ImageModel, LanguageModel } from "ai";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { createXai } from "@ai-sdk/xai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -180,6 +181,30 @@ export function getModelOpts(): { temperature: number; seed?: number } {
   const seedRaw = process.env.AI_SEED;
   const seed = seedRaw && /^\d+$/.test(seedRaw) ? Number(seedRaw) : undefined;
   return seed != null ? { temperature, seed } : { temperature };
+}
+
+// Provider-specific options passed straight through to generateText /
+// generateObject / streamText. Today this enables live web search for
+// providers that support it natively.
+//
+// Default-on for xAI (the photo-passthrough chain leans on the model
+// returning image_url from search results — no search means no
+// passthrough). Set AI_DISABLE_SEARCH=true to opt out and save cost.
+export function getProviderOptions(): ProviderOptions {
+  const disabled = process.env.AI_DISABLE_SEARCH === "true";
+  if (disabled) return {};
+  switch (PROVIDER) {
+    case "xai":
+      return {
+        xai: {
+          searchParameters: { mode: "auto", returnCitations: true },
+        },
+      };
+    default:
+      // OpenAI / Anthropic / Google search wiring varies per provider and
+      // is left to the user (e.g. AI_MODEL_FAST=gpt-4o-search-preview).
+      return {};
+  }
 }
 
 // Useful for clients that need to know which provider is wired up

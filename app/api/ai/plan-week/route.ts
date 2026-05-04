@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getModel, getModelOpts } from "@/lib/ai/provider";
+import {
+  getModel,
+  getModelOpts,
+  getProviderOptions,
+} from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
 import {
   PlanWeekSchema,
@@ -166,6 +170,7 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: PlanWeekSchema,
+        providerOptions: getProviderOptions(),
         ...getModelOpts(),
         prompt: planWeekPrompt({
           week_dates: dates,

@@ -265,3 +265,33 @@ export function buildProgramContext(args: {
 
   return sections.join("\n\n");
 }
+
+// Inferred slot defaults for the plan generator's Options drawer.
+// Active programs nudge which optional slots (snack / dessert / beverage)
+// start checked. The user can still override before clicking Generate.
+//
+// Heuristics (deliberately conservative — assume "off" unless a program
+// strongly implies otherwise):
+//   - 16-8-fasting    → no snacks/desserts/beverages outside the window
+//   - workout-fuel    → snacks + beverages on (intra-workout fueling)
+//   - everything else → defaults off
+export interface InferredSlotDefaults {
+  snack: boolean;
+  dessert: boolean;
+  beverage: boolean;
+}
+
+export function inferSlotDefaults(
+  activeProgramIds: string[],
+): InferredSlotDefaults {
+  const ids = new Set(activeProgramIds);
+
+  if (ids.has("workout-fuel")) {
+    return { snack: true, dessert: false, beverage: true };
+  }
+  if (ids.has("16-8-fasting")) {
+    return { snack: false, dessert: false, beverage: false };
+  }
+
+  return { snack: false, dessert: false, beverage: false };
+}

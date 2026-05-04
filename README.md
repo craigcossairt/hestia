@@ -82,6 +82,12 @@ Every Hestia AI call prefixes a shared **`BASE_SYSTEM`** block (`lib/ai/prompts/
 
 Sampling defaults (`AI_TEMPERATURE`, optional `AI_SEED`) are also shared via `getModelOpts()`, so deterministic-leaning behaviour carries across providers.
 
+#### Live web search
+
+Recipe-generation calls run with **xAI live search enabled by default** (`searchParameters: { mode: 'auto' }`). When the model searches, it can return a representative photo URL straight in the recipe object — saving us a separate Brave/Pexels call. Costs ~$0.025 per search at xAI pricing. Set `AI_DISABLE_SEARCH=true` to opt out.
+
+Other providers don't get search enabled automatically (each one wires it differently — OpenAI uses model variants like `gpt-4o-search-preview`, Anthropic uses tools, Google uses `googleSearchRetrieval`). Swap `AI_MODEL_FAST` to a search-enabled model variant for those providers.
+
 ### Recipe photos
 
 When a recipe is generated or parsed, Hestia tries:
