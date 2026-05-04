@@ -6,6 +6,8 @@ import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
 import { BulkActionLink } from "@/components/grocery/bulk-actions";
 import { clearCheckedGroceryItems } from "./actions";
 import { lookupPricesForList } from "@/lib/kroger/products";
+import { getUserKrogerSession } from "@/lib/kroger/oauth";
+import { SendToCart } from "@/components/grocery/send-to-cart";
 import type { Ingredient } from "@/lib/types/database";
 
 interface GroceryPurchaseRow {
@@ -154,6 +156,15 @@ export default async function ShopPage() {
     }
   }
 
+  // Phase 2: do we have a usable Kroger user OAuth token? Drives the
+  // Send-to-Cart button label (Connect vs Send). The button itself
+  // does the actual auth/refresh dance — we only need to know whether
+  // a token exists at all so the label reads sensibly.
+  const krogerSession = krogerLocationId
+    ? await getUserKrogerSession({ supabase, userId: user.id }).catch(() => null)
+    : null;
+  const isKrogerConnected = !!krogerSession;
+
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-3xl mx-auto flex flex-col gap-8">
       <header className="flex flex-col gap-2">
@@ -179,6 +190,14 @@ export default async function ShopPage() {
           <Body size="xs" dim>
             Prices &amp; aisles from {krogerLocationName}
           </Body>
+        ) : null}
+        {krogerLocationId && allItemNames.length > 0 ? (
+          <div className="mt-2">
+            <SendToCart
+              itemNames={allItemNames}
+              isConnected={isKrogerConnected}
+            />
+          </div>
         ) : null}
       </header>
 

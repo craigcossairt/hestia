@@ -220,6 +220,20 @@ export async function savePreferredKrogerLocation(args: {
   return { ok: true };
 }
 
+// Revoke our locally-stored Kroger OAuth tokens. Doesn't formally
+// notify Kroger that we're no longer authorised — that's a separate
+// flow (Kroger doesn't expose a token-revocation endpoint on the
+// public API anyway). Practically: we forget the tokens so future
+// Send-to-Cart attempts kick off a fresh consent flow.
+export async function disconnectKrogerAccount() {
+  const { supabase, user } = await getUserOrRedirect();
+  const { clearUserKrogerSession } = await import("@/lib/kroger/oauth");
+  await clearUserKrogerSession({ supabase, userId: user.id });
+  revalidatePath("/me");
+  revalidatePath("/shop");
+  return { ok: true };
+}
+
 export async function clearPreferredKrogerLocation() {
   const { supabase, user } = await getUserOrRedirect();
   await supabase
