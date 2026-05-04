@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getModel, getModelOpts } from "@/lib/ai/provider";
+import {
+  getModel,
+  getModelOpts,
+  getProviderOptions,
+} from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
 import { generateRecipePrompt, RecipeSchema } from "@/lib/ai/prompts/recipe";
 import type { FamilyMember } from "@/lib/family";
@@ -70,6 +74,7 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: RecipeSchema,
+        providerOptions: getProviderOptions(),
         ...getModelOpts(),
         prompt: generateRecipePrompt({
           prompt: parsed.data.prompt,

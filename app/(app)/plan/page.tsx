@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PlanGrid, type PlanCellEntry } from "@/components/plan/plan-grid";
 import { GenerateWeekButton } from "@/components/plan/generate-week-button";
 import { WeekNavigator } from "@/components/plan/week-navigator";
+import { inferSlotDefaults } from "@/lib/programs";
 import type { Slot } from "@/lib/types/database";
 
 const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
@@ -68,8 +69,18 @@ export default async function PlanPage({
   const entries: Record<string, Record<Slot, PlanCellEntry | undefined>> = {};
   const weekStats = { kcal: 0, planned: 0 };
   const slotsWithEntries = new Set<Slot>();
+  let userActivePrograms: string[] = [];
 
   if (user) {
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("active_programs")
+      .eq("id", user.id)
+      .maybeSingle();
+    userActivePrograms =
+      ((profileRow as { active_programs?: string[] | null } | null)
+        ?.active_programs) ?? [];
+
     const { data } = await supabase
       .from("meal_plan_entries")
       .select(
@@ -136,7 +147,12 @@ export default async function PlanPage({
         <Stat label="avg kcal" value={avgKcal ? <Mono>{avgKcal}</Mono> : "—"} />
       </div>
 
-      {user ? <GenerateWeekButton weekStart={weekStartStr} /> : null}
+      {user ? (
+        <GenerateWeekButton
+          weekStart={weekStartStr}
+          inferredDefaults={inferSlotDefaults(userActivePrograms)}
+        />
+      ) : null}
 
       <PlanGrid days={days} entries={entries} slots={slots} />
     </div>

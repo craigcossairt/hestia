@@ -1,13 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, ChevronDown } from "lucide-react";
 import { Btn, Body, Mono, Chip } from "@/components/ds";
-
-interface GenerateWeekButtonProps {
-  weekStart?: string;
-}
 
 interface SlotConfig {
   snack: boolean;
@@ -15,17 +11,38 @@ interface SlotConfig {
   beverage: boolean;
 }
 
-export function GenerateWeekButton({ weekStart }: GenerateWeekButtonProps) {
+interface GenerateWeekButtonProps {
+  weekStart?: string;
+  // Inferred from active programs (16-8 IF off snacks; Workout Fuel on
+  // snacks + beverages). User can still flip individually before generating.
+  inferredDefaults?: SlotConfig;
+}
+
+export function GenerateWeekButton({
+  weekStart,
+  inferredDefaults,
+}: GenerateWeekButtonProps) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
-  const [slots, setSlots] = useState<SlotConfig>({
-    snack: false,
-    dessert: false,
-    beverage: false,
-  });
+  const [slots, setSlots] = useState<SlotConfig>(
+    inferredDefaults ?? { snack: false, dessert: false, beverage: false },
+  );
   const [regenerate, setRegenerate] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Tick a soft progress timer while the request is in flight so the long
+  // wait feels intentional instead of frozen.
+  useEffect(() => {
+    if (!pending) {
+      setElapsed(0);
+      return;
+    }
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [pending]);
 
   function toggleSlot(key: keyof SlotConfig) {
     setSlots((cur) => ({ ...cur, [key]: !cur[key] }));
@@ -73,6 +90,20 @@ export function GenerateWeekButton({ weekStart }: GenerateWeekButtonProps) {
   }
 
   const includesExtras = slots.snack || slots.dessert || slots.beverage;
+  const slotCount = 3 + (slots.snack ? 1 : 0) + (slots.dessert ? 1 : 0) + (slots.beverage ? 1 : 0);
+  const totalCount = slotCount * 7;
+
+  // Soft progress hint that updates as the wait drags on. Tied to the elapsed
+  // timer so it feels alive even though the route returns in one shot.
+  const progressHint = pending
+    ? elapsed < 15
+      ? `Drafting ${totalCount} meals…`
+      : elapsed < 35
+        ? `Researching photos…`
+        : elapsed < 60
+          ? `Cross-checking ingredients…`
+          : `Almost there — finishing up…`
+    : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -80,7 +111,7 @@ export function GenerateWeekButton({ weekStart }: GenerateWeekButtonProps) {
         <Btn variant="primary" onClick={generate} disabled={pending}>
           <Sparkles size={14} strokeWidth={1.5} />
           {pending
-            ? "Thinking…"
+            ? `${progressHint} (${elapsed}s)`
             : regenerate
               ? "Regenerate this week's meals"
               : "Generate this week's meals"}
@@ -141,6 +172,14 @@ export function GenerateWeekButton({ weekStart }: GenerateWeekButtonProps) {
               Beverage
             </Chip>
           </div>
+          {inferredDefaults &&
+          (inferredDefaults.snack ||
+            inferredDefaults.dessert ||
+            inferredDefaults.beverage) ? (
+            <Body size="xs" dim>
+              Defaults set by your active programs — tweak as needed.
+            </Body>
+          ) : null}
 
           <div className="border-t border-ink-l/40 pt-3 flex items-start gap-2">
             <input
