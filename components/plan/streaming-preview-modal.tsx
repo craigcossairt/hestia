@@ -59,6 +59,8 @@ export function StreamingPreviewModal({
     },
   });
 
+  const [elapsed, setElapsed] = useState(0);
+
   // Kick off the stream once when the modal opens.
   useEffect(() => {
     if (!open) {
@@ -67,6 +69,7 @@ export function StreamingPreviewModal({
       setPhase("streaming");
       setError(null);
       setSavedSummary(null);
+      setElapsed(0);
       return;
     }
     if (submittedRef.current) return;
@@ -87,6 +90,14 @@ export function StreamingPreviewModal({
     includeBeverage,
     regenerate,
   ]);
+
+  // 1Hz timer while the request is in flight so the long wait feels
+  // intentional. Counter resets on close.
+  useEffect(() => {
+    if (!open || phase === "done" || phase === "error") return;
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [open, phase]);
 
   // When the stream completes, kick off the save.
   useEffect(() => {
@@ -185,6 +196,21 @@ export function StreamingPreviewModal({
     (m) => m?.recipe?.name || typeof m?.is_leftover_of_index === "number",
   ).length;
 
+  // Rotating progress hint while we wait for the stream's first tokens.
+  // Once meals start arriving, the meal list itself is the progress.
+  const waitingHint =
+    elapsed < 8
+      ? "Reading your inventory, family, and programs…"
+      : elapsed < 20
+        ? "Drafting recipe ideas…"
+        : elapsed < 40
+          ? "Balancing macros and ingredient overlap…"
+          : elapsed < 70
+            ? "Almost there — finalizing the week…"
+            : "This is taking longer than usual. Hestia is still working.";
+
+  const stalled = phase === "streaming" && elapsed > 90 && total === 0;
+
   return (
     <Dialog open={open} onClose={handleClose} size="lg">
       <div className="p-6 flex flex-col gap-5 max-h-[80vh]">
@@ -208,10 +234,14 @@ export function StreamingPreviewModal({
                   : "Something went wrong."}
           </H>
           <Body size="sm" dim>
-            {phase === "streaming" && (
+            {phase === "streaming" && total > 0 && (
               <>
-                Streaming {named} of {total || "…"} meals as Hestia drafts
-                them.
+                Drafted {named} of {total} meals · {elapsed}s elapsed
+              </>
+            )}
+            {phase === "streaming" && total === 0 && (
+              <>
+                {waitingHint} · {elapsed}s elapsed
               </>
             )}
             {phase === "saving" && (
@@ -235,11 +265,26 @@ export function StreamingPreviewModal({
 
         <div className="flex-1 overflow-auto -mx-2 px-2 flex flex-col gap-4">
           {orderedDates.length === 0 && phase === "streaming" ? (
-            <div className="flex items-center gap-2 py-8 justify-center text-ink-3">
-              <Sparkles size={14} strokeWidth={1.5} className="animate-pulse" />
-              <Body size="sm" dim>
-                Hestia is reading your inventory, family, and programs…
-              </Body>
+            <div className="flex flex-col items-center gap-3 py-8 text-ink-3">
+              <div className="flex items-center gap-2">
+                <Sparkles
+                  size={14}
+                  strokeWidth={1.5}
+                  className="animate-pulse"
+                />
+                <Body size="sm" dim>
+                  {waitingHint}
+                </Body>
+              </div>
+              {stalled ? (
+                <div className="rounded-thumb border border-warn/40 bg-warn/5 px-4 py-3 text-center max-w-md">
+                  <Body size="xs" className="text-warn">
+                    The model hasn&apos;t streamed any data yet. Network
+                    issues or a slow upstream can cause this — try
+                    Cancel and Generate again.
+                  </Body>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {orderedDates.map((date) => {

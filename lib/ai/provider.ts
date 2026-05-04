@@ -189,10 +189,16 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 //
 // Default-on for xAI (the photo-passthrough chain leans on the model
 // returning image_url from search results — no search means no
-// passthrough). Set AI_DISABLE_SEARCH=true to opt out and save cost.
-export function getProviderOptions(): ProviderOptions {
-  const disabled = process.env.AI_DISABLE_SEARCH === "true";
-  if (disabled) return {};
+// passthrough). Set AI_DISABLE_SEARCH=true to opt out globally, OR pass
+// { disableSearch: true } per call for routes where the search latency
+// is too costly (e.g. plan-week generates 21 recipes; with auto-search
+// per recipe the model spends 60+ seconds searching before any token
+// streams to the client).
+export function getProviderOptions(opts?: {
+  disableSearch?: boolean;
+}): ProviderOptions {
+  const globallyDisabled = process.env.AI_DISABLE_SEARCH === "true";
+  if (globallyDisabled || opts?.disableSearch) return {};
   switch (PROVIDER) {
     case "xai":
       return {
