@@ -8,6 +8,27 @@ import { computeTargets, type TargetInputs } from "@/lib/ai/targets";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { blueprintPrompt } from "@/lib/ai/prompts/blueprint";
 import type { FamilyMember } from "@/lib/family";
+import {
+  buildPlanStaleHint,
+  setPlanStaleHintCookie,
+} from "@/lib/plans/staleness";
+
+// Fields whose change should prompt the user to refresh their plan —
+// these all feed into the recipe-generation prompt's per-member
+// adaptations. Pure-cosmetic edits (name, age, weight, height) don't
+// affect what's on the plate, so we skip the prompt for those.
+const PLAN_RELEVANT_FIELDS: ReadonlyArray<keyof FamilyMember> = [
+  "dietary_restrictions",
+  "allergies",
+  "disliked_foods",
+  "medical_conditions",
+  "portion_modifier",
+  "active_programs",
+];
+
+function patchAffectsPlan(patch: Partial<FamilyMember>): boolean {
+  return PLAN_RELEVANT_FIELDS.some((field) => field in patch);
+}
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -63,6 +84,20 @@ export async function updateMember(
   );
   const { error } = await saveFamily(supabase, user.id, updated);
   if (error) return { error: error.message };
+
+  // If the patch touched fields that influence per-member plate
+  // adaptations (allergies, dietary restrictions, etc.), drop a
+  // plan-staleness hint so the next page render asks the user
+  // whether to refresh upcoming plans.
+  if (patchAffectsPlan(patch)) {
+    const member = updated[idx];
+    const hint = await buildPlanStaleHint(
+      supabase,
+      user.id,
+      `${member.name}'s diet or health profile changed`,
+    );
+    await setPlanStaleHintCookie(hint);
+  }
 
   bumpRevalidations(memberId);
   return { ok: true };
@@ -160,6 +195,7 @@ export async function logMemberWeight(
 export async function removeMember(memberId: string) {
   const { supabase, user } = await getUserOrRedirect();
   const family = await loadFamily(supabase, user.id);
+  const removed = family.find((m) => m.id === memberId);
   const next = family.filter((m) => m.id !== memberId);
   const { error } = await saveFamily(supabase, user.id, next);
   if (error) return { error: error.message };
@@ -171,6 +207,15 @@ export async function removeMember(memberId: string) {
     .delete()
     .eq("user_id", user.id)
     .eq("family_member_id", memberId);
+
+  // Stale-plan hint — covers the bug where removed-member adaptations
+  // hung around on existing recipes / plan entries.
+  const hint = await buildPlanStaleHint(
+    supabase,
+    user.id,
+    `${removed?.name ?? "A family member"} was removed from the household`,
+  );
+  await setPlanStaleHintCookie(hint);
 
   bumpRevalidations(memberId);
   redirect("/family");
@@ -201,6 +246,18 @@ export async function addMember(name: string) {
   ];
   const { error } = await saveFamily(supabase, user.id, next);
   if (error) return { error: error.message };
+
+  // Adding a member only matters for upcoming plans if the user has
+  // already-generated entries that don't account for the new mouth.
+  // The hint short-circuits to null when there are no upcoming
+  // planned entries, so a fresh user adding their first member won't
+  // see the prompt.
+  const hint = await buildPlanStaleHint(
+    supabase,
+    user.id,
+    `${trimmed} was added to the household`,
+  );
+  await setPlanStaleHintCookie(hint);
 
   revalidatePath("/family");
   revalidatePath("/me");

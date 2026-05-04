@@ -9,6 +9,31 @@ import {
   getProgram,
 } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
+import {
+  buildPlanStaleHint,
+  setPlanStaleHintCookie,
+} from "@/lib/plans/staleness";
+
+// Build a "{Program} was {verb} {scope}" reason string for the
+// plan-staleness prompt. Stays concise so it fits in the dialog body
+// and reads naturally as the seed text in the /plan refine modal.
+function programStaleReason(args: {
+  programName: string;
+  verb: "activated" | "deactivated";
+  scope: Scope;
+  family: FamilyMember[];
+}): string {
+  // Destructure so TypeScript narrows the discriminated union — bare
+  // `args.scope.kind` checks don't always carry the narrowing into
+  // subsequent accesses.
+  const { scope } = args;
+  if (scope.kind === "user") {
+    return `${args.programName} was ${args.verb} for you`;
+  }
+  const member = args.family.find((m) => m.id === scope.memberId);
+  const who = member?.name ?? "a household member";
+  return `${args.programName} was ${args.verb} for ${who}`;
+}
 
 // Where the program is being applied. User-scope = the account holder
 // (lives in profiles.active_programs). Member-scope = a single household
@@ -128,6 +153,21 @@ export async function activateProgram(
     if (error) return { error: error.message };
   }
 
+  // Drop a plan-staleness hint so the next page render asks the user
+  // whether to refresh upcoming plans against the new program context.
+  // The hint short-circuits when there are no upcoming planned entries.
+  const hint = await buildPlanStaleHint(
+    supabase,
+    user.id,
+    programStaleReason({
+      programName: program.name,
+      verb: "activated",
+      scope,
+      family: profile.family_json ?? [],
+    }),
+  );
+  await setPlanStaleHintCookie(hint);
+
   revalidatePath("/programs");
   revalidatePath(`/programs/${programId}`);
   revalidatePath("/today");
@@ -141,6 +181,7 @@ export async function deactivateProgram(
   programId: string,
   scope: Scope = { kind: "user" },
 ): Promise<MutationResult> {
+  const program = getProgram(programId);
   const { supabase, user } = await getUserOrRedirect();
   const profile = await loadProfile(supabase, user.id);
 
@@ -179,6 +220,21 @@ export async function deactivateProgram(
       .eq("id", user.id);
     if (error) return { error: error.message };
   }
+
+  // Same plan-staleness hint as activate. Use the program name when
+  // we can resolve it; fall back to "A program" if the registry lookup
+  // returned undefined (legacy IDs from older plans).
+  const hint = await buildPlanStaleHint(
+    supabase,
+    user.id,
+    programStaleReason({
+      programName: program?.name ?? "A program",
+      verb: "deactivated",
+      scope,
+      family: profile.family_json ?? [],
+    }),
+  );
+  await setPlanStaleHintCookie(hint);
 
   revalidatePath("/programs");
   revalidatePath(`/programs/${programId}`);
