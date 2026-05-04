@@ -1,57 +1,144 @@
 # Hestia
 
-A calm meal planner that pairs daily nutrition targets with an AI coach,
-inventory-aware grocery lists, and recipe + cook flows.
+> In Greek mythology, **Hestia** was the goddess of the hearth, home, and
+> family — the keeper of the sacred fire that was never allowed to go out.
+> She got the first offering at every meal. Quietly central rather than
+> dramatically powerful: the household ritual of feeding the people you love.
+>
+> That's the app. A calm meal planner that sits with you at the kitchen
+> counter — daily nutrition targets, an AI coach who knows your household,
+> inventory-aware grocery lists, and recipe + cook flows. Not a tracker that
+> shames you. A hearth.
 
-Built on Next.js 16, Tailwind v4, Supabase, and xAI Grok. Designed as a PWA so
-it installs to Android home screens with a single web codebase.
-
-The visual design lives in [`design_handoff_meal_planner/`](./design_handoff_meal_planner)
-— the README there documents tokens, primitives, and every screen.
+Built as a personal project, kept as one. Open-sourced under MIT so anyone
+can fork it and run their own instance.
 
 ---
+
+## What's in it
+
+| Surface | What it does |
+|---|---|
+| **/today** | Daily dashboard — kcal + macro rings, today's meals, quick-log |
+| **/plan** | 7-day grid, AI-generated weekly plans, drag-to-rearrange |
+| **/inventory** | Pantry + fridge + freezer with barcode scan, receipt OCR, paste-bulk |
+| **/shop** | Plan ∩ inventory → grocery list, optional Kroger pricing + send-to-cart |
+| **/recipes** | Library, AI generation, URL import, photo OCR import, cook mode |
+| **/coach** | Chat with an AI that knows your targets, pantry, and household |
+| **/programs** | Multi-active programs (Family Meals, 16:8 IF, Workout Fuel, …) |
+| **/family** | Per-member profiles + per-member program assignments |
+| **/stats** | Long-term trend view (weight, macros, adherence) |
+| **/me** | Profile, dietary preferences, dark mode, integrations, sign out |
+
+Designed mobile-first as a PWA — installs to iOS/Android home screens with
+the same web codebase. No app store, no native build.
 
 ## Stack
 
 | Layer | What |
 |---|---|
-| Framework | Next.js 16, App Router, TypeScript, Turbopack |
-| Styling | Tailwind v4 (CSS-first config in `app/globals.css`) |
+| Framework | **Next.js 16** App Router, TypeScript, Turbopack |
+| Styling | **Tailwind v4** (CSS-first config in `app/globals.css`) |
 | UI primitives | Custom design system in `components/ds/` |
-| Data | Supabase Postgres + Auth + Storage + RLS |
-| AI | Pluggable provider via Vercel AI SDK — defaults to xAI Grok, swap to OpenAI / Anthropic / Google / Vercel AI Gateway with one env var |
+| Data | **Supabase** Postgres + Auth (OTP) + Storage + Row-Level Security |
+| AI | Pluggable provider via **Vercel AI SDK** — defaults to xAI Grok, swap to OpenAI / Anthropic / Google / Vercel AI Gateway with one env var |
 | Server state | TanStack Query |
 | Barcode | `@zxing/browser` + Open Food Facts API |
-| Hosting | Vercel (Hobby tier) |
+| Nutrition refinement | USDA FoodData Central |
+| Grocery | Kroger Public API (Locations + Products + Cart + Profile) |
+| Photos | og:image → Brave → Pexels → AI image gen → stylised SVG |
+| Hosting | Vercel (Hobby tier is enough for a household) |
 
-## Local setup
+## Try it
 
-1. **Install dependencies** (already done if you cloned post-scaffold):
-   ```bash
-   npm install
-   ```
+The hosted instance at the production URL is **private to my immediate
+family** — sign-up is gated by an email allowlist (see *Limit who can sign
+up*, below). To try Hestia, the path is to fork and deploy your own. Setup
+is ~15 minutes if you have a Supabase + Vercel account, and runs entirely
+on free tiers for personal use.
 
-2. **Provision Supabase** (free tier):
-   - Sign up at https://supabase.com and create a new project.
-   - Project Settings → API → copy the project URL and the **anon** key.
-   - SQL editor → paste `supabase/migrations/0001_init.sql` → Run.
-   - Authentication → URL Configuration → add `http://localhost:3000/auth/callback`
-     (and your production URL once deployed).
+---
 
-3. **Get an AI API key.** Hestia ships with xAI Grok by default — get a key
-   at https://console.x.ai (free credits on signup). To use a different
-   provider, see [Choosing an AI provider](#choosing-an-ai-provider) below.
+## Self-host
 
-4. **Configure env vars**: copy `.env.local.example` to `.env.local` and fill
-   in:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-   XAI_API_KEY=xai-...
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
-   ```
+### 1. Clone + install
 
-### Choosing an AI provider
+```bash
+git clone https://github.com/craigcossairt/hestia.git
+cd hestia
+npm install
+```
+
+### 2. Provision Supabase (free tier)
+
+- Create a project at https://supabase.com.
+- Project Settings → API → copy the project URL and the **anon** key.
+- SQL editor → paste each file in `supabase/migrations/` **in order**
+  (0001 → 0018+) → Run.
+- Authentication → URL Configuration → add `http://localhost:3000/auth/callback`
+  (and your production URL once deployed).
+- Authentication → Email Templates → optional: customise the OTP email
+  subject so it doesn't look like a Supabase notification.
+
+### 3. Pick an AI provider
+
+Hestia ships with xAI Grok by default — get a key at https://console.x.ai
+(free credits on signup). To use a different provider, see *Choosing an AI
+provider* below.
+
+### 4. Configure env vars
+
+Copy `.env.local.example` to `.env.local` and fill in at minimum:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+XAI_API_KEY=xai-...
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+The example file documents every optional integration (Brave, Pexels,
+USDA, Kroger) with what they unlock and where to get the keys.
+
+### 5. Run
+
+```bash
+npm run dev
+```
+
+Open http://localhost:3000.
+
+### 6. Deploy to Vercel
+
+1. Push your fork to GitHub.
+2. https://vercel.com/new → import the repo.
+3. Set the same env vars in Project Settings → Environment Variables (set
+   `NEXT_PUBLIC_APP_URL` to your production URL).
+4. Add the production callback URL to Supabase Auth → URL Configuration.
+5. Deploy.
+
+For Kroger integration also add the production redirect URI exactly as
+`{NEXT_PUBLIC_APP_URL}/api/kroger/oauth/callback` to your Kroger app's
+Production environment.
+
+---
+
+## Limit who can sign up
+
+If you're hosting an instance and only want specific people to sign in
+(e.g. household members on your own deployment), set:
+
+```
+SIGNUP_ALLOWLIST=alice@example.com,bob@example.com
+```
+
+When set, only the listed addresses can request a magic code on `/login`
+— everyone else gets a friendly note pointing them at this repo to run
+their own instance. Leave unset for fully-open sign-up.
+
+---
+
+## Choosing an AI provider
 
 Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
 provider based on `AI_PROVIDER`. Defaults to `xai`.
@@ -64,52 +151,77 @@ provider based on `AI_PROVIDER`. Defaults to `xai`.
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
 | `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4-fast-reasoning` | `xai/grok-2-vision-1212` |
 
-Override the model per role with `AI_MODEL_FAST` / `AI_MODEL_VISION`. With the
-Vercel AI Gateway, model strings use the `provider/model-id` form (e.g.
-`openai/gpt-4o-mini`) so you can pick from any supported provider with a
-single key.
+Override the model per role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
+`AI_MODEL_VISION` / `AI_MODEL_IMAGE`. With the Vercel AI Gateway, model
+strings use the `provider/model-id` form so you can pick from any
+supported provider with a single key.
 
-Example for OpenAI:
-```
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-AI_MODEL_FAST=gpt-4o-mini       # optional override
-```
+### Consistency across providers
 
-#### Consistency across providers
+Every Hestia AI call prefixes a shared **`BASE_SYSTEM`** block
+(`lib/ai/prompts/system.ts`) defining the assistant's voice, US-units
+convention, and hard rules around allergies / medical conditions / honest
+macros. Switching `AI_PROVIDER` keeps the same instructions in front of
+every model — outputs stay structurally consistent.
 
-Every Hestia AI call prefixes a shared **`BASE_SYSTEM`** block (`lib/ai/prompts/system.ts`) that defines the assistant's voice, US-units convention, and hard rules around allergies / medical conditions / honest macros. Switching `AI_PROVIDER` keeps the same instructions in front of every model — outputs stay structurally consistent.
-
-Sampling defaults (`AI_TEMPERATURE`, optional `AI_SEED`) are also shared via `getModelOpts()`, so deterministic-leaning behaviour carries across providers.
-
-#### Live web search
-
-Recipe-generation calls run with **xAI live search enabled by default** (`searchParameters: { mode: 'auto' }`). When the model searches, it can return a representative photo URL straight in the recipe object — saving us a separate Brave/Pexels call. Costs ~$0.025 per search at xAI pricing. Set `AI_DISABLE_SEARCH=true` to opt out.
-
-Other providers don't get search enabled automatically (each one wires it differently — OpenAI uses model variants like `gpt-4o-search-preview`, Anthropic uses tools, Google uses `googleSearchRetrieval`). Swap `AI_MODEL_FAST` to a search-enabled model variant for those providers.
+Sampling defaults (`AI_TEMPERATURE`, optional `AI_SEED`) are also shared
+via `getModelOpts()`, so deterministic-leaning behaviour carries across
+providers.
 
 ### Recipe photos
 
-When a recipe is generated or parsed, Hestia tries:
+When a recipe is generated or imported, Hestia tries:
 
-1. **og:image** of the source page (recipes parsed from URLs).
-2. **AI image generation** if your provider supports it (xai `grok-2-image-1212`, openai `dall-e-3`, google `imagen-3.0-generate-001`). Override with `AI_MODEL_IMAGE`.
-3. **Pexels search** if `PEXELS_API_KEY` is set (free, generous tier — get one at https://www.pexels.com/api/).
-4. **Stylised SVG fallback** — every recipe always has a visual.
+1. **og:image** of the source page (URL-imported recipes)
+2. **Brave web image search** (set `BRAVE_SEARCH_API_KEY`, free 2k/month)
+3. **Pexels search** (set `PEXELS_API_KEY`, free, generous tier)
+4. **AI image generation** if your provider supports it
+5. **Stylised SVG fallback** — every recipe always has a visual
 
-5. **Run**:
-   ```bash
-   npm run dev
-   ```
-   Open http://localhost:3000.
+### Nutrition refinement
+
+When `USDA_API_KEY` is set, AI-generated recipe macros get refined against
+real USDA per-100g values whenever ingredients can be matched with high
+confidence. The AI's estimate is kept as a fallback when coverage is too
+low to trust. Free, 1k requests/hour. Get a key at
+https://fdc.nal.usda.gov/api-key-signup.html
+
+---
+
+## Cost expectations
+
+Running Hestia for a single household on free tiers, expect roughly:
+
+| Service | Tier | Monthly cost |
+|---|---|---|
+| Vercel | Hobby | $0 |
+| Supabase | Free | $0 (< 500MB DB, < 1GB storage) |
+| xAI Grok | Pay-as-you-go | $1–5 for ~1 active user |
+| USDA FDC | Free | $0 |
+| Brave Search | Free | $0 (under 2k queries/month) |
+| Pexels | Free | $0 |
+| Kroger Public API | Free (Personal App) | $0 |
+
+xAI is the only meaningful variable cost. A typical week — generating one
+weekly plan, ~10 recipe creations, ~20 quick-logs, daily Coach use — runs
+about $1. Plan generation is the biggest single cost (~$0.30 per
+21-meal plan with live web search enabled) so set `AI_DISABLE_SEARCH=true`
+if you want to drop that to ~$0.05.
+
+For multiple users on a shared hosted instance: rate-limit the AI
+endpoints. (Not yet implemented in this codebase — see open issues.)
+
+---
 
 ## First-run flow
 
-1. `/login` — enter your email, click the magic link in your inbox.
-2. `/onboard` — six-step form. Hestia computes a target via Mifflin–St Jeor
-   and writes a narrative with Grok.
+1. `/login` — enter your email, paste the OTP code from your inbox.
+2. `/onboard` — multi-step form. Hestia computes a target via Mifflin–St
+   Jeor and writes a narrative with your AI provider.
 3. `/result` — target reveal.
 4. `/today` — daily dashboard.
+
+---
 
 ## Architecture map
 
@@ -118,87 +230,111 @@ app/
 ├── (app)/                  # authenticated app shell (sidebar + tab bar)
 │   ├── today/              # daily dashboard
 │   ├── plan/               # 7-day plan grid
-│   ├── pantry/             # inventory with location tabs
-│   ├── shop/               # derived grocery list
-│   ├── me/                 # profile, settings, sign out
-│   ├── recipes/            # library + detail + cook
+│   ├── inventory/          # pantry + fridge + freezer
+│   ├── shop/               # derived grocery list + Kroger integration
+│   ├── recipes/            # library + detail + cook + edit
+│   ├── coach/              # AI chat with household context
+│   ├── programs/           # multi-active programs library
+│   ├── family/             # per-member profiles
+│   ├── stats/              # long-term trends
+│   ├── me/                 # profile, settings, integrations, sign out
 │   └── layout.tsx          # shell
-├── (auth)/login/           # magic-link sign-in
+├── (auth)/login/           # OTP sign-in
 ├── (onboarding)/           # multi-step form + result reveal
-├── auth/callback/          # Supabase magic-link callback
+├── auth/callback/          # Supabase OAuth callback
 ├── api/
-│   ├── ai/recipe-generate  # Grok → structured recipe
-│   ├── ai/recipe-parse     # URL → fetch → Grok → recipe
-│   ├── ai/substitutions    # ingredient swaps
-│   ├── ai/pantry-bulk-parse # paste list → structured items
-│   ├── ai/pantry-receipt   # receipt photo → Grok vision → items
-│   └── pantry/barcode      # Open Food Facts lookup
+│   ├── ai/
+│   │   ├── coach/chat              # streaming chat
+│   │   ├── estimate-macros         # quick-log → macros (with FDC refine)
+│   │   ├── family-tonight          # plate-by-plate dinner builder
+│   │   ├── insights/generate       # daily insight cron
+│   │   ├── pantry-bulk-parse       # paste list → structured items
+│   │   ├── pantry-receipt          # receipt photo → vision → items
+│   │   ├── plan-week               # 7-day plan generation (preview/refine/save)
+│   │   ├── recipe-generate         # prompt → structured recipe
+│   │   ├── recipe-parse            # URL → fetch → structured recipe
+│   │   ├── recipe-photo            # cookbook page → vision → recipe
+│   │   ├── substitutions           # ingredient swaps
+│   │   └── sunday-prep             # batch-cook timeline
+│   ├── cron/daily-insights         # Vercel cron
+│   ├── kroger/oauth/{start,callback}  # per-user Kroger OAuth
+│   └── pantry/barcode              # Open Food Facts lookup
 ├── manifest.ts             # PWA manifest
-├── icon.tsx, apple-icon.tsx # generated icons (ImageResponse)
+├── icon.png, apple-icon.png # app icons
 └── globals.css             # design tokens + Tailwind v4 theme
 
 components/
-├── ds/                     # design system primitives
-├── shell/                  # sidebar + tab bar nav
-├── onboarding/             # form components
+├── ds/                     # design system primitives (Btn, Card, Drawer, …)
+├── shell/                  # sidebar + mobile tab bar + More sheet
+├── onboarding/             # multi-step form
 ├── today/                  # dashboard pieces
 ├── plan/                   # week grid + recipe picker
-├── pantry/                 # tabs + cards + add modal (4 modes)
+├── inventory/              # pantry/fridge/freezer + add modal
 ├── recipe/                 # library, detail, cook, add modal
-└── grocery/                # row component
+├── grocery/                # row + send-to-cart
+├── coach/                  # chat UI
+├── programs/               # program cards + activate
+├── family/                 # member cards + tonight builder
+├── stats/                  # trend charts
+└── me/                     # profile sections (kroger, never-shop, etc.)
 
 lib/
-├── ai/                     # Grok provider + the 12 thread prompts
-│   ├── grok.ts
-│   ├── targets.ts          # Mifflin–St Jeor (deterministic)
-│   └── prompts/            # blueprint, insight, recipe, pantry
-├── grocery/derive.ts       # plan ∩ pantry → list grouped by aisle
-├── supabase/               # client, server, middleware
-├── types/database.ts       # hand-rolled DB types
-└── utils.ts                # cn() helper
+├── ai/
+│   ├── provider.ts                 # pluggable getModel()/getProviderOptions()
+│   ├── photo.ts                    # resolveRecipePhoto() chain
+│   ├── targets.ts                  # Mifflin–St Jeor (deterministic)
+│   └── prompts/                    # system + per-route prompt builders
+├── grocery/derive.ts               # plan ∩ inventory → grouped list
+├── inventory/                      # location + decrement helpers
+├── kroger/                         # banners, package-size, cart, products
+├── nutrition/                      # FDC refinement, portion conversion
+├── programs/                       # program registry + kind helpers
+├── recipes/                        # save, photo persist
+├── seed/                           # starter recipe library
+├── supabase/                       # client, server, middleware
+├── types/database.ts               # hand-rolled DB types
+└── family.ts                       # member typedef + helpers
 
-supabase/migrations/
-└── 0001_init.sql           # schema, RLS, auto-create profile trigger
+supabase/migrations/                # 0001 → 0018+, run in order
 ```
 
-## Deployment (Vercel)
-
-1. Push this repo to GitHub.
-2. https://vercel.com/new → import the repo.
-3. Set the same env vars in Project Settings → Environment Variables (set
-   `NEXT_PUBLIC_APP_URL` to your production URL).
-4. Add the production callback URL to Supabase Auth → URL Configuration.
-5. Deploy.
-
-## Installing on Android
-
-Open the deployed URL in Chrome on Android → tap menu → **Add to Home Screen**.
-The PWA manifest takes over and the app launches standalone.
-
-## Next steps (out of v1 scope)
-
-- Stats + long-term tracking (sketch in handoff).
-- Programs library, Sunday Prep timeline, Family meals, Coach chat.
-- Service worker for offline (manifest is shipped; SW deferred).
-- Drag-to-reschedule on the Plan grid (currently click-to-assign).
-- Seed recipe library — script lives in plan, not yet executed.
-- Settings page polish — see plan file for the prompt ready to paste into
-  Claude Design.
-
-## Design system preview
-
-`/dev/ds` renders every primitive — useful when iterating on tokens or adding
-new variants.
+---
 
 ## Verification checklist
 
 | Check | How |
 |---|---|
 | Build green | `npm run build` |
-| All routes | 21 routes including 6 dynamic API endpoints |
-| Magic link | sign in, check Supabase logs for the email |
-| Onboarding | walk all 6 steps → land on `/result` with kcal target |
-| AI | Add Recipe → Ask Hestia → "high-protein dinner" generates a real recipe |
-| Pantry derive | bulk-paste → save 5 items → assign a recipe to today's dinner → /shop shows what's missing |
-| RLS | sign in as a second user → cannot read first user's pantry/plan via SQL editor |
-| PWA | open deployed URL in Chrome on Android → Add to Home Screen → opens standalone |
+| Type-check | `npx tsc --noEmit` |
+| Lint | `npm run lint` |
+| OTP sign-in | `/login` → enter email → paste code from inbox |
+| Onboarding | walk all steps → land on `/result` with kcal target |
+| AI generate | `/recipes` → + Add → "high-protein dinner" → recipe lands |
+| Pantry derive | bulk-paste → save 5 items → assign recipe → `/shop` shows what's missing |
+| RLS | sign in as a second user → cannot read first user's data via SQL editor |
+| PWA | open deployed URL in Chrome/Safari on phone → Add to Home Screen → opens standalone |
+| Allowlist | set `SIGNUP_ALLOWLIST=` to a single email → other addresses are rejected |
+
+---
+
+## Design system preview
+
+`/dev/ds` renders every primitive — useful when iterating on tokens or
+adding new variants.
+
+---
+
+## Contributing
+
+This is a personal project so PRs aren't actively solicited, but if you
+fix a bug or add something useful, open an issue first to talk it
+through. See [SECURITY.md](./SECURITY.md) for vulnerability reports.
+
+## License
+
+[MIT](./LICENSE) — fork it, modify it, ship your own. Attribution
+appreciated but not required.
+
+The name *Hestia* is from public-domain Greek mythology; if you want to
+keep using it for your fork that's fine, but a different name often
+helps people find your project distinct from this one.

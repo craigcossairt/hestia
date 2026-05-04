@@ -3,6 +3,25 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+// Optional friends-and-family allowlist. When SIGNUP_ALLOWLIST is set,
+// only the listed emails can request a magic code. Everyone else gets
+// pointed at the open-source repo so they can run their own instance.
+//
+// Format: comma-separated, case-insensitive. Whitespace is trimmed.
+//   SIGNUP_ALLOWLIST=alice@example.com, bob@example.com
+//
+// Unset / empty → fully open sign-up (the original behaviour).
+function isAllowlisted(email: string): boolean {
+  const raw = process.env.SIGNUP_ALLOWLIST?.trim();
+  if (!raw) return true;
+  const allowed = raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowed.length === 0) return true;
+  return allowed.includes(email.trim().toLowerCase());
+}
+
 // Send an OTP code (NOT a magic link). Skipping emailRedirectTo tells Supabase
 // to email a 6-digit code instead. Avoids PKCE/cookie/redirect complexity that
 // breaks the magic-link flow on Next.js App Router.
@@ -10,6 +29,18 @@ export async function sendOtp(_prev: unknown, formData: FormData) {
   const email = (formData.get("email") as string | null)?.trim();
   if (!email) {
     return { step: "email" as const, error: "Email is required." };
+  }
+
+  // Friendly hard-stop for non-allowlisted addresses on a private instance.
+  // Done before hitting Supabase so we never spend an email send on someone
+  // who can't sign in anyway, and so we don't reveal whether the email
+  // already has an account.
+  if (!isAllowlisted(email)) {
+    return {
+      step: "email" as const,
+      error:
+        "This Hestia instance is private to friends and family. Hestia is open source — clone it from github.com/craigcossairt/hestia to run your own.",
+    };
   }
 
   const supabase = await createClient();
