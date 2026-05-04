@@ -446,6 +446,48 @@ function BarcodeMode({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+// Pull text out of a digital-receipt PDF (Smith's, Whole Foods, Instacart,
+// any "save as PDF" download). Dynamic import keeps the 300KB+ bundle out
+// of every page visit — only loaded when the user actually picks a PDF.
+//
+// Worker config: pdfjs-dist v5 needs a separate worker file. Pointing
+// at unpkg avoids having to bundle/serve the worker through Next, at
+// the cost of a one-time fetch when the user uploads their first PDF.
+// Acceptable for a personal-use app — the worker file is ~1MB and
+// browser-cached after first use.
+//
+// Returns null if the PDF has no text layer (scanned PDFs / image-only),
+// so the caller can give the user actionable advice ("save as image").
+async function extractPdfText(file: File): Promise<string | null> {
+  const pdfjs = await import("pdfjs-dist");
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  }
+  const buffer = await file.arrayBuffer();
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+  });
+  const pdf = await loadingTask.promise;
+
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) pages.push(text);
+  }
+  const joined = pages.join("\n").trim();
+  // Heuristic: a scanned PDF either yields nothing or a few stray
+  // characters from header garbage. Anything under 40 chars is almost
+  // certainly missing the real receipt body.
+  if (joined.length < 40) return null;
+  return joined;
+}
+
 function ReceiptMode({ onSaved }: { onSaved: () => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [parsed, setParsed] = useState<ParsedItem[] | null>(null);
@@ -453,6 +495,7 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pdfFilename, setPdfFilename] = useState<string | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -460,7 +503,47 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
     setError(null);
     setParsing(true);
     setParsed(null);
+    setPreviewUrl(null);
+    setPdfFilename(null);
+
     try {
+      const isImage = file.type.startsWith("image/");
+      const isPdf =
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
+
+      if (!isImage && !isPdf) {
+        throw new Error(
+          `${file.type || "That file type"} isn't supported — upload an image (PNG/JPG) or PDF.`,
+        );
+      }
+
+      if (isPdf) {
+        // Digital receipts (Smith's PDF download, Whole Foods email
+        // receipt → save as PDF, etc.) have a real text layer. Pull
+        // it out and route through the bulk-paste parser — the same
+        // endpoint that handles "paste anything" in Bulk Paste mode.
+        // More accurate than vision OCR for clean digital text, and
+        // costs ~10× fewer tokens.
+        setPdfFilename(file.name);
+        const text = await extractPdfText(file);
+        if (!text) {
+          throw new Error(
+            "This PDF doesn't have a readable text layer — looks like a scanned image saved as PDF. Save the original as PNG/JPG instead, or take a photo of the receipt.",
+          );
+        }
+        const res = await fetch("/api/ai/pantry-bulk-parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Failed");
+        setParsed(json.items);
+        return;
+      }
+
+      // Image path: vision OCR via the dedicated endpoint.
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(r.result as string);
@@ -480,6 +563,9 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
       setError((err as Error).message);
     } finally {
       setParsing(false);
+      // Clear the file input so the user can re-pick the same file
+      // after fixing an error (otherwise React doesn't fire onChange).
+      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
@@ -492,19 +578,21 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
     });
   }
 
+  const haveSomething = previewUrl !== null || pdfFilename !== null;
+
   return (
     <div className="flex flex-col gap-3">
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         capture="environment"
         onChange={onFile}
         className="hidden"
       />
       <div className="flex gap-2">
         <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={parsing}>
-          {parsing ? "Reading…" : previewUrl ? "Another receipt" : "Upload receipt"}
+          {parsing ? "Reading…" : haveSomething ? "Another receipt" : "Upload receipt"}
         </Btn>
         {parsed ? (
           <Btn variant="outline" onClick={save} disabled={pending}>
@@ -512,6 +600,15 @@ function ReceiptMode({ onSaved }: { onSaved: () => void }) {
           </Btn>
         ) : null}
       </div>
+      <Body size="xs" dim>
+        Image (PNG/JPG) of a paper receipt, or a digital receipt saved as PDF.
+      </Body>
+      {pdfFilename ? (
+        <div className="rounded-card border border-ink-l bg-paper-2 px-3 py-2 flex items-center gap-2">
+          <Body size="sm">📄</Body>
+          <Body size="sm" className="truncate">{pdfFilename}</Body>
+        </div>
+      ) : null}
       {previewUrl ? (
         <div className="rounded-card overflow-hidden border border-ink-l max-h-64">
           {/* eslint-disable-next-line @next/next/no-img-element */}
