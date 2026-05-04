@@ -7,6 +7,7 @@ import { StarRating } from "@/components/recipe/star-rating";
 import { FamilyNotes, type FamilyNote } from "@/components/recipe/family-notes";
 import { TipsList } from "@/components/recipe/tips-list";
 import type { Ingredient, Step } from "@/lib/types/database";
+import type { FamilyMember } from "@/lib/family";
 
 export default async function RecipeDetailPage({
   params,
@@ -31,8 +32,9 @@ export default async function RecipeDetailPage({
 
   let pantryNames = new Set<string>();
   let rating = 0;
+  let currentFamilyNames = new Set<string>();
   if (user) {
-    const [pantryRes, rateRes] = await Promise.all([
+    const [pantryRes, rateRes, profileRes] = await Promise.all([
       supabase.from("pantry_items").select("name").eq("user_id", user.id),
       supabase
         .from("recipe_ratings")
@@ -40,16 +42,39 @@ export default async function RecipeDetailPage({
         .eq("user_id", user.id)
         .eq("recipe_id", id)
         .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("family_json")
+        .eq("id", user.id)
+        .maybeSingle(),
     ]);
     pantryNames = new Set(
       (pantryRes.data ?? []).map((p: { name: string }) => p.name.toLowerCase()),
     );
     rating = rateRes.data?.rating ?? 0;
+    const family =
+      (profileRes.data?.family_json as FamilyMember[] | null | undefined) ?? [];
+    currentFamilyNames = new Set(
+      family
+        .map((m) => m.name?.trim().toLowerCase())
+        .filter((n): n is string => !!n),
+    );
   }
 
   const ingredients: Ingredient[] = recipe.ingredients_json ?? [];
   const steps: Step[] = recipe.steps_json ?? [];
-  const familyNotes: FamilyNote[] = recipe.family_notes_json ?? [];
+  // Family modifications were generated when the recipe was saved.
+  // Filter against the *current* household so notes for members the
+  // user has since removed don't keep haunting the recipe card.
+  // Non-owners (rare — recipes are owner-scoped via RLS, but the page
+  // tolerates that case) see the notes as-stored since they're someone
+  // else's per-member adaptations.
+  const allFamilyNotes: FamilyNote[] = recipe.family_notes_json ?? [];
+  const familyNotes: FamilyNote[] = isOwner
+    ? allFamilyNotes.filter((n) =>
+        currentFamilyNames.has(n.member_name?.trim().toLowerCase() ?? ""),
+      )
+    : allFamilyNotes;
   const tips: string[] = recipe.tips_json ?? [];
   const servings: number = recipe.servings ?? 4;
 

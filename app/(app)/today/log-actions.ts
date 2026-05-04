@@ -145,13 +145,45 @@ export async function logCustomMeal(payload: {
 
 export async function removeMealLog(logId: string) {
   const { supabase, user } = await getUserOrRedirect();
+
+  // Read the log first so we can roll back the matching plan entry's
+  // status if this log was created by "Mark eaten" on a planned slot.
+  // Without this rollback, removing a log leaves the plan entry stuck
+  // at status="logged" — the user can no longer mark it eaten and the
+  // logged row is gone, so the meal is in a dead-end state.
+  const { data: log } = await supabase
+    .from("meal_logs")
+    .select("recipe_id, slot, logged_at")
+    .eq("id", logId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("meal_logs")
     .delete()
     .eq("id", logId)
     .eq("user_id", user.id);
   if (error) return { error: error.message };
+
+  // Roll back the corresponding plan entry, if any. Only flip when:
+  //  - the log had a slot + recipe + date (custom-name logs aren't
+  //    tied to a plan entry)
+  //  - the plan entry is currently "logged" (don't override "skipped"
+  //    or any other status the user may have set explicitly)
+  if (log?.slot && log.recipe_id && log.logged_at) {
+    const date = log.logged_at.slice(0, 10);
+    await supabase
+      .from("meal_plan_entries")
+      .update({ status: "planned" })
+      .eq("user_id", user.id)
+      .eq("date", date)
+      .eq("slot", log.slot)
+      .eq("recipe_id", log.recipe_id)
+      .eq("status", "logged");
+  }
+
   revalidatePath("/today");
+  revalidatePath("/plan");
   revalidatePath("/stats");
 }
 
