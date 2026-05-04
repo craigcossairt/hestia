@@ -20,6 +20,11 @@ alter table daily_ai_usage enable row level security;
 
 -- Users can read their own usage (powers the "X of Y used today" UI
 -- when we add it; not used yet but cheap to expose).
+-- Drop-then-create so partial re-runs of this migration don't error
+-- on "policy already exists" — Postgres' CREATE POLICY has no
+-- IF NOT EXISTS clause until PG 15, and even then we want predictable
+-- re-run semantics.
+drop policy if exists "users_read_own_usage" on daily_ai_usage;
 create policy "users_read_own_usage" on daily_ai_usage
   for select
   using (auth.uid() = user_id);
