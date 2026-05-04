@@ -34,6 +34,8 @@ import {
   Bookmark,
   Star,
   Apple,
+  MoreHorizontal,
+  LogOut,
   type LucideProps,
 } from "lucide-react";
 
@@ -74,6 +76,8 @@ const map = {
   bookmark: Bookmark,
   star: Star,
   apple: Apple,
+  more: MoreHorizontal,
+  logout: LogOut,
 } as const;
 
 export type IconName = keyof typeof map;
