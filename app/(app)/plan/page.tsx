@@ -84,7 +84,7 @@ export default async function PlanPage({
     const { data } = await supabase
       .from("meal_plan_entries")
       .select(
-        "id, date, slot, recipe_id, recipes:recipe_id(name, kcal, photo_url)",
+        "id, date, slot, recipe_id, is_leftover_of, recipes:recipe_id(name, kcal, photo_url)",
       )
       .eq("user_id", user.id)
       .gte("date", dateRange.from)
@@ -95,9 +95,20 @@ export default async function PlanPage({
       date: string;
       slot: Slot;
       recipe_id: string | null;
+      is_leftover_of: string | null;
       recipes: { name: string; kcal: number | null; photo_url: string | null } | null;
     };
     const rows = (data ?? []) as unknown as Row[];
+
+    // Build a map of entry_id → "Mon dinner" for the leftover badge.
+    const labelByEntryId = new Map<string, string>();
+    for (const row of rows) {
+      const dateLabel = new Date(`${row.date}T00:00:00`).toLocaleDateString(
+        "en-US",
+        { weekday: "short" },
+      );
+      labelByEntryId.set(row.id, `${dateLabel.toLowerCase()} ${row.slot}`);
+    }
 
     for (const row of rows) {
       const cell: PlanCellEntry | undefined =
@@ -108,13 +119,19 @@ export default async function PlanPage({
               recipeName: row.recipes.name,
               kcal: row.recipes.kcal,
               photoUrl: row.recipes.photo_url,
+              leftoverOfLabel: row.is_leftover_of
+                ? (labelByEntryId.get(row.is_leftover_of) ?? null)
+                : null,
             }
           : undefined;
       if (!entries[row.date])
         entries[row.date] = {} as Record<Slot, PlanCellEntry | undefined>;
       entries[row.date][row.slot] = cell;
       slotsWithEntries.add(row.slot);
-      if (row.recipes?.kcal) weekStats.kcal += row.recipes.kcal;
+      // Only count kcal for the original cook session, not leftovers, so the
+      // weekly average isn't double-counted.
+      if (row.recipes?.kcal && !row.is_leftover_of)
+        weekStats.kcal += row.recipes.kcal;
       if (cell) weekStats.planned += 1;
     }
   }

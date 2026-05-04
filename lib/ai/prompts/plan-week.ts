@@ -28,17 +28,45 @@ const PlanSlotSchema = z.enum([
 // Each plan entry pairs a calendar date + slot with a fully-specified
 // recipe. The generator returns one big array — the route splits and
 // inserts the recipes + plan_entries.
+//
+// is_leftover_of_index lets the planner reuse a single cook session
+// across multiple slots: a Monday dinner that yields 4 servings can
+// also fill Tuesday lunch as leftovers. When set, the entry doesn't
+// carry a new recipe — it points at the index of an earlier meal in
+// the array whose recipe gets shared.
 export const PlanWeekSchema = z.object({
   meals: z
     .array(
-      z.object({
-        date: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .describe("ISO date (YYYY-MM-DD) of the day this meal lands on."),
-        slot: PlanSlotSchema,
-        recipe: RecipeSchema,
-      }),
+      z
+        .object({
+          date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .describe("ISO date (YYYY-MM-DD) of the day this meal lands on."),
+          slot: PlanSlotSchema,
+          recipe: RecipeSchema.optional().describe(
+            "The cooked recipe for this slot. Omit when this slot is a " +
+              "leftover of another meal in the array (use is_leftover_of_index).",
+          ),
+          is_leftover_of_index: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe(
+              "When this slot reuses an earlier meal's cook session, set " +
+                "this to that meal's array index (0-based). Omit recipe in " +
+                "that case. Used when the source recipe yields more " +
+                "servings than the household consumes in one sitting.",
+            ),
+        })
+        .refine(
+          (m) => !!m.recipe || typeof m.is_leftover_of_index === "number",
+          {
+            message:
+              "Each meal must have either a recipe or is_leftover_of_index.",
+          },
+        ),
     )
     .min(1)
     .max(60),
@@ -134,6 +162,19 @@ ${args.pantry_hints.length ? `- These items are already on hand — prefer recip
 - Choose 3–5 "anchor" base ingredients that thread through 4+ recipes.
 - Avoid one-off specialty ingredients used in a single dish unless they're
   inexpensive or shelf-stable.
+
+Leftovers (IMPORTANT for efficiency):
+- Household size: ${args.household_size}. When a recipe naturally yields
+  more servings than that (a casserole that makes 6, a pot of chili that
+  makes 8), use the extra servings as leftovers on a later slot.
+- To mark a slot as leftovers, OMIT the recipe field and set
+  is_leftover_of_index to the 0-based array index of the earlier meal
+  whose recipe is being reused.
+- Don't force leftovers — only use them when a recipe genuinely makes
+  excess. A recipe with servings exactly equal to household_size produces
+  no leftovers.
+- When you DO use leftovers, prefer them for the next day's lunch (not
+  the next dinner) so the user gets variety at dinner.
 
 Variety rules:
 - Mix proteins across the week (don't repeat the same protein twice in a row).

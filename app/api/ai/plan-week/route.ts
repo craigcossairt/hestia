@@ -213,40 +213,94 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Drop entries for any (date, slot) already filled — defense-in-depth
-    // in case the generator re-included one.
+    // Process meals in their original AI-array order so is_leftover_of_index
+    // references can be resolved by index. We keep two parallel maps:
+    //   originalIndex → inserted entry id (for is_leftover_of links)
+    //   originalIndex → inserted recipe id (so leftovers reuse the recipe)
     const filledKeys = new Set(existing.map((e) => `${e.date}|${e.slot}`));
-    const newMeals = meals.filter(
-      (m) =>
-        dates.includes(m.date) &&
-        slots.includes(m.slot as PlanSlot) &&
-        !filledKeys.has(`${m.date}|${m.slot}`),
-    );
 
-    // Resolve photos in parallel — every gen recipe gets one. AI-supplied
-    // image URLs take priority so we don't double-pay for searches.
-    const photos = await Promise.all(
-      newMeals.map((m) =>
-        resolveRecipePhoto({
+    // Resolve photos up-front in parallel — only for meals that contain a
+    // recipe AND will actually be inserted (slot/date valid + not filled).
+    const photoTargets: Array<{
+      index: number;
+      recipeName: string;
+      aiImageUrl: string | null;
+      promptHint: string;
+    }> = [];
+    meals.forEach((m, i) => {
+      const slotOk = slots.includes(m.slot as PlanSlot);
+      const dateOk = dates.includes(m.date);
+      const filled = filledKeys.has(`${m.date}|${m.slot}`);
+      if (m.recipe && slotOk && dateOk && !filled) {
+        photoTargets.push({
+          index: i,
           recipeName: m.recipe.name,
           aiImageUrl: m.recipe.image_url ?? null,
-          promptHint: m.recipe.tags?.slice(0, 3).join(", "),
+          promptHint: m.recipe.tags?.slice(0, 3).join(", ") ?? "",
+        });
+      }
+    });
+    const resolvedPhotos = await Promise.all(
+      photoTargets.map((t) =>
+        resolveRecipePhoto({
+          recipeName: t.recipeName,
+          aiImageUrl: t.aiImageUrl,
+          promptHint: t.promptHint,
         }).catch(() => null),
       ),
     );
+    const photoByIndex = new Map<number, string | null>();
+    photoTargets.forEach((t, j) => {
+      photoByIndex.set(t.index, resolvedPhotos[j]?.url ?? null);
+    });
 
     const created: Array<{ date: string; slot: string; recipe_name: string }> = [];
     let skipped = existing.length;
+    const entryIdByIndex = new Map<number, string>();
+    const recipeIdByIndex = new Map<number, string>();
 
-    for (let i = 0; i < newMeals.length; i++) {
-      const m = newMeals[i];
+    for (let i = 0; i < meals.length; i++) {
+      const m = meals[i];
+      if (!dates.includes(m.date) || !slots.includes(m.slot as PlanSlot)) {
+        continue;
+      }
+      if (filledKeys.has(`${m.date}|${m.slot}`)) {
+        continue;
+      }
+
+      // Branch 1: leftover — points at an earlier insert in this batch.
+      if (typeof m.is_leftover_of_index === "number") {
+        const sourceIdx = m.is_leftover_of_index;
+        if (sourceIdx >= i) continue; // forward refs not allowed
+        const sourceEntryId = entryIdByIndex.get(sourceIdx);
+        const sourceRecipeId = recipeIdByIndex.get(sourceIdx);
+        if (!sourceEntryId || !sourceRecipeId) continue;
+
+        await supabase.from("meal_plan_entries").insert({
+          user_id: user.id,
+          date: m.date,
+          slot: m.slot,
+          recipe_id: sourceRecipeId,
+          status: "planned",
+          is_leftover_of: sourceEntryId,
+        });
+        created.push({
+          date: m.date,
+          slot: m.slot,
+          recipe_name: `(leftover) ${meals[sourceIdx]?.recipe?.name ?? "earlier meal"}`,
+        });
+        continue;
+      }
+
+      // Branch 2: fresh recipe.
       const r = m.recipe;
+      if (!r) continue;
       const { data: recipeRow, error: recipeErr } = await supabase
         .from("recipes")
         .insert({
           owner_id: user.id,
           name: r.name,
-          photo_url: photos[i]?.url ?? null,
+          photo_url: photoByIndex.get(i) ?? null,
           source_url: null,
           ingredients_json: r.ingredients,
           steps_json: r.steps,
@@ -264,14 +318,21 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (recipeErr || !recipeRow) continue;
+      recipeIdByIndex.set(i, recipeRow.id);
 
-      await supabase.from("meal_plan_entries").insert({
-        user_id: user.id,
-        date: m.date,
-        slot: m.slot,
-        recipe_id: recipeRow.id,
-        status: "planned",
-      });
+      const { data: entryRow } = await supabase
+        .from("meal_plan_entries")
+        .insert({
+          user_id: user.id,
+          date: m.date,
+          slot: m.slot,
+          recipe_id: recipeRow.id,
+          status: "planned",
+        })
+        .select("id")
+        .single();
+      if (entryRow) entryIdByIndex.set(i, entryRow.id);
+
       created.push({
         date: m.date,
         slot: m.slot,
