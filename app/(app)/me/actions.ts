@@ -179,6 +179,62 @@ export async function updateFamily(
   revalidatePath("/coach");
 }
 
+// ─── Kroger store picker ──────────────────────────────────────────────
+// Search nearby Kroger-family stores by ZIP. Wraps lib/kroger/locations
+// so the picker can call it as a server action without exposing the
+// Kroger API directly to the browser.
+export type SearchKrogerLocationsResult =
+  | { ok: true; stores: import("@/lib/kroger/locations").KrogerLocation[] }
+  | { ok: false; error: string };
+
+export async function searchKrogerLocations(
+  zip: string,
+): Promise<SearchKrogerLocationsResult> {
+  const { searchLocations } = await import("@/lib/kroger/locations");
+  const { isKrogerConfigured } = await import("@/lib/kroger/client");
+  if (!isKrogerConfigured()) {
+    return { ok: false, error: "Kroger isn't configured on the server." };
+  }
+  const stores = await searchLocations({ zip });
+  return { ok: true, stores };
+}
+
+export async function savePreferredKrogerLocation(args: {
+  locationId: string;
+  locationName: string;
+  zip: string;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      preferred_kroger_location_id: args.locationId,
+      preferred_kroger_location_name: args.locationName,
+      preferred_kroger_zip: args.zip,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/me");
+  revalidatePath("/shop");
+  return { ok: true };
+}
+
+export async function clearPreferredKrogerLocation() {
+  const { supabase, user } = await getUserOrRedirect();
+  await supabase
+    .from("profiles")
+    .update({
+      preferred_kroger_location_id: null,
+      preferred_kroger_location_name: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+  revalidatePath("/me");
+  revalidatePath("/shop");
+  return { ok: true };
+}
+
 export async function logWeight(value_kg: number, note?: string) {
   if (value_kg <= 20 || value_kg >= 300) {
     return { error: "Weight out of range." };

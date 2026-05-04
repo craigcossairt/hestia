@@ -5,6 +5,7 @@ import { GroceryRow } from "@/components/grocery/grocery-row";
 import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
 import { BulkActionLink } from "@/components/grocery/bulk-actions";
 import { clearCheckedGroceryItems } from "./actions";
+import { lookupPricesForList } from "@/lib/kroger/products";
 import type { Ingredient } from "@/lib/types/database";
 
 interface GroceryPurchaseRow {
@@ -72,7 +73,7 @@ export default async function ShopPage() {
     // grocery_purchases table may not exist yet — silently fall back to empty
   }
 
-  const [planRes, pantryRes, overridesRes] = await Promise.all([
+  const [planRes, pantryRes, overridesRes, profileRes] = await Promise.all([
     supabase
       .from("meal_plan_entries")
       .select("recipes:recipe_id(name, ingredients_json)")
@@ -85,7 +86,21 @@ export default async function ShopPage() {
       .from("grocery_overrides")
       .select("item_key, checked")
       .eq("user_id", user.id),
+    supabase
+      .from("profiles")
+      .select(
+        "preferred_kroger_location_id, preferred_kroger_location_name",
+      )
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
+
+  const krogerLocationId =
+    (profileRes.data as { preferred_kroger_location_id?: string | null } | null)
+      ?.preferred_kroger_location_id ?? null;
+  const krogerLocationName =
+    (profileRes.data as { preferred_kroger_location_name?: string | null } | null)
+      ?.preferred_kroger_location_name ?? null;
 
   type PlanRow = { recipes: { name: string; ingredients_json: Ingredient[] } | null };
   const plan = ((planRes.data ?? []) as unknown as PlanRow[])
@@ -106,6 +121,39 @@ export default async function ShopPage() {
     overrides: overridesMap,
   });
 
+  // Optional: enrich the list with Kroger prices + aisles when the user
+  // has picked a home store on /me. Best-effort — failures here don't
+  // block the list. Cache (kroger_price_cache) absorbs repeat visits.
+  type KrogerMatch = Awaited<
+    ReturnType<typeof lookupPricesForList>
+  > extends Map<string, infer V>
+    ? V
+    : never;
+  const allItemNames = list.sections.flatMap((s) => s.items.map((i) => i.name));
+  const emptyPriceMap: Map<string, KrogerMatch> = new Map();
+  const priceMap: Map<string, KrogerMatch> = krogerLocationId
+    ? await lookupPricesForList({
+        supabase,
+        locationId: krogerLocationId,
+        queries: allItemNames,
+      }).catch(() => emptyPriceMap)
+    : emptyPriceMap;
+
+  // Sum Kroger product prices (not multiplied by qty — that requires
+  // weight-aware unit math we don't have yet — just the per-package
+  // price). Gives a directional "trip cost" estimate.
+  let estTotalCents = 0;
+  let estCovered = 0;
+  for (const name of allItemNames) {
+    const m = priceMap.get(name.toLowerCase());
+    if (!m) continue;
+    const cents = m.salePriceCents ?? m.priceCents;
+    if (cents != null) {
+      estTotalCents += cents;
+      estCovered += 1;
+    }
+  }
+
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-3xl mx-auto flex flex-col gap-8">
       <header className="flex flex-col gap-2">
@@ -115,7 +163,23 @@ export default async function ShopPage() {
         </H>
         <Body size="lg" dim>
           {list.total} items · {list.inPantry} already in inventory
+          {krogerLocationId && estCovered > 0 ? (
+            <>
+              {" · est. "}
+              <span className="text-accent font-mono">
+                ${(estTotalCents / 100).toFixed(2)}
+              </span>{" "}
+              <span className="font-mono text-[11px]">
+                ({estCovered}/{list.total} priced)
+              </span>
+            </>
+          ) : null}
         </Body>
+        {krogerLocationName ? (
+          <Body size="xs" dim>
+            Prices &amp; aisles from {krogerLocationName}
+          </Body>
+        ) : null}
       </header>
 
       {list.sections.length === 0 ? (
@@ -163,17 +227,24 @@ export default async function ShopPage() {
                   </BulkActionLink>
                 </div>
                 <ul className="flex flex-col">
-                  {items.map((it) => (
-                    <GroceryRow
-                      key={it.key}
-                      itemKey={it.key}
-                      name={it.name}
-                      qty={it.qty}
-                      unit={it.unit}
-                      fromRecipes={it.fromRecipes}
-                      initialChecked={list.checked.has(it.key)}
-                    />
-                  ))}
+                  {items.map((it) => {
+                    const m = priceMap.get(it.name.toLowerCase());
+                    return (
+                      <GroceryRow
+                        key={it.key}
+                        itemKey={it.key}
+                        name={it.name}
+                        qty={it.qty}
+                        unit={it.unit}
+                        fromRecipes={it.fromRecipes}
+                        initialChecked={list.checked.has(it.key)}
+                        priceCents={m?.priceCents ?? null}
+                        salePriceCents={m?.salePriceCents ?? null}
+                        aisleNumber={m?.aisleNumber ?? null}
+                        productName={m?.description ?? null}
+                      />
+                    );
+                  })}
                 </ul>
               </section>
             );
