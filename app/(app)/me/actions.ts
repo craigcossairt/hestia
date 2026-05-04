@@ -8,6 +8,29 @@ import { computeTargets, type TargetInputs } from "@/lib/ai/targets";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { blueprintPrompt } from "@/lib/ai/prompts/blueprint";
 import type { Activity, Goal, Sex } from "@/lib/types/database";
+import {
+  buildPlanStaleHint,
+  setPlanStaleHintCookie,
+} from "@/lib/plans/staleness";
+
+// Fields whose change should prompt the user to refresh their plan.
+// Diet/health affects per-meal adaptations; body data affects target
+// macros (and indirectly per-meal calorie counts). Anything outside
+// these lists (e.g. name, schedule) doesn't move the plan needle.
+const PLAN_DIET_FIELDS = [
+  "dietary_restrictions",
+  "allergies",
+  "disliked_foods",
+  "medical_conditions",
+] as const;
+const PLAN_BODY_FIELDS = [
+  "sex",
+  "age",
+  "height_cm",
+  "weight_kg",
+  "activity",
+  "goal",
+] as const;
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -55,6 +78,26 @@ export async function updateProfile(update: ProfileUpdate) {
 
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
   if (error) return { error: error.message };
+
+  // Plan-staleness hint when the patch touches anything that affects
+  // upcoming meals. Body-data edits also offer a target recompute since
+  // weight/age/activity/goal change Mifflin-St Jeor outputs.
+  // updateMember handled this for family edits in PR #42 — this is the
+  // missed self-edit path.
+  const dietChanged = PLAN_DIET_FIELDS.some((f) => f in update);
+  const bodyChanged = PLAN_BODY_FIELDS.some((f) => f in update);
+  if (dietChanged || bodyChanged) {
+    const reason =
+      dietChanged && bodyChanged
+        ? "Your body and diet/health profile changed"
+        : dietChanged
+          ? "Your diet or health profile changed"
+          : "Your body profile changed";
+    const hint = await buildPlanStaleHint(supabase, user.id, reason, {
+      offerTargetRecompute: bodyChanged,
+    });
+    await setPlanStaleHintCookie(hint);
+  }
 
   revalidatePath("/me");
   revalidatePath("/today");

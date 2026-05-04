@@ -156,6 +156,11 @@ export async function activateProgram(
   // Drop a plan-staleness hint so the next page render asks the user
   // whether to refresh upcoming plans against the new program context.
   // The hint short-circuits when there are no upcoming planned entries.
+  // Self-scope changes also offer to recompute the user's targets —
+  // programs like Workout Fuel or Therapeutic genuinely shift macro
+  // budgets even though the underlying Mifflin-St Jeor inputs haven't
+  // moved. Member-scope skips the recompute offer because member
+  // targets live on a different code path.
   const hint = await buildPlanStaleHint(
     supabase,
     user.id,
@@ -165,6 +170,7 @@ export async function activateProgram(
       scope,
       family: profile.family_json ?? [],
     }),
+    { offerTargetRecompute: scope.kind === "user" },
   );
   await setPlanStaleHintCookie(hint);
 
@@ -233,6 +239,7 @@ export async function deactivateProgram(
       scope,
       family: profile.family_json ?? [],
     }),
+    { offerTargetRecompute: scope.kind === "user" },
   );
   await setPlanStaleHintCookie(hint);
 

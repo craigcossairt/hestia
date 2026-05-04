@@ -28,6 +28,13 @@ export interface PlanStaleHint {
   // prompt copy ("you have N upcoming planned meals…") so the user
   // can decide whether updating is worth the time.
   upcomingCount: number;
+  // When true, the prompt also offers a "Recompute my daily targets"
+  // checkbox. Set by triggers where the change might shift kcal/protein
+  // budgets — body-data edits (weight, age, activity, goal) and program
+  // activation/deactivation. Plain diet/health edits (allergies,
+  // restrictions, dislikes) don't change targets, so the checkbox stays
+  // hidden for those.
+  offerTargetRecompute?: boolean;
 }
 
 // Counts upcoming planned meal entries for the user. Returns null when
@@ -37,6 +44,7 @@ export async function buildPlanStaleHint(
   supabase: SupabaseClient,
   userId: string,
   reason: string,
+  options: { offerTargetRecompute?: boolean } = {},
 ): Promise<PlanStaleHint | null> {
   const today = new Date().toISOString().slice(0, 10);
   const { count } = await supabase
@@ -46,7 +54,11 @@ export async function buildPlanStaleHint(
     .eq("status", "planned")
     .gte("date", today);
   if (!count || count <= 0) return null;
-  return { reason, upcomingCount: count };
+  const hint: PlanStaleHint = { reason, upcomingCount: count };
+  if (options.offerTargetRecompute) {
+    hint.offerTargetRecompute = true;
+  }
+  return hint;
 }
 
 export async function setPlanStaleHintCookie(
@@ -81,7 +93,15 @@ export async function readPlanStaleHintCookie(): Promise<PlanStaleHint | null> {
       typeof (parsed as Record<string, unknown>).reason === "string" &&
       typeof (parsed as Record<string, unknown>).upcomingCount === "number"
     ) {
-      return parsed as PlanStaleHint;
+      const obj = parsed as Record<string, unknown>;
+      const hint: PlanStaleHint = {
+        reason: obj.reason as string,
+        upcomingCount: obj.upcomingCount as number,
+      };
+      if (obj.offerTargetRecompute === true) {
+        hint.offerTargetRecompute = true;
+      }
+      return hint;
     }
     return null;
   } catch {
