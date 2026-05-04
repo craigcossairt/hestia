@@ -4,6 +4,10 @@ import { useEffect, useState, useTransition } from "react";
 import { ShoppingCart, ExternalLink, Check } from "lucide-react";
 import { Btn, Body } from "@/components/ds";
 import { sendToKrogerCart } from "@/app/(app)/shop/actions";
+import {
+  bannerCartUrl,
+  bannerDisplayHost,
+} from "@/lib/kroger/banners";
 
 interface SendToCartProps {
   // Names of items currently on the shopping list. We send these to
@@ -13,13 +17,20 @@ interface SendToCartProps {
   // Whether the viewer has already connected their Kroger account.
   // Drives the button label (Connect vs Send).
   isConnected: boolean;
+  // Banner code from the user's preferred location ("SMITHS",
+  // "KROGER", "FRYS", etc.). Drives the cart deep-link host so a
+  // Smith's shopper opens smithsfoodanddrug.com/cart instead of
+  // kroger.com/cart (which routes to a default Texas store).
+  chain: string | null;
 }
 
 // /shop button that pushes the list to the user's Kroger cart. First
 // click for an unconnected user redirects through the OAuth flow;
 // after coming back successfully, the Phase 1 connection-state prop
 // flips to true and the second click actually sends.
-export function SendToCart({ itemNames, isConnected }: SendToCartProps) {
+export function SendToCart({ itemNames, isConnected, chain }: SendToCartProps) {
+  const cartHref = bannerCartUrl(chain);
+  const cartHost = bannerDisplayHost(chain);
   const [pending, start] = useTransition();
   const [status, setStatus] = useState<
     | { kind: "idle" }
@@ -102,12 +113,12 @@ export function SendToCart({ itemNames, isConnected }: SendToCartProps) {
       </Btn>
       {isConnected ? (
         <a
-          href="https://www.kroger.com/cart"
+          href={cartHref}
           target="_blank"
           rel="noreferrer noopener"
           className="text-ink-3 hover:text-ink text-[12px] inline-flex items-center gap-1"
         >
-          Open cart on kroger.com <ExternalLink size={11} />
+          Open cart on {cartHost} <ExternalLink size={11} />
         </a>
       ) : null}
       {status.kind === "ok" && status.total === 0 ? (
