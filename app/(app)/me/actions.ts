@@ -241,6 +241,32 @@ export async function disconnectKrogerAccount() {
   return { ok: true };
 }
 
+// Update the household's "never add to shopping list" exclusion list.
+// Items are stored lowercased + trimmed; /shop's derive step matches
+// after canonicalisation so plurals/casing don't matter at use site.
+export async function updateNeverShopItems(items: string[]) {
+  const { supabase, user } = await getUserOrRedirect();
+  // Normalise: trim, lowercase, drop empties + dupes, cap at 50.
+  const cleaned = Array.from(
+    new Set(
+      items
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.length > 0 && s.length < 60),
+    ),
+  ).slice(0, 50);
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      never_shop_items: cleaned,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/me");
+  revalidatePath("/shop");
+  return { ok: true, items: cleaned };
+}
+
 export async function clearPreferredKrogerLocation() {
   const { supabase, user } = await getUserOrRedirect();
   await supabase

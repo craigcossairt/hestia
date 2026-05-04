@@ -91,7 +91,7 @@ export default async function ShopPage() {
     supabase
       .from("profiles")
       .select(
-        "preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_chain",
+        "preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_chain, never_shop_items",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -106,6 +106,9 @@ export default async function ShopPage() {
   const krogerChain =
     (profileRes.data as { preferred_kroger_chain?: string | null } | null)
       ?.preferred_kroger_chain ?? null;
+  const neverShop =
+    (profileRes.data as { never_shop_items?: string[] | null } | null)
+      ?.never_shop_items ?? [];
 
   type PlanRow = { recipes: { name: string; ingredients_json: Ingredient[] } | null };
   const plan = ((planRes.data ?? []) as unknown as PlanRow[])
@@ -124,6 +127,7 @@ export default async function ShopPage() {
     plan,
     pantry: pantryRes.data ?? [],
     overrides: overridesMap,
+    neverShop,
   });
 
   // Optional: enrich the list with Kroger prices + aisles when the user
