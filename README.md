@@ -10,7 +10,7 @@
 > inventory-aware grocery lists, and recipe + cook flows. Not a tracker that
 > shames you. A hearth.
 
-Built as a personal project, kept as one. Open-sourced under MIT so anyone
+Built over the course of a weekend as a personal project, kept as one. Open-sourced under MIT so anyone
 can fork it and run their own instance.
 
 ---
