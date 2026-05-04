@@ -22,7 +22,9 @@ import type { FamilyMember } from "@/lib/family";
 // keep this endpoint short-lived so the client sees content as soon as
 // possible.
 
-export const maxDuration = 120;
+// 21 recipes generated sequentially can run 90-180s of model output;
+// 300s is Vercel's default function timeout — give the route headroom.
+export const maxDuration = 300;
 
 const REQUIRED_SLOTS: PlanSlot[] = ["breakfast", "lunch", "dinner"];
 
@@ -150,7 +152,7 @@ export async function POST(req: NextRequest) {
   }
 
   const result = streamObject({
-    model: getModel("fast"),
+    model: getModel("bulk"),
     schema: PlanWeekSchema,
     // Disable search for the bulk plan generator. With auto-search the
     // model issues a search per recipe BEFORE streaming any tokens, which

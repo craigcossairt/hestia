@@ -6,6 +6,10 @@
 // Env vars (all optional except the API key for the chosen provider):
 //   AI_PROVIDER       — "xai" (default) | "openai" | "anthropic" | "google" | "gateway"
 //   AI_MODEL_FAST     — override the fast text/json model
+//   AI_MODEL_BULK     — override the model used for the plan-week generator
+//                       (defaults to AI_MODEL_FAST). Swap to a faster
+//                       non-reasoning model — e.g. AI_MODEL_BULK=grok-3-fast
+//                       on xAI — when 21-meal generations are timing out.
 //   AI_MODEL_VISION   — override the vision (image input) model
 //   AI_MODEL_IMAGE    — override the image-generation model
 //   AI_TEMPERATURE    — sampling temperature for text generations (default 0.4)
@@ -28,7 +32,12 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { gateway } from "ai";
 
 export type AiProvider = "xai" | "openai" | "anthropic" | "google" | "gateway";
-export type ModelRole = "fast" | "vision";
+// "fast"   — default text/json model, balanced quality/latency.
+// "bulk"   — used by plan-week's 21-recipe generator. Defaults to "fast"
+//            for each provider; override via AI_MODEL_BULK to swap in a
+//            faster non-reasoning variant when big plans time out.
+// "vision" — image-input capable model.
+export type ModelRole = "fast" | "bulk" | "vision";
 
 const PROVIDER: AiProvider = (process.env.AI_PROVIDER as AiProvider) || "xai";
 
@@ -41,33 +50,46 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4-fast-reasoning",
+    bulk: "grok-4-fast-reasoning",
     vision: "grok-2-vision-1212",
     image: "grok-2-image-1212",
   },
   openai: {
     fast: "gpt-4o-mini",
+    bulk: "gpt-4o-mini",
     vision: "gpt-4o-mini",
     image: "dall-e-3",
   },
   anthropic: {
     fast: "claude-haiku-4-5-20251001",
+    bulk: "claude-haiku-4-5-20251001",
     vision: "claude-haiku-4-5-20251001",
-    image: null, // Anthropic doesn't ship image generation.
+    image: null,
   },
   google: {
     fast: "gemini-2.5-flash",
+    bulk: "gemini-2.5-flash",
     vision: "gemini-2.5-flash",
     image: "imagen-3.0-generate-001",
   },
   gateway: {
     fast: "xai/grok-4-fast-reasoning",
+    bulk: "xai/grok-4-fast-reasoning",
     vision: "xai/grok-2-vision-1212",
     image: "xai/grok-2-image-1212",
   },
 };
 
 function modelName(role: ModelRole): string {
-  if (role === "fast") return process.env.AI_MODEL_FAST || (DEFAULTS[PROVIDER].fast as string);
+  if (role === "fast")
+    return process.env.AI_MODEL_FAST || (DEFAULTS[PROVIDER].fast as string);
+  if (role === "bulk") {
+    return (
+      process.env.AI_MODEL_BULK ||
+      process.env.AI_MODEL_FAST ||
+      (DEFAULTS[PROVIDER].bulk as string)
+    );
+  }
   return process.env.AI_MODEL_VISION || (DEFAULTS[PROVIDER].vision as string);
 }
 

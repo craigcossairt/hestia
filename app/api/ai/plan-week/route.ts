@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
     let meals;
     try {
       const result = await generateObject({
-        model: getModel("fast"),
+        model: getModel("bulk"),
         schema: PlanWeekSchema,
         // Disable search on the bulk generator — auto-search per recipe
         // stacks 60+ seconds of dead time before any output. Photo chain

@@ -123,6 +123,27 @@ export function RefinePlanModal({
     onClose();
   }
 
+  function friendlyError(raw: string): string {
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes("function_invocation_timeout") ||
+      lower.includes("timed out")
+    ) {
+      return "The refine took too long and timed out. Try a smaller request, or try again.";
+    }
+    if (lower.includes("non-json") || lower.includes("unexpected token")) {
+      return "The server returned an unexpected response. Wait a moment and try again.";
+    }
+    if (
+      lower.includes("rate limit") ||
+      lower.includes("rate_limit") ||
+      lower.includes("429")
+    ) {
+      return "Hit a rate limit on the AI provider. Wait a minute and try again.";
+    }
+    return raw;
+  }
+
   const removeIds = object?.remove ?? [];
   const adds = object?.add ?? [];
   const explanation = object?.explanation;
@@ -280,7 +301,7 @@ export function RefinePlanModal({
 
           {phase === "error" && error ? (
             <Body size="sm" className="text-danger">
-              {error}
+              {friendlyError(error)}
             </Body>
           ) : null}
         </div>
