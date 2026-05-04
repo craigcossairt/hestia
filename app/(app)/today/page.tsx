@@ -12,6 +12,7 @@ import {
 } from "@/components/today/meal-card";
 import { MemberSwitcher } from "@/components/family/member-switcher";
 import { DateNavigator } from "@/components/today/date-navigator";
+import { Greeting } from "@/components/today/greeting";
 import { getProgram } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
@@ -23,13 +24,6 @@ const SLOTS = [
   "snack",
   "beverage",
 ] as const;
-
-function greet(now: Date): string {
-  const h = now.getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -162,7 +156,6 @@ export default async function TodayPage({
     );
   }
 
-  const now = new Date();
   const name = profile?.name?.split(" ")[0] ?? "there";
   const kcalTarget = profile?.kcal_target ?? 2140;
   const proteinTarget = profile?.protein_target ?? 140;
@@ -240,7 +233,7 @@ export default async function TodayPage({
           ) : viewedMember ? (
             <>Today, <span className="text-accent">{headerName}</span>.</>
           ) : (
-            <>{greet(now)}, {headerName}.</>
+            <Greeting name={headerName} />
           )}
         </H>
       </header>
