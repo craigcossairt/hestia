@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
+import { checkAiQuota } from "@/lib/ai/quota";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { insightPrompt } from "@/lib/ai/prompts/insight";
 
@@ -12,6 +13,9 @@ export async function POST(_req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const quota = await checkAiQuota(supabase, user.id);
+  if (!quota.ok && quota.response) return quota.response;
 
   const today = new Date().toISOString().slice(0, 10);
 

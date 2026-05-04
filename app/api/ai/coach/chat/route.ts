@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { createClient } from "@/lib/supabase/server";
+import { checkAiQuota } from "@/lib/ai/quota";
 import { getXai, MODELS } from "@/lib/ai/grok";
 import { coachSystemPrompt } from "@/lib/ai/prompts/coach";
 import { buildProgramContext } from "@/lib/programs";
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return new Response("Unauthorized", { status: 401 });
   }
+
+  const quota = await checkAiQuota(supabase, user.id);
+  if (!quota.ok && quota.response) return quota.response;
 
   const today = new Date().toISOString().slice(0, 10);
   const [{ data: profile }, { data: logs }, { data: pantry }] = await Promise.all([

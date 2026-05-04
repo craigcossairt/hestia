@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/craigcossairt/hestia/security/policy
+    about: Please do not file public issues for security concerns. See SECURITY.md.
+  - name: Question or discussion
+    url: https://github.com/craigcossairt/hestia/discussions
+    about: For open-ended questions, ideas, or troubleshooting, start a Discussion.

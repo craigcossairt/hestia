@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
   getModelOpts,
@@ -57,6 +58,9 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const quota = await checkAiQuota(supabase, user.id);
+    if (!quota.ok && quota.response) return quota.response;
 
     // Hydrate context.
     const [{ data: profile }, { data: pantry }, { data: recent }] =
@@ -259,7 +263,7 @@ export async function POST(req: NextRequest) {
     });
 
     const created: Array<{ date: string; slot: string; recipe_name: string }> = [];
-    let skipped = existing.length;
+    const skipped = existing.length;
     const entryIdByIndex = new Map<number, string>();
     const recipeIdByIndex = new Map<number, string>();
 

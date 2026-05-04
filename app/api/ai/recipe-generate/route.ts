@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
   getModelOpts,
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const quota = await checkAiQuota(supabase, user.id);
+    if (!quota.ok && quota.response) return quota.response;
 
     const [{ data: profile }, { data: pantry }] = await Promise.all([
       supabase

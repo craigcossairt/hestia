@@ -138,6 +138,38 @@ their own instance. Leave unset for fully-open sign-up.
 
 ---
 
+## Setting up a public demo deploy
+
+If you want a separate "anyone can try without signing up" instance —
+distinct from your real one — the pattern is:
+
+1. **Create a second Supabase project** for demo data only. Run all
+   migrations in order, same as a normal install.
+2. **Manually create one demo user** in the demo project's Auth tab
+   (e.g. `demo@hestia.app`). Note its UUID.
+3. **Seed it.** From your local clone, with the demo project's URL
+   and service-role key:
+   ```bash
+   SUPABASE_URL=https://<demo>.supabase.co \
+   SUPABASE_SERVICE_ROLE_KEY=eyJ... \
+   DEMO_USER_ID=<uuid-from-step-2> \
+   npx tsx scripts/seed-demo.ts
+   ```
+   The script wipes + reseeds a realistic household (one adult, two
+   kids, full pantry, weekly plan, eight weeks of weight logs, the
+   curated starter recipe library). Re-run any time you want a fresh
+   demo state.
+4. **Deploy to a separate Vercel project** (`hestia-demo` or similar)
+   with env vars pointing at the demo Supabase, and either:
+   - leave `SIGNUP_ALLOWLIST` set to just the demo email (most robust), or
+   - leave it unset (open sign-up — fine for a throwaway DB).
+5. **Document the demo creds** somewhere visitors will find them
+   (landing page, README badge, etc.).
+
+A nightly cron that re-runs `seed-demo.ts` keeps the data fresh.
+
+---
+
 ## Choosing an AI provider
 
 Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
