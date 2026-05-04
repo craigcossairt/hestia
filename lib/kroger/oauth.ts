@@ -37,24 +37,31 @@ function getCreds(): KrogerCreds | null {
   return { id, secret };
 }
 
-// Build the absolute redirect URI for the callback. Must match exactly
-// what was registered in the Kroger app settings.
-export function getRedirectUri(): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(
-    /\/$/,
-    "",
-  );
-  return `${base}/api/kroger/oauth/callback`;
+// Build the absolute redirect URI for the callback. Derived from the
+// incoming request's origin so it works on whatever URL the app is
+// actually deployed to (vs trusting NEXT_PUBLIC_APP_URL to be set
+// correctly in every environment). Kroger requires the URI we send
+// during /authorize and /token exchange to match each other AND to
+// match one of the Redirect URIs registered in the Kroger app config.
+//
+// Vercel's edge proxy puts the canonical external host into
+// req.nextUrl.origin, so this is correct in production, preview
+// deployments, and local dev.
+export function getRedirectUriFromRequest(req: { nextUrl: URL }): string {
+  return `${req.nextUrl.origin}/api/kroger/oauth/callback`;
 }
 
-// Build the URL we send the user to to start the consent flow.
-export function buildAuthorizeUrl(state: string): string | null {
+// Build the URL we send the user to to start the consent flow. The
+// caller passes the redirect URI it intends to use so we can echo the
+// exact same value back during /token exchange — Kroger validates
+// they match.
+export function buildAuthorizeUrl(state: string, redirectUri: string): string | null {
   const creds = getCreds();
   if (!creds) return null;
   const url = new URL(AUTHORIZE_URL);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", creds.id);
-  url.searchParams.set("redirect_uri", getRedirectUri());
+  url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("scope", REQUIRED_SCOPES);
   url.searchParams.set("state", state);
   return url.toString();
@@ -87,13 +94,16 @@ async function postToken(body: URLSearchParams): Promise<TokenResponse | null> {
 }
 
 // Step 3: exchange the authorisation code for an initial token pair.
+// `redirectUri` MUST be byte-identical to the one passed in during
+// /authorize — Kroger rejects mismatches with "invalid_grant".
 export async function exchangeCodeForTokens(
   code: string,
+  redirectUri: string,
 ): Promise<TokenResponse | null> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: redirectUri,
   });
   return postToken(body);
 }

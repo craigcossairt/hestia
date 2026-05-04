@@ -7,14 +7,20 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { exchangeCodeForTokens, persistUserTokens } from "@/lib/kroger/oauth";
+import {
+  exchangeCodeForTokens,
+  getRedirectUriFromRequest,
+  persistUserTokens,
+} from "@/lib/kroger/oauth";
 
 const STATE_COOKIE = "kroger_oauth_state";
 const RETURN_COOKIE = "kroger_oauth_return";
+const REDIRECT_COOKIE = "kroger_oauth_redirect";
 
 function clearCookies(res: NextResponse) {
   res.cookies.delete(STATE_COOKIE);
   res.cookies.delete(RETURN_COOKIE);
+  res.cookies.delete(REDIRECT_COOKIE);
   return res;
 }
 
@@ -47,7 +53,13 @@ export async function GET(req: NextRequest) {
     return errorRedirect(req, returnPath, "state-mismatch");
   }
 
-  const tokens = await exchangeCodeForTokens(code);
+  // Use the same redirect URI that was sent during /authorize. Falls
+  // back to deriving from this request if the cookie is missing
+  // (cookie expired or sameSite blocked) — same-host requests will
+  // produce the same value anyway.
+  const redirectUri =
+    req.cookies.get(REDIRECT_COOKIE)?.value || getRedirectUriFromRequest(req);
+  const tokens = await exchangeCodeForTokens(code, redirectUri);
   if (!tokens) return errorRedirect(req, returnPath, "exchange-failed");
 
   // Best-effort: pull the Kroger profile id for display ("connected as

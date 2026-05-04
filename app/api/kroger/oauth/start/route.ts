@@ -7,12 +7,19 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildAuthorizeUrl } from "@/lib/kroger/oauth";
+import {
+  buildAuthorizeUrl,
+  getRedirectUriFromRequest,
+} from "@/lib/kroger/oauth";
 import { isKrogerConfigured } from "@/lib/kroger/client";
 import crypto from "crypto";
 
 const STATE_COOKIE = "kroger_oauth_state";
 const RETURN_COOKIE = "kroger_oauth_return";
+// Persist the exact redirect URI we sent during /authorize so the
+// callback can echo the byte-identical value back during /token
+// exchange. Kroger validates these match.
+const REDIRECT_COOKIE = "kroger_oauth_redirect";
 
 export async function GET(req: NextRequest) {
   // Require an authenticated Hestia user — we don't allow anonymous
@@ -34,7 +41,8 @@ export async function GET(req: NextRequest) {
 
   const state = crypto.randomBytes(24).toString("hex");
   const returnPath = req.nextUrl.searchParams.get("return") || "/shop";
-  const url = buildAuthorizeUrl(state);
+  const redirectUri = getRedirectUriFromRequest(req);
+  const url = buildAuthorizeUrl(state, redirectUri);
   if (!url) {
     return NextResponse.json(
       { error: "Failed to build authorize URL." },
@@ -46,19 +54,15 @@ export async function GET(req: NextRequest) {
   // 10-minute window for the user to complete consent. Cookies are
   // httpOnly + same-site=lax so the callback can read them across
   // the cross-site redirect from Kroger.
-  res.cookies.set(STATE_COOKIE, state, {
+  const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     maxAge: 10 * 60,
     path: "/",
-  });
-  res.cookies.set(RETURN_COOKIE, returnPath, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 10 * 60,
-    path: "/",
-  });
+  };
+  res.cookies.set(STATE_COOKIE, state, cookieOpts);
+  res.cookies.set(RETURN_COOKIE, returnPath, cookieOpts);
+  res.cookies.set(REDIRECT_COOKIE, redirectUri, cookieOpts);
   return res;
 }
