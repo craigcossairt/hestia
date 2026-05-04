@@ -3,6 +3,7 @@
 // simultaneous cooking).
 
 import { z } from "zod";
+import { withBaseSystem } from "./system";
 
 export const SundayPrepSchema = z.object({
   total_minutes: z.number().int().min(30).max(180),
@@ -61,9 +62,9 @@ export function sundayPrepPrompt(args: {
   pantry_hints: string[];
   user_request?: string;
 }) {
-  return `You are Hestia, a calm meal-prep coach. Generate a Sunday meal-prep
-plan that runs in parallel across three lanes (Oven, Stovetop, Prep counter)
-and finishes within 90 minutes of active time.
+  return withBaseSystem(`Generate a Sunday meal-prep plan that runs in
+parallel across three lanes (Oven, Stovetop, Prep counter) and finishes
+within 90 minutes of active time.
 
 Output should cover ~5 lunches + ~3 dinners, with sensible base ingredients
 that overlap across meals.
@@ -81,5 +82,5 @@ counter. Block names should be short imperative actions ("Roast salmon",
 "Chop veg", "Cook quinoa"). Total elapsed time should NOT exceed 90 minutes
 when run in parallel.
 
-Return ONLY a valid plan object matching the schema.`;
+Return ONLY a valid plan object matching the schema.`);
 }

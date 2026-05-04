@@ -7,6 +7,9 @@
 //   AI_PROVIDER       — "xai" (default) | "openai" | "anthropic" | "google" | "gateway"
 //   AI_MODEL_FAST     — override the fast text/json model
 //   AI_MODEL_VISION   — override the vision (image input) model
+//   AI_MODEL_IMAGE    — override the image-generation model
+//   AI_TEMPERATURE    — sampling temperature for text generations (default 0.4)
+//   AI_SEED           — fixed seed for repeatable outputs (optional; integer)
 //
 //   XAI_API_KEY              — required when AI_PROVIDER=xai (default)
 //   OPENAI_API_KEY           — required when AI_PROVIDER=openai
@@ -16,7 +19,7 @@
 //
 // Gateway models use "provider/model-id" strings, e.g. "openai/gpt-4o-mini".
 
-import type { LanguageModel } from "ai";
+import type { ImageModel, LanguageModel } from "ai";
 import { createXai } from "@ai-sdk/xai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -29,33 +32,46 @@ export type ModelRole = "fast" | "vision";
 const PROVIDER: AiProvider = (process.env.AI_PROVIDER as AiProvider) || "xai";
 
 // Sensible defaults per provider. Override per role via AI_MODEL_FAST /
-// AI_MODEL_VISION. For the gateway, the model strings use "provider/model".
-const DEFAULTS: Record<AiProvider, Record<ModelRole, string>> = {
+// AI_MODEL_VISION / AI_MODEL_IMAGE. For the gateway, the model strings use
+// "provider/model".
+const DEFAULTS: Record<
+  AiProvider,
+  Record<ModelRole | "image", string | null>
+> = {
   xai: {
     fast: "grok-4-fast-reasoning",
     vision: "grok-2-vision-1212",
+    image: "grok-2-image-1212",
   },
   openai: {
     fast: "gpt-4o-mini",
     vision: "gpt-4o-mini",
+    image: "dall-e-3",
   },
   anthropic: {
     fast: "claude-haiku-4-5-20251001",
     vision: "claude-haiku-4-5-20251001",
+    image: null, // Anthropic doesn't ship image generation.
   },
   google: {
     fast: "gemini-2.5-flash",
     vision: "gemini-2.5-flash",
+    image: "imagen-3.0-generate-001",
   },
   gateway: {
     fast: "xai/grok-4-fast-reasoning",
     vision: "xai/grok-2-vision-1212",
+    image: "xai/grok-2-image-1212",
   },
 };
 
 function modelName(role: ModelRole): string {
-  if (role === "fast") return process.env.AI_MODEL_FAST || DEFAULTS[PROVIDER][role];
-  return process.env.AI_MODEL_VISION || DEFAULTS[PROVIDER][role];
+  if (role === "fast") return process.env.AI_MODEL_FAST || (DEFAULTS[PROVIDER].fast as string);
+  return process.env.AI_MODEL_VISION || (DEFAULTS[PROVIDER].vision as string);
+}
+
+function imageModelName(): string | null {
+  return process.env.AI_MODEL_IMAGE || DEFAULTS[PROVIDER].image;
 }
 
 function requireKey(name: string, label: string): string {
@@ -73,56 +89,97 @@ let openaiClient: ReturnType<typeof createOpenAI> | null = null;
 let anthropicClient: ReturnType<typeof createAnthropic> | null = null;
 let googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
 
+function ensureXai() {
+  if (!xaiClient) {
+    xaiClient = createXai({ apiKey: requireKey("XAI_API_KEY", "xAI API key") });
+  }
+  return xaiClient;
+}
+function ensureOpenAI() {
+  if (!openaiClient) {
+    openaiClient = createOpenAI({
+      apiKey: requireKey("OPENAI_API_KEY", "OpenAI API key"),
+    });
+  }
+  return openaiClient;
+}
+function ensureAnthropic() {
+  if (!anthropicClient) {
+    anthropicClient = createAnthropic({
+      apiKey: requireKey("ANTHROPIC_API_KEY", "Anthropic API key"),
+    });
+  }
+  return anthropicClient;
+}
+function ensureGoogle() {
+  if (!googleClient) {
+    googleClient = createGoogleGenerativeAI({
+      apiKey: requireKey(
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "Google Generative AI API key",
+      ),
+    });
+  }
+  return googleClient;
+}
+
 // Returns a LanguageModel ready for `generateObject` / `generateText` /
 // `streamText`. Pick "fast" for text + JSON outputs and "vision" for any
 // call that includes image inputs.
 export function getModel(role: ModelRole): LanguageModel {
   const name = modelName(role);
   switch (PROVIDER) {
-    case "xai": {
-      if (!xaiClient) {
-        xaiClient = createXai({
-          apiKey: requireKey("XAI_API_KEY", "xAI API key"),
-        });
-      }
-      return xaiClient(name);
-    }
-    case "openai": {
-      if (!openaiClient) {
-        openaiClient = createOpenAI({
-          apiKey: requireKey("OPENAI_API_KEY", "OpenAI API key"),
-        });
-      }
-      return openaiClient(name);
-    }
-    case "anthropic": {
-      if (!anthropicClient) {
-        anthropicClient = createAnthropic({
-          apiKey: requireKey("ANTHROPIC_API_KEY", "Anthropic API key"),
-        });
-      }
-      return anthropicClient(name);
-    }
-    case "google": {
-      if (!googleClient) {
-        googleClient = createGoogleGenerativeAI({
-          apiKey: requireKey(
-            "GOOGLE_GENERATIVE_AI_API_KEY",
-            "Google Generative AI API key",
-          ),
-        });
-      }
-      return googleClient(name);
-    }
-    case "gateway": {
-      // Vercel AI Gateway picks up AI_GATEWAY_API_KEY automatically.
+    case "xai":
+      return ensureXai()(name);
+    case "openai":
+      return ensureOpenAI()(name);
+    case "anthropic":
+      return ensureAnthropic()(name);
+    case "google":
+      return ensureGoogle()(name);
+    case "gateway":
       requireKey("AI_GATEWAY_API_KEY", "Vercel AI Gateway API key");
       return gateway(name);
-    }
-    default: {
+    default:
       throw new Error(`Unknown AI_PROVIDER: ${PROVIDER}`);
-    }
   }
+}
+
+// Image generation model, or null if the configured provider doesn't ship
+// one. Use with `experimental_generateImage` from the AI SDK.
+export function getImageModel(): ImageModel | null {
+  const name = imageModelName();
+  if (!name) return null;
+  try {
+    switch (PROVIDER) {
+      case "xai":
+        return ensureXai().imageModel(name);
+      case "openai":
+        return ensureOpenAI().imageModel(name);
+      case "google":
+        return ensureGoogle().imageModel(name);
+      case "anthropic":
+        return null;
+      case "gateway":
+        requireKey("AI_GATEWAY_API_KEY", "Vercel AI Gateway API key");
+        return gateway.imageModel(name);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Default sampling settings — kept consistent across providers so swapping
+// AI_PROVIDER doesn't materially change the output style. Override via
+// AI_TEMPERATURE / AI_SEED.
+export function getModelOpts(): { temperature: number; seed?: number } {
+  const temperature = process.env.AI_TEMPERATURE
+    ? Math.max(0, Math.min(1, Number(process.env.AI_TEMPERATURE)))
+    : 0.4;
+  const seedRaw = process.env.AI_SEED;
+  const seed = seedRaw && /^\d+$/.test(seedRaw) ? Number(seedRaw) : undefined;
+  return seed != null ? { temperature, seed } : { temperature };
 }
 
 // Useful for clients that need to know which provider is wired up

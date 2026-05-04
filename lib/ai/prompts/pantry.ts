@@ -1,6 +1,7 @@
 // Pantry parsing prompts: bulk paste + receipt OCR.
 
 import { z } from "zod";
+import { withBaseSystem } from "./system";
 
 export const PantryItemsSchema = z.object({
   items: z
@@ -26,7 +27,7 @@ export const PantryItemsSchema = z.object({
 export type PantryItemsParsed = z.infer<typeof PantryItemsSchema>;
 
 export function bulkParsePrompt(text: string) {
-  return `Parse the following list into a clean array of pantry items. The
+  return withBaseSystem(`Parse the following list into a clean array of pantry items. The
 input is messy human text — receipts, meal-kit notes, brain-dumps. Normalise
 to consistent units, sensible quantities, and assign each to one of:
 'pantry', 'fridge', 'freezer', 'spices'.
@@ -43,16 +44,16 @@ Input:
 ${text}
 """
 
-Return ONLY the items object matching the schema. No commentary.`;
+Return ONLY the items object matching the schema. No commentary.`);
 }
 
 export function receiptParsePrompt() {
-  return `You are reading a grocery receipt photo. Extract every food item
-into a clean array of pantry items. Normalise names (strip brand, lowercase),
-guess sensible units and locations.
+  return withBaseSystem(`You are reading a grocery receipt photo. Extract
+every food item into a clean array of pantry items. Normalise names (strip
+brand, lowercase), guess sensible units and locations.
 
 Skip: tax lines, totals, store names, payment info, non-food items.
 If quantity is missing, default to 1.
 
-Return ONLY the items object matching the schema. No commentary.`;
+Return ONLY the items object matching the schema. No commentary.`);
 }

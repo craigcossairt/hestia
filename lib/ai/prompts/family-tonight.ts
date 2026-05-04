@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import type { FamilyMember } from "@/lib/family";
+import { withBaseSystem } from "./system";
 
 export const FamilyTonightSchema = z.object({
   recipe_name: z.string(),
@@ -42,8 +43,8 @@ export function familyTonightPrompt(args: {
   recipe_summary: string;
   members: FamilyMember[];
 }) {
-  return `You are Hestia helping a household plan tonight's dinner. ONE
-recipe is being made: "${args.recipe_name}". Recipe details:
+  return withBaseSystem(`You are helping a household plan tonight's dinner.
+ONE recipe is being made: "${args.recipe_name}". Recipe details:
 
 ${args.recipe_summary}
 
@@ -76,5 +77,5 @@ Rules:
 - Medical conditions: bias their plate toward aligned patterns where simple.
 - Keep prep_tip to one short sentence.
 
-Return ONLY a valid plan object matching the schema.`;
+Return ONLY a valid plan object matching the schema.`);
 }

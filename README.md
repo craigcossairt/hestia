@@ -76,6 +76,21 @@ OPENAI_API_KEY=sk-...
 AI_MODEL_FAST=gpt-4o-mini       # optional override
 ```
 
+#### Consistency across providers
+
+Every Hestia AI call prefixes a shared **`BASE_SYSTEM`** block (`lib/ai/prompts/system.ts`) that defines the assistant's voice, US-units convention, and hard rules around allergies / medical conditions / honest macros. Switching `AI_PROVIDER` keeps the same instructions in front of every model — outputs stay structurally consistent.
+
+Sampling defaults (`AI_TEMPERATURE`, optional `AI_SEED`) are also shared via `getModelOpts()`, so deterministic-leaning behaviour carries across providers.
+
+### Recipe photos
+
+When a recipe is generated or parsed, Hestia tries:
+
+1. **og:image** of the source page (recipes parsed from URLs).
+2. **AI image generation** if your provider supports it (xai `grok-2-image-1212`, openai `dall-e-3`, google `imagen-3.0-generate-001`). Override with `AI_MODEL_IMAGE`.
+3. **Pexels search** if `PEXELS_API_KEY` is set (free, generous tier — get one at https://www.pexels.com/api/).
+4. **Stylised SVG fallback** — every recipe always has a visual.
+
 5. **Run**:
    ```bash
    npm run dev

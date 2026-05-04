@@ -6,10 +6,11 @@
 // for the human narrative + a first-week behavioural nudge.
 
 import type { TargetInputs, TargetResult } from "@/lib/ai/targets";
+import { withBaseSystem } from "./system";
 
 export function blueprintPrompt(inputs: TargetInputs, targets: TargetResult) {
-  return `You are a calm, evidence-based clinical dietitian writing a 3-paragraph
-personalised blueprint for someone starting Hestia, a meal-planning app.
+  return withBaseSystem(`Write a 3-paragraph personalised blueprint for
+someone starting Hestia, a meal-planning app.
 
 Their inputs:
 - Sex: ${inputs.sex}
@@ -40,5 +41,5 @@ Write three short paragraphs (under 80 words each):
    habit psychology: small, specific, paired with an existing routine.
 
 Tone: warm, editorial, like a thoughtful health magazine. No emoji. No
-bullet points. No headings. Just three paragraphs separated by blank lines.`;
+bullet points. No headings. Just three paragraphs separated by blank lines.`);
 }

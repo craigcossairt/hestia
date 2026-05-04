@@ -3,6 +3,7 @@
 // Honest estimation — round to nearest 5 for kcal, nearest 1 for grams.
 
 import { z } from "zod";
+import { withBaseSystem } from "./system";
 
 export const MacroEstimateSchema = z.object({
   kcal: z.number().int().min(0).max(3000),
@@ -23,7 +24,8 @@ export function estimateMacrosPrompt(args: {
   description: string;
   dietary_context?: string[];
 }) {
-  return `You are estimating macros for a meal the user is logging quickly.
+  return withBaseSystem(`You are estimating macros for a meal the user is
+logging quickly.
 Their description: "${args.description}"
 ${args.dietary_context?.length ? `Their dietary context: ${args.dietary_context.join(", ")}.` : ""}
 
@@ -33,5 +35,5 @@ If it names a brand item (e.g. "cocoa puffs"), use the brand's standard
 serving size and macros. If it includes obvious sides ("cocoa puffs with
 milk"), include them.
 
-Return ONLY a valid object matching the schema.`;
+Return ONLY a valid object matching the schema.`);
 }
