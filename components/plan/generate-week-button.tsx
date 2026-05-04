@@ -25,8 +25,23 @@ export function GenerateWeekButton({ weekStart }: GenerateWeekButtonProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(weekStart ? { week_start: weekStart } : {}),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Failed");
+        // Read the body as text first so a non-JSON error response (e.g. an
+        // upstream HTML error page) gets surfaced cleanly instead of throwing
+        // "Unexpected token 'A'…" inside res.json().
+        const raw = await res.text();
+        let json: { error?: string; created?: unknown[]; skipped?: number } = {};
+        try {
+          json = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error(
+            res.ok
+              ? "Server returned a non-JSON response."
+              : `Server error (${res.status}).`,
+          );
+        }
+        if (!res.ok) {
+          throw new Error(json.error ?? `Generation failed (${res.status}).`);
+        }
         const created = json.created?.length ?? 0;
         const skipped = json.skipped ?? 0;
         setStatus(

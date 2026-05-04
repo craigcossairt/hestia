@@ -78,13 +78,15 @@ function ToggleSwitch({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`mt-0.5 relative shrink-0 w-10 h-6 rounded-full border transition-colors disabled:opacity-50 ${
-        checked ? "bg-accent border-accent" : "bg-paper-2 border-ink-l"
+      className={`mt-0.5 relative shrink-0 w-10 h-6 rounded-full border-2 transition-colors disabled:opacity-50 ${
+        checked
+          ? "bg-accent border-accent"
+          : "bg-ink-l/50 border-ink-3 hover:bg-ink-l"
       }`}
     >
       <span
-        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-card shadow-[var(--shadow-1)] transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0"
+        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full shadow-[var(--shadow-1)] transition-transform ${
+          checked ? "bg-card translate-x-4" : "bg-paper translate-x-0"
         }`}
       />
     </button>
