@@ -9,11 +9,17 @@ import {
   bannerDisplayHost,
 } from "@/lib/kroger/banners";
 
+interface CartLineInput {
+  name: string;
+  qty: number;
+  unit: string;
+}
+
 interface SendToCartProps {
-  // Names of items currently on the shopping list. We send these to
-  // the server action, which translates them to UPCs via the Phase 1
-  // price cache.
-  itemNames: string[];
+  // Items currently on the shopping list, with their merged qty + unit
+  // so the server action can size cart quantities correctly ("2 cups
+  // flour" → 1 small bag; "20 cups flour" → multiple bags).
+  lines: CartLineInput[];
   // Whether the viewer has already connected their Kroger account.
   // Drives the button label (Connect vs Send).
   isConnected: boolean;
@@ -28,7 +34,7 @@ interface SendToCartProps {
 // click for an unconnected user redirects through the OAuth flow;
 // after coming back successfully, the Phase 1 connection-state prop
 // flips to true and the second click actually sends.
-export function SendToCart({ itemNames, isConnected, chain }: SendToCartProps) {
+export function SendToCart({ lines, isConnected, chain }: SendToCartProps) {
   const cartHref = bannerCartUrl(chain);
   const cartHost = bannerDisplayHost(chain);
   const [pending, start] = useTransition();
@@ -77,7 +83,7 @@ export function SendToCart({ itemNames, isConnected, chain }: SendToCartProps) {
     }
     setStatus({ kind: "idle" });
     start(async () => {
-      const r = await sendToKrogerCart(itemNames);
+      const r = await sendToKrogerCart(lines);
       if ("ok" in r && r.ok) {
         setStatus({ kind: "ok", added: r.added, total: r.total });
         return;
@@ -100,7 +106,7 @@ export function SendToCart({ itemNames, isConnected, chain }: SendToCartProps) {
         variant={isConnected ? "primary" : "outline"}
         size="sm"
         onClick={send}
-        disabled={pending || itemNames.length === 0}
+        disabled={pending || lines.length === 0}
       >
         <span className="inline-flex items-center gap-1.5">
           <ShoppingCart size={14} />

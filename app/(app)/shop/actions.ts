@@ -92,22 +92,34 @@ export async function logGroceryPurchase(payload: {
   return { ok: true };
 }
 
+// Per-item payload for sendToKrogerCart. Carries the recipe quantity
+// + unit so we can ask for the right number of packages — "2 cups
+// flour" should add 1 small bag of flour, "20 cups flour" should add
+// several. Computed by /shop's page.tsx from the merged grocery list.
+export interface CartLine {
+  name: string;
+  qty: number;
+  unit: string;
+}
+
 // Send the user's current grocery list to their Kroger cart. Pulls
 // product UPCs from kroger_price_cache (populated by /shop's price
-// fetch) and PUTs them via lib/kroger/cart.ts.
+// fetch) and PUTs them via lib/kroger/cart.ts. The line's recipe qty
+// + unit drives how many packages we ask Kroger to add (computed via
+// lib/kroger/package-size.ts).
 //
 // Returns:
 //   { ok: true, added: N }                        — items in cart
 //   { needsAuth: true }                           — start OAuth flow
 //   { error: "..." }                              — anything else
-export async function sendToKrogerCart(itemNames: string[]) {
+export async function sendToKrogerCart(lines: CartLine[]) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  if (itemNames.length === 0) {
+  if (lines.length === 0) {
     return { error: "Nothing to send." };
   }
 
@@ -122,27 +134,41 @@ export async function sendToKrogerCart(itemNames: string[]) {
     return { error: "Pick a Kroger store on /me first." };
   }
 
-  // Pull cached UPCs for each item. Anything we don't have a cached
-  // price for at this store has no UPC to send.
-  const queries = [...new Set(itemNames.map((n) => n.trim().toLowerCase()))];
+  // Pull cached UPCs + size_text for each item. Anything we don't
+  // have a cached match for at this store has no UPC to send.
+  const queries = [...new Set(lines.map((l) => l.name.trim().toLowerCase()))];
   const { data: cacheRows } = await supabase
     .from("kroger_price_cache")
-    .select("query, product_id")
+    .select("query, product_id, description, size_text")
     .eq("location_id", locationId)
     .in("query", queries);
-  const upcByQuery = new Map<string, string>();
+  type CacheRow = {
+    query: string;
+    product_id: string | null;
+    description: string | null;
+    size_text: string | null;
+  };
+  const matchByQuery = new Map<string, CacheRow>();
   for (const row of cacheRows ?? []) {
-    if (row.product_id) upcByQuery.set(row.query as string, row.product_id as string);
+    matchByQuery.set(row.query as string, row as CacheRow);
   }
 
-  // One cart entry per matched ingredient. Quantity is 1 per
-  // ingredient in this first pass — we don't yet do unit math (e.g.
-  // "2 cups of flour" → "2 of the smallest flour bag"). The user can
-  // adjust quantities in the Kroger cart before checkout.
-  const items = itemNames
-    .map((name) => {
-      const upc = upcByQuery.get(name.trim().toLowerCase());
-      return upc ? { upc, quantity: 1 } : null;
+  // Compute the right cart quantity per line. computeUnitsNeeded()
+  // divides the recipe gram weight by the package gram weight; falls
+  // back to 1 if either side is unparseable.
+  const { computeUnitsNeeded } = await import("@/lib/kroger/package-size");
+  const items = lines
+    .map((line) => {
+      const match = matchByQuery.get(line.name.trim().toLowerCase());
+      if (!match?.product_id) return null;
+      const quantity = computeUnitsNeeded({
+        recipeName: line.name,
+        recipeQty: line.qty,
+        recipeUnit: line.unit,
+        packageSizeText: match.size_text,
+        productName: match.description,
+      });
+      return { upc: match.product_id, quantity };
     })
     .filter((x): x is { upc: string; quantity: number } => x !== null);
 
@@ -161,7 +187,7 @@ export async function sendToKrogerCart(itemNames: string[]) {
 
   if (result.ok) {
     revalidatePath("/shop");
-    return { ok: true, added: result.added ?? items.length, total: itemNames.length };
+    return { ok: true, added: result.added ?? items.length, total: lines.length };
   }
   if (result.reason === "no-token" || result.reason === "auth") {
     // Reset any half-stale session so next attempt starts cleanly.
