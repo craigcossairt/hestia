@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Body, Mono, Check } from "@/components/ds";
 import { toggleGroceryItem } from "@/app/(app)/shop/actions";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,14 @@ export function GroceryRow({
 }: GroceryRowProps) {
   const [checked, setChecked] = useState(initialChecked);
   const [pending, start] = useTransition();
+  // Sync local state when the parent re-renders with a new `initialChecked`.
+  // Required for the bulk select-all / deselect-section actions to actually
+  // update the row UI after the server-side revalidation: React preserves
+  // useState across re-renders, so without this effect the checkboxes stay
+  // visually unchanged even though the database is correct.
+  useEffect(() => {
+    setChecked(initialChecked);
+  }, [initialChecked]);
   return (
     <li
       className={cn(
