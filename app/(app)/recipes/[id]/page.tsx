@@ -27,6 +27,8 @@ export default async function RecipeDetailPage({
 
   if (!recipe) notFound();
 
+  const isOwner = !!user && recipe.owner_id === user.id;
+
   let pantryNames = new Set<string>();
   let rating = 0;
   if (user) {
@@ -139,7 +141,14 @@ export default async function RecipeDetailPage({
         ) : null}
       </div>
 
-      <div className="sticky bottom-24 md:bottom-8 flex justify-center pb-4 px-6">
+      <div className="sticky bottom-24 md:bottom-8 flex justify-center gap-3 pb-4 px-6">
+        {isOwner ? (
+          <Link href={`/recipes/${id}/edit`}>
+            <Btn variant="outline" size="lg">
+              edit
+            </Btn>
+          </Link>
+        ) : null}
         <Link href={`/recipes/${id}/cook`}>
           <Btn variant="primary" size="lg">
             start cooking →
