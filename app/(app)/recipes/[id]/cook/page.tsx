@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CookShell } from "@/components/recipe/cook-shell";
-import type { Step } from "@/lib/types/database";
+import type { Ingredient, Step } from "@/lib/types/database";
 
 export default async function CookPage({
   params,
@@ -13,7 +13,7 @@ export default async function CookPage({
 
   const { data: recipe } = await supabase
     .from("recipes")
-    .select("id, name, steps_json")
+    .select("id, name, steps_json, ingredients_json")
     .eq("id", id)
     .maybeSingle();
 
@@ -24,6 +24,7 @@ export default async function CookPage({
       recipeId={recipe.id}
       recipeName={recipe.name}
       steps={(recipe.steps_json ?? []) as Step[]}
+      ingredients={(recipe.ingredients_json ?? []) as Ingredient[]}
     />
   );
 }
