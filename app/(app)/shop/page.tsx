@@ -7,6 +7,7 @@ import { BulkActionLink } from "@/components/grocery/bulk-actions";
 import { clearCheckedGroceryItems } from "./actions";
 import { lookupPricesForList } from "@/lib/kroger/products";
 import { getUserKrogerSession } from "@/lib/kroger/oauth";
+import { computeUnitsNeeded } from "@/lib/kroger/package-size";
 import { SendToCart } from "@/components/grocery/send-to-cart";
 import type { Ingredient } from "@/lib/types/database";
 
@@ -148,19 +149,33 @@ export default async function ShopPage() {
       }).catch(() => emptyPriceMap)
     : emptyPriceMap;
 
-  // Sum Kroger product prices (not multiplied by qty — that requires
-  // weight-aware unit math we don't have yet — just the per-package
-  // price). Gives a directional "trip cost" estimate.
+  // Estimated trip cost: sum of (package price × packages needed). The
+  // packages-needed math comes from lib/kroger/package-size, which
+  // divides recipe gram weight by the parsed package size. Falls back
+  // to 1 when either side is unparseable, so the worst case is the
+  // pre-multiplication behaviour.
+  const allLines: Array<{ name: string; qty: number; unit: string }> = [];
+  for (const section of list.sections) {
+    for (const item of section.items) {
+      allLines.push({ name: item.name, qty: item.qty, unit: item.unit });
+    }
+  }
   let estTotalCents = 0;
   let estCovered = 0;
-  for (const name of allItemNames) {
-    const m = priceMap.get(name.toLowerCase());
+  for (const line of allLines) {
+    const m = priceMap.get(line.name.toLowerCase());
     if (!m) continue;
     const cents = m.salePriceCents ?? m.priceCents;
-    if (cents != null) {
-      estTotalCents += cents;
-      estCovered += 1;
-    }
+    if (cents == null) continue;
+    const units = computeUnitsNeeded({
+      recipeName: line.name,
+      recipeQty: line.qty,
+      recipeUnit: line.unit,
+      packageSizeText: m.sizeText,
+      productName: m.description,
+    });
+    estTotalCents += cents * units;
+    estCovered += 1;
   }
 
   // Phase 2: do we have a usable Kroger user OAuth token? Drives the
@@ -198,10 +213,10 @@ export default async function ShopPage() {
             Prices &amp; aisles from {krogerLocationName}
           </Body>
         ) : null}
-        {krogerLocationId && allItemNames.length > 0 ? (
+        {krogerLocationId && allLines.length > 0 ? (
           <div className="mt-2">
             <SendToCart
-              itemNames={allItemNames}
+              lines={allLines}
               isConnected={isKrogerConnected}
               chain={krogerChain}
             />
