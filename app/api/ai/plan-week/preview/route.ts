@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { streamObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
+import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
   getModelOpts,
@@ -63,6 +64,9 @@ export async function POST(req: NextRequest) {
       { status: 401, headers: { "Content-Type": "application/json" } },
     );
   }
+
+  const quota = await checkAiQuota(supabase, user.id);
+  if (!quota.ok && quota.response) return quota.response;
 
   const [{ data: profile }, { data: pantry }, { data: recent }] =
     await Promise.all([
