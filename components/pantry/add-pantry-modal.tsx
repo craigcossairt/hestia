@@ -407,25 +407,40 @@ function ParsedItemsGrid({
 }
 
 function BarcodeMode({ onSaved }: { onSaved: () => void }) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
   return (
     <BarcodeScanner
-      onResult={(item) => {
-        setError(null);
-        start(async () => {
-          const result = await addPantryItem({
-            name: item.name,
-            qty: item.qty ?? 1,
-            unit: item.unit ?? "each",
-            location: item.location ?? "pantry",
-            source: "scan",
-            photo_url: item.photoUrl ?? null,
-          });
-          if (result?.error) setError(result.error);
-          else onSaved();
+      onAdd={async (item) => {
+        // Dedup by (name, unit, location). Two scans of the same jar
+        // increment qty instead of creating a second row — fixes the
+        // "I scanned milk 16 times because I didn't see any feedback"
+        // pile-up the previous flow had.
+        //
+        // The product photo from OFF is only persisted on first add;
+        // increments leave the existing photo alone (no point fetching
+        // and re-saving the same URL).
+        const result = await addOrIncrementPantryItem({
+          name: item.name,
+          qty: item.qty,
+          unit: item.unit,
+          location: item.location,
+          source: item.source,
         });
+        if (result?.error) {
+          return { ok: false as const, error: result.error };
+        }
+        // Refresh the underlying /inventory page so the item appears
+        // immediately if the user closes the modal next.
+        onSaved();
+        // Build a short readable summary for the success banner +
+        // session list. "each" is implicit; other units stay loud.
+        const qtyLabel =
+          item.unit === "each"
+            ? `${item.qty} ${item.name}`
+            : `${item.qty} ${item.unit} ${item.name}`;
+        return {
+          ok: true as const,
+          summary: `${qtyLabel} → ${item.location}`,
+        };
       }}
     />
   );
