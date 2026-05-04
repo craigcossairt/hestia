@@ -370,7 +370,14 @@ function NumInput({
   );
 }
 
-const SLOTS: Slot[] = ["breakfast", "lunch", "dinner", "dessert", "snack"];
+const SLOTS: Slot[] = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "dessert",
+  "snack",
+  "beverage",
+];
 
 function SlotPicker({
   slot,

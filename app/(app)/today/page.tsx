@@ -15,7 +15,14 @@ import { DateNavigator } from "@/components/today/date-navigator";
 import { getProgram } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
-const SLOTS = ["breakfast", "lunch", "dinner", "dessert", "snack"] as const;
+const SLOTS = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "dessert",
+  "snack",
+  "beverage",
+] as const;
 
 function greet(now: Date): string {
   const h = now.getHours();

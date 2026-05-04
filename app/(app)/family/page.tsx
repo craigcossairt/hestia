@@ -3,7 +3,6 @@ import { H, Body, Label } from "@/components/ds";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { FamilyCard } from "@/components/family/family-card";
 import { AddMemberForm } from "@/components/family/add-member-form";
-import { TonightBuilder } from "@/components/family/tonight-builder";
 import type { FamilyMember } from "@/lib/family";
 
 export default async function FamilyPage() {
@@ -70,12 +69,6 @@ export default async function FamilyPage() {
       <div>
         <AddMemberForm />
       </div>
-
-      {family.length > 0 ? (
-        <section>
-          <TonightBuilder />
-        </section>
-      ) : null}
     </div>
   );
 }

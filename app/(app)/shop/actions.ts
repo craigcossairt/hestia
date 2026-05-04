@@ -38,3 +38,47 @@ export async function clearCheckedGroceryItems() {
     .eq("checked", true);
   revalidatePath("/shop");
 }
+
+// Log a single grocery trip's total. Stored in cents to avoid float drift.
+export async function logGroceryPurchase(payload: {
+  amountDollars: number;
+  note?: string;
+  purchasedAt?: string; // ISO
+}) {
+  if (!Number.isFinite(payload.amountDollars) || payload.amountDollars < 0) {
+    return { error: "Enter a positive amount." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase.from("grocery_purchases").insert({
+    user_id: user.id,
+    amount_cents: Math.round(payload.amountDollars * 100),
+    note: payload.note?.trim() || null,
+    purchased_at: payload.purchasedAt ?? new Date().toISOString(),
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/shop");
+  revalidatePath("/stats");
+  return { ok: true };
+}
+
+export async function removeGroceryPurchase(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { error } = await supabase
+    .from("grocery_purchases")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/shop");
+  revalidatePath("/stats");
+  return { ok: true };
+}
