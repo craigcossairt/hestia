@@ -16,12 +16,18 @@
 -- handle_new_user fires as an auth.users INSERT trigger to seed a
 -- profiles row. There's no reason it should be callable via REST RPC —
 -- the trigger fires regardless of grants.
-revoke execute on function public.handle_new_user() from anon, authenticated;
+--
+-- REVOKE FROM PUBLIC is the load-bearing line: Postgres' default for
+-- new functions is GRANT EXECUTE TO PUBLIC, and both anon + authenticated
+-- inherit from PUBLIC. Revoking from those two specifically does
+-- nothing while the PUBLIC grant exists. Same pattern for the other
+-- two functions below.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 -- rls_auto_enable is an event-trigger helper that auto-enables RLS on
 -- newly created tables. Same deal — event triggers don't need RPC
 -- grants.
-revoke execute on function public.rls_auto_enable() from anon, authenticated;
+revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
 
 -- increment_daily_ai_usage(p_user_id) was trusting its parameter for
 -- identity. An authenticated client could call:
@@ -59,6 +65,14 @@ begin
   return new_count;
 end
 $$;
+
+-- Lock the function down: revoke the default PUBLIC grant, then grant
+-- back only to authenticated (server actions need to call it from the
+-- user's session). The advisor will still flag it as "callable by
+-- authenticated" — that's intentional, the body uses auth.uid() so
+-- callers can only increment their own counter.
+revoke execute on function public.increment_daily_ai_usage(uuid) from public, anon, authenticated;
+grant execute on function public.increment_daily_ai_usage(uuid) to authenticated;
 
 -- ============================================================
 -- B. Security: drop bucket-listing policy on recipe-photos
@@ -169,8 +183,13 @@ create policy "users_read_own_usage" on public.daily_ai_usage
 -- SELECT — and so did "owner or seed visible". Two permissive policies
 -- on every SELECT is a per-row cost. Split the mutate policy into the
 -- three actual write commands so SELECT is single-policied again.
+-- Drop both the legacy ("owner can mutate") and the new policy names
+-- so the migration is idempotent across partial-apply states.
 drop policy if exists "owner or seed visible" on public.recipes;
 drop policy if exists "owner can mutate" on public.recipes;
+drop policy if exists "owner can insert" on public.recipes;
+drop policy if exists "owner can update" on public.recipes;
+drop policy if exists "owner can delete" on public.recipes;
 create policy "owner or seed visible" on public.recipes
   for select
   using ((owner_id is null) or (owner_id = (select auth.uid())));
@@ -191,6 +210,9 @@ create policy "owner can delete" on public.recipes
 -- is a shared cross-user cache by design — any authenticated user can
 -- contribute prices), but the SELECT redundancy goes away.
 drop policy if exists "kroger_price_cache_write" on public.kroger_price_cache;
+drop policy if exists "kroger_price_cache_insert" on public.kroger_price_cache;
+drop policy if exists "kroger_price_cache_update" on public.kroger_price_cache;
+drop policy if exists "kroger_price_cache_delete" on public.kroger_price_cache;
 create policy "kroger_price_cache_insert" on public.kroger_price_cache
   for insert
   to authenticated
