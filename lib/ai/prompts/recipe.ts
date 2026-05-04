@@ -57,9 +57,42 @@ export const RecipeSchema = z.object({
     )
     .min(2)
     .max(15),
+  family_modifications: z
+    .array(
+      z.object({
+        member_name: z.string(),
+        notes: z
+          .string()
+          .min(4)
+          .describe(
+            "One short sentence describing how this person's plate differs " +
+              "from the base recipe. Concrete and small: 'sub zucchini for " +
+              "onions', 'extra portion + a sweet potato', 'plain rice on the side'.",
+          ),
+      }),
+    )
+    .max(8)
+    .optional()
+    .describe(
+      "Per-family-member adaptations. Include ONE entry per named family " +
+        "member only when the recipe needs to be altered for that person " +
+        "(allergy / dislike / portion / medical / picky-eater). Skip the " +
+        "field entirely when no member needs adjustments.",
+    ),
 });
 
 export type GeneratedRecipe = z.infer<typeof RecipeSchema>;
+
+export interface FamilyMemberForRecipe {
+  name: string;
+  age: number;
+  dietary_restrictions: string[];
+  allergies?: string[];
+  disliked_foods?: string[];
+  medical_conditions?: string[];
+  portion_modifier?: number;
+  notes?: string;
+}
 
 export function generateRecipePrompt(args: {
   prompt: string;
@@ -73,6 +106,11 @@ export function generateRecipePrompt(args: {
   disliked_foods?: string[];
   // Medical conditions to bias for.
   medical_conditions?: string[];
+  // Named household members. When provided, the recipe should include
+  // per-member modifications for any member whose plate must differ.
+  family?: FamilyMemberForRecipe[];
+  // Number of people who'll eat this — drives the `servings` field.
+  household_size?: number;
 }) {
   const {
     prompt,
@@ -83,7 +121,31 @@ export function generateRecipePrompt(args: {
     allergies,
     disliked_foods,
     medical_conditions,
+    family,
+    household_size,
   } = args;
+  const familyBlock = family?.length
+    ? `\nHousehold members eating this:\n${family
+        .map(
+          (m) =>
+            `- ${m.name} (${m.age})` +
+            (m.dietary_restrictions.length
+              ? `, prefers ${m.dietary_restrictions.join("/")}`
+              : "") +
+            (m.allergies?.length ? `, ALLERGIES: ${m.allergies.join(", ")}` : "") +
+            (m.disliked_foods?.length
+              ? `, dislikes ${m.disliked_foods.join(", ")}`
+              : "") +
+            (m.medical_conditions?.length
+              ? `, managing ${m.medical_conditions.join(", ")}`
+              : "") +
+            (m.portion_modifier && m.portion_modifier !== 1
+              ? `, ${m.portion_modifier}× portion`
+              : "") +
+            (m.notes ? `; notes: ${m.notes}` : ""),
+        )
+        .join("\n")}\nIf any member needs an adapted plate (allergy / dislike / portion / medical), put a short note in family_modifications. Skip the field entirely when no adjustments are needed.`
+    : "";
   return withBaseSystem(`Generate ONE recipe that matches the user's request.
 The recipe must be:
 
@@ -92,11 +154,12 @@ The recipe must be:
 ${allergies?.length ? `- ALLERGIES — NEVER include: ${allergies.join(", ")}. This is a hard rule.` : ""}
 ${disliked_foods?.length ? `- Avoid these disliked foods when reasonable: ${disliked_foods.join(", ")}.` : ""}
 ${medical_conditions?.length ? `- Lean toward patterns aligned with: ${medical_conditions.join(", ")}.` : ""}
-- US-based user: prefer US units (cup, tbsp, tsp, oz, lb, each) for ingredients. Use grams only for macros.
 - Macros must be honest. Don't pad with "optional toppings" to hit a number.
 ${goal ? `- Aligned with this goal: ${goal}.` : ""}
 ${protein_target ? `- Bias protein density when reasonable; daily protein target is ${protein_target} g.` : ""}
 ${pantry_hints.length ? `- Prefer ingredients the user already has when natural: ${pantry_hints.slice(0, 12).join(", ")}.` : ""}
+${household_size ? `- Servings should match the household: ~${household_size} adult portions when reasonable.` : ""}
+${familyBlock}
 
 User request: "${prompt}"
 

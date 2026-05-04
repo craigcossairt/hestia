@@ -41,11 +41,10 @@ export async function POST(req: NextRequest) {
         .limit(40),
     ]);
 
-    const family =
-      (
-        (profile as { family_json?: FamilyMember[] | null } | null)
-          ?.family_json ?? []
-      ).filter((f) => f.name && f.name.trim().length > 0);
+    const family = (
+      (profile as { family_json?: FamilyMember[] | null } | null)?.family_json ??
+      []
+    ).filter((f) => f.name && f.name.trim().length > 0);
 
     const allergies = Array.from(
       new Set([
@@ -81,6 +80,17 @@ export async function POST(req: NextRequest) {
           pantry_hints: (pantry ?? []).map((p: { name: string }) => p.name),
           goal: profile?.goal ?? undefined,
           protein_target: profile?.protein_target ?? undefined,
+          household_size: 1 + family.length,
+          family: family.map((f) => ({
+            name: f.name,
+            age: f.age,
+            dietary_restrictions: f.dietary_restrictions ?? [],
+            allergies: f.allergies ?? [],
+            disliked_foods: f.disliked_foods ?? [],
+            medical_conditions: f.medical_conditions ?? [],
+            portion_modifier: f.portion_modifier,
+            notes: f.notes,
+          })),
         }),
       });
       object = result.object;

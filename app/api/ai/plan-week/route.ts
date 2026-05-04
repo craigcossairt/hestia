@@ -4,15 +4,23 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getModel, getModelOpts } from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
-import { PlanWeekSchema, planWeekPrompt } from "@/lib/ai/prompts/plan-week";
+import {
+  PlanWeekSchema,
+  planWeekPrompt,
+  type PlanSlot,
+} from "@/lib/ai/prompts/plan-week";
 import { buildProgramContext } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
-// Photos add ~5–15s on top of dinner generation; 90s gives headroom.
-export const maxDuration = 90;
+// Photos add ~5–15s on top of dinner generation; longer plans need
+// more headroom. Vercel default is 300s on all plans now.
+export const maxDuration = 300;
+
+// Fixed slots that are always part of a plan; the generator will fill them
+// regardless of toggles. Snack / dessert / beverage are opt-in.
+const REQUIRED_SLOTS: PlanSlot[] = ["breakfast", "lunch", "dinner"];
 
 function startOfWeek(d: Date): Date {
-  // Monday-anchored, matches /plan page logic.
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   const out = new Date(d);
@@ -25,19 +33,25 @@ function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 }
 
+interface RequestBody {
+  week_start?: string;
+  include_snack?: boolean;
+  include_dessert?: boolean;
+  include_beverage?: boolean;
+  // When true, planner deletes existing 'planned' entries for the week
+  // before regenerating. Default false (additive).
+  regenerate?: boolean;
+}
+
 export async function POST(req: NextRequest) {
-  // Outer try/catch so any failure returns JSON, not Next's HTML error page.
-  // Without this, an unhandled throw makes the client see "Unexpected token
-  // 'A', 'An error o'..." when it tries to parse the HTML as JSON.
   try {
-    const body = (await req.json().catch(() => null)) as
-      | { week_start?: string }
-      | null;
+    const body = (await req.json().catch(() => null)) as RequestBody | null;
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // Hydrate context.
     const [{ data: profile }, { data: pantry }, { data: recent }] =
@@ -49,7 +63,11 @@ export async function POST(req: NextRequest) {
           )
           .eq("id", user.id)
           .maybeSingle(),
-        supabase.from("pantry_items").select("name").eq("user_id", user.id).limit(40),
+        supabase
+          .from("pantry_items")
+          .select("name")
+          .eq("user_id", user.id)
+          .limit(60),
         supabase
           .from("recipes")
           .select("name")
@@ -59,20 +77,18 @@ export async function POST(req: NextRequest) {
       ]);
 
     const userProgramIds =
-      ((profile as { active_programs?: string[] | null } | null)?.active_programs) ??
-      [];
-    const family =
-      (
-        (profile as { family_json?: FamilyMember[] | null } | null)?.family_json ??
-        []
-      ).filter((f) => f.name && f.name.trim().length > 0);
+      ((profile as { active_programs?: string[] | null } | null)
+        ?.active_programs) ?? [];
+    const family = (
+      (profile as { family_json?: FamilyMember[] | null } | null)?.family_json ??
+      []
+    ).filter((f) => f.name && f.name.trim().length > 0);
 
     const programContext = buildProgramContext({
       userProgramIds,
       members: family,
     });
 
-    // Aggregate hard rules across the household.
     const householdAllergies = Array.from(
       new Set([
         ...(profile?.allergies ?? []),
@@ -92,51 +108,13 @@ export async function POST(req: NextRequest) {
       ]),
     );
 
-    const familySummary = family.length
-      ? family
-          .map(
-            (f) =>
-              `${f.name} (${f.age}${f.dietary_restrictions.length ? ", " + f.dietary_restrictions.join("/") : ""})`,
-          )
-          .join(", ")
-      : null;
+    // Build the slot list from required + body opt-ins.
+    const slots: PlanSlot[] = [...REQUIRED_SLOTS];
+    if (body?.include_snack) slots.push("snack");
+    if (body?.include_dessert) slots.push("dessert");
+    if (body?.include_beverage) slots.push("beverage");
 
-    // Generate 7 dinners.
-    let dinners;
-    try {
-      const result = await generateObject({
-        model: getModel("fast"),
-        schema: PlanWeekSchema,
-        ...getModelOpts(),
-        prompt: planWeekPrompt({
-          goal: profile?.goal ?? null,
-          protein_target: profile?.protein_target ?? null,
-          dietary_restrictions: profile?.dietary_restrictions ?? [],
-          household_allergies: householdAllergies,
-          household_dislikes: householdDislikes,
-          household_medical: householdMedical,
-          pantry_hints: (pantry ?? []).map((p: { name: string }) => p.name),
-          recent_recipe_names: (recent ?? []).map((r: { name: string }) => r.name),
-          active_program_context: programContext,
-          family_summary: familySummary,
-        }),
-      });
-      dinners = result.object.dinners;
-    } catch (err) {
-      return NextResponse.json(
-        { error: `Generation failed: ${(err as Error).message}` },
-        { status: 500 },
-      );
-    }
-
-    if (!Array.isArray(dinners) || dinners.length !== 7) {
-      return NextResponse.json(
-        { error: "Generator returned an unexpected shape." },
-        { status: 500 },
-      );
-    }
-
-    // Compute the 7 days: caller-supplied Monday or current week's Monday.
+    // Compute the week's 7 dates.
     const requestedWeek =
       body?.week_start && isValidDate(body.week_start)
         ? new Date(`${body.week_start}T00:00:00`)
@@ -148,53 +126,120 @@ export async function POST(req: NextRequest) {
       return d.toISOString().slice(0, 10);
     });
 
-    // Find which dinner slots are already filled — skip those.
+    // Optional regenerate: drop existing planned entries for this week +
+    // these slots so the generator fills them fresh. Status='logged' or
+    // 'skipped' are NEVER touched.
+    if (body?.regenerate) {
+      await supabase
+        .from("meal_plan_entries")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("status", "planned")
+        .gte("date", dates[0])
+        .lte("date", dates[6])
+        .in("slot", slots);
+    }
+
+    // Find which (date, slot) pairs are already filled — skip them.
     const { data: existingPlans } = await supabase
       .from("meal_plan_entries")
-      .select("date")
+      .select("date, slot")
       .eq("user_id", user.id)
-      .eq("slot", "dinner")
-      .in("date", dates);
-    const filled = new Set(
-      ((existingPlans ?? []) as Array<{ date: string }>).map((p) => p.date),
+      .gte("date", dates[0])
+      .lte("date", dates[6])
+      .in("slot", slots);
+    const existing: Array<{ date: string; slot: PlanSlot }> = (
+      (existingPlans ?? []) as Array<{ date: string; slot: PlanSlot }>
+    ).filter((e) => slots.includes(e.slot));
+
+    const familySummary = family.length
+      ? family
+          .map(
+            (f) =>
+              `${f.name} (${f.age}${f.dietary_restrictions.length ? ", " + f.dietary_restrictions.join("/") : ""})`,
+          )
+          .join(", ")
+      : null;
+
+    let meals;
+    try {
+      const result = await generateObject({
+        model: getModel("fast"),
+        schema: PlanWeekSchema,
+        ...getModelOpts(),
+        prompt: planWeekPrompt({
+          week_dates: dates,
+          slots,
+          existing,
+          goal: profile?.goal ?? null,
+          protein_target: profile?.protein_target ?? null,
+          dietary_restrictions: profile?.dietary_restrictions ?? [],
+          household_allergies: householdAllergies,
+          household_dislikes: householdDislikes,
+          household_medical: householdMedical,
+          pantry_hints: (pantry ?? []).map((p: { name: string }) => p.name),
+          recent_recipe_names: (recent ?? []).map((r: { name: string }) => r.name),
+          household_size: 1 + family.length,
+          active_program_context: programContext,
+          family: family.map((f) => ({
+            name: f.name,
+            age: f.age,
+            dietary_restrictions: f.dietary_restrictions ?? [],
+            allergies: f.allergies ?? [],
+            disliked_foods: f.disliked_foods ?? [],
+            medical_conditions: f.medical_conditions ?? [],
+            portion_modifier: f.portion_modifier,
+            notes: f.notes,
+          })),
+        }),
+      });
+      meals = result.object.meals;
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Generation failed: ${(err as Error).message}` },
+        { status: 500 },
+      );
+    }
+
+    if (!Array.isArray(meals) || meals.length === 0) {
+      return NextResponse.json(
+        { error: "Generator returned no meals." },
+        { status: 500 },
+      );
+    }
+
+    // Drop entries for any (date, slot) already filled — defense-in-depth
+    // in case the generator re-included one.
+    const filledKeys = new Set(existing.map((e) => `${e.date}|${e.slot}`));
+    const newMeals = meals.filter(
+      (m) =>
+        dates.includes(m.date) &&
+        slots.includes(m.slot as PlanSlot) &&
+        !filledKeys.has(`${m.date}|${m.slot}`),
     );
 
-    // Resolve photos for the dinners we'll actually create, in parallel.
-    const targetIndices: number[] = [];
-    for (let i = 0; i < 7; i++) {
-      if (!filled.has(dates[i]) && dinners[i]) targetIndices.push(i);
-    }
+    // Resolve photos in parallel — every gen recipe gets one.
     const photos = await Promise.all(
-      targetIndices.map((i) =>
+      newMeals.map((m) =>
         resolveRecipePhoto({
-          recipeName: dinners[i].name,
-          promptHint: dinners[i].tags?.slice(0, 3).join(", "),
+          recipeName: m.recipe.name,
+          promptHint: m.recipe.tags?.slice(0, 3).join(", "),
         }).catch(() => null),
       ),
     );
-    const photoByIndex = new Map<number, string | null>();
-    targetIndices.forEach((i, j) => {
-      photoByIndex.set(i, photos[j]?.url ?? null);
-    });
 
-    const created: Array<{ date: string; recipe_name: string }> = [];
-    let skipped = 0;
+    const created: Array<{ date: string; slot: string; recipe_name: string }> = [];
+    let skipped = existing.length;
 
-    for (let i = 0; i < 7; i++) {
-      const date = dates[i];
-      if (filled.has(date)) {
-        skipped++;
-        continue;
-      }
-      const r = dinners[i];
-      if (!r) continue;
-
+    for (let i = 0; i < newMeals.length; i++) {
+      const m = newMeals[i];
+      const r = m.recipe;
       const { data: recipeRow, error: recipeErr } = await supabase
         .from("recipes")
         .insert({
           owner_id: user.id,
           name: r.name,
-          photo_url: photoByIndex.get(i) ?? null,
+          photo_url: photos[i]?.url ?? null,
           source_url: null,
           ingredients_json: r.ingredients,
           steps_json: r.steps,
@@ -203,7 +248,8 @@ export async function POST(req: NextRequest) {
           carbs: r.carbs,
           fat: r.fat,
           time_min: r.time_min,
-          servings: r.servings ?? 4,
+          servings: r.servings ?? 1 + family.length,
+          family_notes_json: r.family_modifications ?? [],
           tags: [...new Set([...(r.tags ?? []), "auto-generated"])],
         })
         .select("id")
@@ -213,12 +259,16 @@ export async function POST(req: NextRequest) {
 
       await supabase.from("meal_plan_entries").insert({
         user_id: user.id,
-        date,
-        slot: "dinner",
+        date: m.date,
+        slot: m.slot,
         recipe_id: recipeRow.id,
         status: "planned",
       });
-      created.push({ date, recipe_name: r.name });
+      created.push({
+        date: m.date,
+        slot: m.slot,
+        recipe_name: r.name,
+      });
     }
 
     revalidatePath("/plan");
@@ -230,6 +280,8 @@ export async function POST(req: NextRequest) {
       ok: true,
       created,
       skipped,
+      slots: slots.length,
+      days: dates.length,
     });
   } catch (err) {
     return NextResponse.json(

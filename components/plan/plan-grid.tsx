@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   DndContext,
@@ -11,17 +12,18 @@ import {
   DragOverlay,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Plus, X, GripVertical } from "lucide-react";
+import { Plus, X, GripVertical, Pencil } from "lucide-react";
 import { Card, Label, Mono, FoodImage } from "@/components/ds";
 import { RecipePicker } from "./recipe-picker";
 import { clearPlanSlot, movePlanEntry } from "@/app/(app)/plan/actions";
 import type { Slot } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
-const SLOTS: Slot[] = ["breakfast", "lunch", "dinner"];
+const DEFAULT_SLOTS: Slot[] = ["breakfast", "lunch", "dinner"];
 
 export interface PlanCellEntry {
   id: string;
+  recipeId: string;
   recipeName: string;
   kcal: number | null;
   photoUrl: string | null;
@@ -30,9 +32,10 @@ export interface PlanCellEntry {
 export interface PlanGridProps {
   days: Array<{ date: string; weekday: string; dayNum: string }>;
   entries: Record<string, Record<Slot, PlanCellEntry | undefined>>;
+  slots?: Slot[];
 }
 
-export function PlanGrid({ days, entries }: PlanGridProps) {
+export function PlanGrid({ days, entries, slots = DEFAULT_SLOTS }: PlanGridProps) {
   const [picker, setPicker] = useState<{ date: string; slot: Slot } | null>(null);
   const [draggingEntry, setDraggingEntry] = useState<PlanCellEntry | null>(null);
   const [, start] = useTransition();
@@ -58,7 +61,7 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
       onDragStart={(e) => {
         const id = String(e.active.id);
         for (const date of Object.keys(entries)) {
-          for (const slot of SLOTS) {
+          for (const slot of slots) {
             const entry = entries[date]?.[slot];
             if (entry?.id === id) {
               setDraggingEntry(entry);
@@ -70,7 +73,7 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
       onDragEnd={onDragEnd}
       onDragCancel={() => setDraggingEntry(null)}
     >
-      {/* Desktop grid: 7 cols × 3 rows */}
+      {/* Desktop grid: 7 cols × N rows (N = base slots + any optional slots in use) */}
       <div className="hidden md:block">
         <div className="grid grid-cols-7 gap-3 mb-3">
           {days.map((d) => (
@@ -80,7 +83,7 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
             </div>
           ))}
         </div>
-        {SLOTS.map((slot) => (
+        {slots.map((slot) => (
           <div key={slot} className="grid grid-cols-7 gap-3 mb-3">
             {days.map((d) => (
               <DroppableCell
@@ -104,7 +107,7 @@ export function PlanGrid({ days, entries }: PlanGridProps) {
               <Mono className="text-ink text-[16px] font-medium">{d.dayNum}</Mono>
             </div>
             <div className="grid grid-cols-1 gap-2">
-              {SLOTS.map((slot) => (
+              {slots.map((slot) => (
                 <DroppableCell
                   key={`${d.date}-${slot}`}
                   date={d.date}
@@ -167,9 +170,20 @@ function DroppableCell({
   const { setNodeRef, isOver } = useDroppable({ id: dropId });
 
   return (
-    <div ref={setNodeRef} className={cn("rounded-card transition-shadow", isOver && "ring-2 ring-accent")}>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-card transition-shadow",
+        isOver && "ring-2 ring-accent",
+      )}
+    >
       {entry ? (
-        <FilledCell entry={entry} slot={slot} onAssign={onAssign} showSlotLabel={showSlotLabel} />
+        <FilledCell
+          entry={entry}
+          slot={slot}
+          onSwap={onAssign}
+          showSlotLabel={showSlotLabel}
+        />
       ) : (
         <button
           type="button"
@@ -189,12 +203,12 @@ function DroppableCell({
 function FilledCell({
   entry,
   slot,
-  onAssign,
+  onSwap,
   showSlotLabel,
 }: {
   entry: PlanCellEntry;
   slot: Slot;
-  onAssign: () => void;
+  onSwap: () => void;
   showSlotLabel?: boolean;
 }) {
   const [pending, start] = useTransition();
@@ -209,6 +223,30 @@ function FilledCell({
         isDragging && "opacity-30",
       )}
     >
+      {/* Drag handle */}
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        className="absolute top-1.5 left-1.5 z-10 p-1 rounded-full bg-card/80 text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+        aria-label="drag to reschedule"
+      >
+        <GripVertical size={12} strokeWidth={1.5} />
+      </div>
+      {/* Swap (re-assign recipe) */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSwap();
+        }}
+        className="absolute top-1.5 right-7 z-10 p-1 rounded-full bg-card/80 text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity"
+        aria-label="swap recipe"
+        title="Swap recipe"
+      >
+        <Pencil size={11} strokeWidth={1.5} />
+      </button>
+      {/* Remove */}
       <button
         type="button"
         disabled={pending}
@@ -224,18 +262,11 @@ function FilledCell({
         <X size={12} strokeWidth={1.5} />
       </button>
 
-      {/* Drag handle — explicit grip avoids fighting with the click-to-edit button */}
-      <div
-        ref={setNodeRef}
-        {...listeners}
-        {...attributes}
-        className="absolute top-1.5 left-1.5 z-10 p-1 rounded-full bg-card/80 text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-        aria-label="drag to reschedule"
+      {/* Card body — clicking opens the recipe page. */}
+      <Link
+        href={`/recipes/${entry.recipeId}`}
+        className="flex-1 flex flex-col text-left hover:opacity-90 transition-opacity"
       >
-        <GripVertical size={12} strokeWidth={1.5} />
-      </div>
-
-      <button type="button" onClick={onAssign} className="flex-1 flex flex-col text-left">
         <FoodImage
           name={entry.recipeName}
           src={entry.photoUrl ?? undefined}
@@ -252,7 +283,7 @@ function FilledCell({
             <Mono className="text-ink-3 text-[10px]">{entry.kcal} kcal</Mono>
           ) : null}
         </div>
-      </button>
+      </Link>
     </Card>
   );
 }

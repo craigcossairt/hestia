@@ -4,6 +4,7 @@ import { H, Body, Btn, Label, Mono, FoodImage } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { IngredientList } from "@/components/recipe/ingredient-list";
 import { StarRating } from "@/components/recipe/star-rating";
+import { FamilyNotes, type FamilyNote } from "@/components/recipe/family-notes";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 export default async function RecipeDetailPage({
@@ -45,6 +46,8 @@ export default async function RecipeDetailPage({
 
   const ingredients: Ingredient[] = recipe.ingredients_json ?? [];
   const steps: Step[] = recipe.steps_json ?? [];
+  const familyNotes: FamilyNote[] = recipe.family_notes_json ?? [];
+  const servings: number = recipe.servings ?? 4;
 
   return (
     <div className="flex flex-col">
@@ -68,12 +71,13 @@ export default async function RecipeDetailPage({
       </div>
 
       <div className="px-6 md:px-12 py-8 md:py-10 max-w-5xl mx-auto w-full flex flex-col gap-10">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Stat label="kcal" value={recipe.kcal ?? "—"} />
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <Stat label="kcal / serving" value={recipe.kcal ?? "—"} />
           <Stat label="protein" value={recipe.protein != null ? `${recipe.protein}g` : "—"} />
           <Stat label="carbs" value={recipe.carbs != null ? `${recipe.carbs}g` : "—"} />
           <Stat label="fat" value={recipe.fat != null ? `${recipe.fat}g` : "—"} />
           <Stat label="time" value={recipe.time_min != null ? `${recipe.time_min}m` : "—"} />
+          <Stat label="servings" value={servings} />
         </div>
 
         <div className="flex items-center gap-4">
@@ -113,6 +117,8 @@ export default async function RecipeDetailPage({
             </ol>
           </div>
         </section>
+
+        {familyNotes.length > 0 ? <FamilyNotes notes={familyNotes} /> : null}
 
         {recipe.source_url ? (
           <Body size="sm" dim>

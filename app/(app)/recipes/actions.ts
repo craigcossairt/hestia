@@ -39,6 +39,7 @@ export async function saveGeneratedRecipe(
       fat: recipe.fat,
       time_min: recipe.time_min,
       servings: recipe.servings ?? 4,
+      family_notes_json: recipe.family_modifications ?? [],
       tags: recipe.tags,
     })
     .select("id")
