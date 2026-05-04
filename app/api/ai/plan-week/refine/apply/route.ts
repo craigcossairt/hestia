@@ -10,7 +10,7 @@ import type { FamilyMember } from "@/lib/family";
 // entries, then inserts the additions (with photo resolution + leftover
 // resolution).
 
-export const maxDuration = 90;
+export const maxDuration = 300;
 
 const Body = z.object({
   diff: PlanRefinementSchema,

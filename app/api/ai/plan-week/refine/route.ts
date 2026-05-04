@@ -14,7 +14,9 @@ import { buildProgramContext } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 import type { PlanSlot } from "@/lib/ai/prompts/plan-week";
 
-export const maxDuration = 90;
+// Refines are usually small (1-3 new recipes), but a "regenerate the
+// whole week as vegetarian" diff can rival a full plan. Use Vercel default.
+export const maxDuration = 300;
 
 function startOfWeek(d: Date): Date {
   const day = d.getDay();
@@ -140,7 +142,7 @@ export async function POST(req: NextRequest) {
     }));
 
   const result = streamObject({
-    model: getModel("fast"),
+    model: getModel("bulk"),
     schema: PlanRefinementSchema,
     // Refine generates a small diff (typically 1-3 new recipes). Bulk
     // search would add latency without much payoff — keep search off here.

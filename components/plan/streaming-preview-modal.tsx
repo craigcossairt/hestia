@@ -178,6 +178,23 @@ export function StreamingPreviewModal({
     onClose();
   }
 
+  // Translate raw error messages into something actionable. Vercel's
+  // FUNCTION_INVOCATION_TIMEOUT and similar opaque platform codes get a
+  // friendlier explanation.
+  function friendlyError(raw: string): string {
+    const lower = raw.toLowerCase();
+    if (lower.includes("function_invocation_timeout") || lower.includes("timed out")) {
+      return "The plan took too long to generate and timed out. The model is on a slow path right now — try again, or try with fewer optional slots (snack/dessert/beverage).";
+    }
+    if (lower.includes("non-json") || lower.includes("unexpected token")) {
+      return "The server returned an unexpected response. Wait a moment and try again.";
+    }
+    if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) {
+      return "Hit a rate limit on the AI provider. Wait a minute and try again.";
+    }
+    return raw;
+  }
+
   // Group streamed meals by date for the preview list.
   const mealsByDate = new Map<string, Array<{ slot: string; name: string | null; isLeftover: boolean }>>();
   for (const m of object?.meals ?? []) {
@@ -259,7 +276,7 @@ export function StreamingPreviewModal({
                   : "."}
               </>
             )}
-            {phase === "error" && error}
+            {phase === "error" && error ? friendlyError(error) : null}
           </Body>
         </div>
 

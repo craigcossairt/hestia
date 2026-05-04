@@ -11,7 +11,10 @@ import type { FamilyMember } from "@/lib/family";
 // shape of the legacy /api/ai/plan-week route's save phase, just driven
 // by a client-supplied result instead of a server-side AI call.
 
-export const maxDuration = 120;
+// Photo resolution + 21 inserts can take longer than the previous 120s
+// budget when the photo chain has to go all the way through Brave/Pexels
+// for every meal. 300s = Vercel default, plenty of headroom.
+export const maxDuration = 300;
 
 const REQUIRED_SLOTS: PlanSlot[] = ["breakfast", "lunch", "dinner"];
 
