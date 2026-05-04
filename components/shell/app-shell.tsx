@@ -24,7 +24,7 @@ export function AppShell({ children, user, initialDark }: AppShellProps) {
       >
         {children}
       </main>
-      <TabBar />
+      <TabBar initialDark={initialDark} />
     </div>
   );
 }
