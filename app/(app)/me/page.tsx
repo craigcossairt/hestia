@@ -10,6 +10,7 @@ import { ScheduleSection } from "@/components/me/schedule-section";
 import { AppearanceSection } from "@/components/me/appearance-section";
 import { CookingSection } from "@/components/me/cooking-section";
 import { KrogerSection } from "@/components/me/kroger-section";
+import { NeverShopSection } from "@/components/me/never-shop-section";
 import { WeightSection } from "@/components/me/weight-section";
 import type { AccentPreset } from "@/lib/types/database";
 
@@ -21,7 +22,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at, preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_zip, kroger_user_id, kroger_access_token",
+      "name, sex, age, height_cm, weight_kg, activity, goal, kcal_target, protein_target, carbs_target, fat_target, dietary_restrictions, allergies, disliked_foods, medical_conditions, schedule_json, accent_preset, dark_mode, auto_decrement_pantry, onboarded_at, preferred_kroger_location_id, preferred_kroger_location_name, preferred_kroger_zip, kroger_user_id, kroger_access_token, never_shop_items",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -113,6 +114,12 @@ export default async function MePage() {
       />
 
       <CookingSection initialAutoDecrement={profile.auto_decrement_pantry ?? false} />
+
+      <NeverShopSection
+        initial={
+          (profile as { never_shop_items?: string[] | null }).never_shop_items ?? []
+        }
+      />
 
       <KrogerSection
         initialLocationId={

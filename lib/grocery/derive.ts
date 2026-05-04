@@ -74,10 +74,18 @@ export function deriveGroceryList(args: {
   plan: PlanRowForDerive[];
   pantry: Pick<PantryItem, "name" | "qty" | "unit">[];
   overrides: Map<string, { checked: boolean }>;
+  // User's "never add to shopping list" exclusions from /me. Compared
+  // against the canonicalised name (lowercased + singularised) so the
+  // user's "water" entry filters AI-emitted "water", "Water", "waters"
+  // and even "ice water" descriptor variants alike.
+  neverShop?: string[];
 }): DerivedGroceryList & { checked: Set<string> } {
   // Group by canonical name + category. Sum baseQty within each group so
   // compatible volume/weight units merge automatically.
   const merged = new Map<string, MergedEntry>();
+  const neverShopSet = new Set(
+    (args.neverShop ?? []).map((s) => s.trim().toLowerCase()),
+  );
 
   function pushEntry(
     rawName: string,
@@ -87,6 +95,22 @@ export function deriveGroceryList(args: {
     recipeName: string | null,
   ) {
     const c = canonicalize(rawName, rawUnit, qty);
+    // Drop never-shop items at this layer so they don't show up on
+    // /shop, don't get summed across recipes, and aren't sent to
+    // Kroger Cart. Match against the canonicalised name (already
+    // lowercased + singularised by canonicalize). Also catches
+    // descriptor variants ("ice cubes" canonicalises with "ice" still
+    // in the name, but exact-match is cheap so we also do an
+    // includes-check as a safety net for multi-word excludes).
+    const lowerName = c.name.toLowerCase();
+    if (neverShopSet.has(lowerName)) return;
+    for (const skip of neverShopSet) {
+      // Allow user's "water" entry to also filter "ice water",
+      // "spring water", etc. — but only when the excluded term is a
+      // whole word in the canonicalised name.
+      const re = new RegExp(`\\b${skip.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+      if (re.test(lowerName)) return;
+    }
     const aisle = classifyAisle(c.name, aisleHint);
     const key = `${c.name.toLowerCase()}|${c.category}`;
     const existing = merged.get(key);
