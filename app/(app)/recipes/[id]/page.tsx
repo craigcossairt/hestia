@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { IngredientList } from "@/components/recipe/ingredient-list";
 import { StarRating } from "@/components/recipe/star-rating";
 import { FamilyNotes, type FamilyNote } from "@/components/recipe/family-notes";
+import { TipsList } from "@/components/recipe/tips-list";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 export default async function RecipeDetailPage({
@@ -47,6 +48,7 @@ export default async function RecipeDetailPage({
   const ingredients: Ingredient[] = recipe.ingredients_json ?? [];
   const steps: Step[] = recipe.steps_json ?? [];
   const familyNotes: FamilyNote[] = recipe.family_notes_json ?? [];
+  const tips: string[] = recipe.tips_json ?? [];
   const servings: number = recipe.servings ?? 4;
 
   return (
@@ -117,6 +119,8 @@ export default async function RecipeDetailPage({
             </ol>
           </div>
         </section>
+
+        {tips.length > 0 ? <TipsList tips={tips} /> : null}
 
         {familyNotes.length > 0 ? <FamilyNotes notes={familyNotes} /> : null}
 

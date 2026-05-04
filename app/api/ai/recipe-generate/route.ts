@@ -102,9 +102,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Best-effort photo. Doesn't block the recipe — null falls through to
-    // the FoodImage SVG on the client.
+    // the FoodImage SVG on the client. AI's own image_url (if any) gets
+    // first crack so we don't pay for two web searches.
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
+      aiImageUrl: object.image_url ?? null,
       promptHint: object.tags?.slice(0, 3).join(", "),
     });
 

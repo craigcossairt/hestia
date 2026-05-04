@@ -79,6 +79,30 @@ export const RecipeSchema = z.object({
         "(allergy / dislike / portion / medical / picky-eater). Skip the " +
         "field entirely when no member needs adjustments.",
     ),
+  tips: z
+    .array(z.string().min(4))
+    .max(8)
+    .optional()
+    .describe(
+      "Optional expert-level cooking tips. Short, practical, advisory — " +
+        "things that improve the dish but aren't mandatory steps. " +
+        "Examples: 'let the meat rest 5 min before slicing', 'salt the " +
+        "pasta water generously', 'toast the spices in dry pan first'. " +
+        "Skip when the recipe doesn't benefit from extra pointers.",
+    ),
+  image_url: z
+    .string()
+    .url()
+    .nullable()
+    .optional()
+    .describe(
+      "If you used web search to research this dish AND a representative " +
+        "real photo URL turned up (NOT a thumbnail / not a stock-photo " +
+        "site placeholder), put the direct image URL here. The host " +
+        "system will validate and use it as the recipe photo so it " +
+        "doesn't pay for a separate image search. Leave null if you " +
+        "didn't search the web or didn't find a clean photo URL.",
+    ),
 });
 
 export type GeneratedRecipe = z.infer<typeof RecipeSchema>;

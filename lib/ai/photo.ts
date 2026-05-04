@@ -3,6 +3,10 @@
 // returns null on failure so callers can handle "no photo" gracefully.
 //
 // Order:
+//   0. AI-provided image URL — when the model has live search enabled
+//      (e.g. Grok), it can return a representative real-photo URL with
+//      the recipe. Skipping this would mean paying for two searches
+//      (the AI's + ours) for the same recipe.
 //   1. og:image extraction — when a recipe was parsed from a webpage,
 //      the page's own marketing image is the gold standard.
 //   2. Web image search (Brave Search API; env-gated) — broad coverage,
@@ -17,17 +21,27 @@ import { getImageModel } from "./provider";
 
 export interface ResolvedPhoto {
   url: string;
-  source: "og" | "web" | "pexels" | "ai";
+  source: "ai_search" | "og" | "web" | "pexels" | "ai_gen";
 }
 
 export async function resolveRecipePhoto(args: {
   recipeName: string;
   sourceUrl?: string | null;
+  // URL the AI returned alongside the recipe (likely from its own web
+  // search). When present and points at a real image, we use it directly
+  // instead of running another search.
+  aiImageUrl?: string | null;
   // Short cuisine / style hint for AI image gen and search refinement
   // (e.g. "creamy pasta dish, Italian, photographed from above").
   promptHint?: string;
 }): Promise<ResolvedPhoto | null> {
-  const { recipeName, sourceUrl, promptHint } = args;
+  const { recipeName, sourceUrl, aiImageUrl, promptHint } = args;
+
+  // 0. AI's own search result
+  if (aiImageUrl) {
+    const validated = await validateImageUrl(aiImageUrl);
+    if (validated) return { url: validated, source: "ai_search" };
+  }
 
   // 1. Source page og:image
   if (sourceUrl) {
@@ -45,9 +59,35 @@ export async function resolveRecipePhoto(args: {
 
   // 4. AI image generation
   const ai = await tryGenerateAiPhoto(recipeName, promptHint);
-  if (ai) return { url: ai, source: "ai" };
+  if (ai) return { url: ai, source: "ai_gen" };
 
   return null;
+}
+
+// HEAD-checks the URL and confirms it points at an image (Content-Type
+// starts with image/). Falls back to extension sniffing if HEAD isn't
+// allowed. Returns the (possibly canonical) URL on success; null otherwise.
+async function validateImageUrl(url: string): Promise<string | null> {
+  if (!/^https?:\/\//.test(url)) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: { "User-Agent": "HestiaBot/1.0" },
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.startsWith("image/")) return url;
+    return null;
+  } catch {
+    // HEAD blocked or network error — fall back to extension check so a
+    // direct .jpg/.png link still passes.
+    if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(url)) return url;
+    return null;
+  }
 }
 
 // Lightweight og:image extractor. Avoids pulling in a full HTML parser —
