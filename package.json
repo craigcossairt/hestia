@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
+    "pdfjs-dist": "^5.7.284",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.5.0",
