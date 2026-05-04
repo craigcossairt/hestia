@@ -193,10 +193,19 @@ function UrlMode({ onClose }: { onClose: () => void }) {
   );
 }
 
+// Recipe shape returned by /api/ai/recipe-photo — same as the bare
+// GeneratedRecipe but with an optional photo_url (resolved by the
+// server-side photo chain) so save() can persist it directly.
+type ParsedPhotoRecipe = GeneratedRecipe & {
+  source_url?: string | null;
+  source_image_url?: string | null;
+  photo_url?: string | null;
+};
+
 function PhotoMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
+  const [recipe, setRecipe] = useState<ParsedPhotoRecipe | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,7 +243,15 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
   function save() {
     if (!recipe) return;
     start(async () => {
-      const result = await saveGeneratedRecipe(recipe);
+      // Pass the resolved photo_url through so the recipe card has an
+      // image. The server-side photo chain (Pexels / Brave / AI gen)
+      // already populated it; saveGeneratedRecipe just persists what
+      // it gets.
+      const result = await saveGeneratedRecipe({
+        ...recipe,
+        photo_url: recipe.photo_url ?? null,
+        source_image_url: recipe.source_image_url ?? null,
+      });
       if ("error" in result) setError(result.error!);
       else {
         onClose();

@@ -92,7 +92,14 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: RecipeSchema,
-        providerOptions: getProviderOptions(),
+        // Disable xAI's auto live-search for this route. We already
+        // have the page's HTML, so search is at best wasted budget and
+        // at worst a source of opaque errors (xAI's search subsystem
+        // has been known to surface "Gone" / "503" type errors when a
+        // searched host blocks its crawler — those bubble up as the
+        // generateObject error message even though our own fetch
+        // returned 200).
+        providerOptions: getProviderOptions({ disableSearch: true }),
         ...getModelOpts(),
         prompt: parseRecipeFromUrlPrompt({
           url: parsed.data.url,
@@ -101,10 +108,25 @@ export async function POST(req: NextRequest) {
       });
       object = result.object;
     } catch (err) {
-      return NextResponse.json(
-        { error: `Parse failed: ${(err as Error).message}` },
-        { status: 500 },
-      );
+      // Log the full error server-side so future failures are
+      // diagnosable from Vercel logs (the user only sees the friendly
+      // message). Categorise into something actionable when we can.
+      const e = err as Error & { name?: string; cause?: unknown };
+      console.error("recipe-parse failed", {
+        name: e.name,
+        message: e.message,
+        cause: e.cause,
+      });
+      const lower = (e.message || "").toLowerCase();
+      const friendly =
+        lower.includes("zod") || lower.includes("schema") || lower.includes("validation")
+          ? "Hestia couldn't read this page as a recipe — the page layout might be too unusual. Try a simpler recipe URL."
+          : lower.includes("timeout") || lower.includes("timed out")
+            ? "The model took too long to parse this page. Try again."
+            : lower.includes("rate") || lower.includes("429")
+              ? "The model is rate-limited right now. Try again in a minute."
+              : `Couldn't parse the page: ${e.message || "unknown error"}.`;
+      return NextResponse.json({ error: friendly }, { status: 500 });
     }
 
     // Photo: AI image url → og:image → web → pexels → ai-gen.
