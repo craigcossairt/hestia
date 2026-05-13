@@ -13,6 +13,60 @@
 -- A. Security: SECURITY DEFINER functions
 -- ============================================================
 
+-- rls_auto_enable was added to prod out-of-band (via the Supabase
+-- dashboard) before this migration directory existed, so 0001..0019
+-- don't create it. The REVOKE below would fail on a fresh replay
+-- (Supabase Preview branches, new self-hosters). Define it here
+-- idempotently so 0020 is self-contained going forward.
+--
+-- Function definition lifted verbatim from prod's pg_get_functiondef;
+-- the event trigger `ensure_rls` matches the prod configuration.
+create or replace function public.rls_auto_enable()
+returns event_trigger
+language plpgsql
+security definer
+set search_path to 'pg_catalog'
+as $rls_auto_enable$
+declare
+  cmd record;
+begin
+  for cmd in
+    select *
+    from pg_event_trigger_ddl_commands()
+    where command_tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      and object_type in ('table','partitioned table')
+  loop
+    if cmd.schema_name is not null
+       and cmd.schema_name in ('public')
+       and cmd.schema_name not in ('pg_catalog','information_schema')
+       and cmd.schema_name not like 'pg_toast%'
+       and cmd.schema_name not like 'pg_temp%' then
+      begin
+        execute format('alter table if exists %s enable row level security', cmd.object_identity);
+        raise log 'rls_auto_enable: enabled RLS on %', cmd.object_identity;
+      exception
+        when others then
+          raise log 'rls_auto_enable: failed to enable RLS on %', cmd.object_identity;
+      end;
+    else
+      raise log 'rls_auto_enable: skip % (system schema or not in enforced list: %.)', cmd.object_identity, cmd.schema_name;
+    end if;
+  end loop;
+end;
+$rls_auto_enable$;
+
+-- Event triggers don't support IF NOT EXISTS pre-PG 14; the DO block
+-- is the portable idempotency pattern.
+do $$
+begin
+  if not exists (select 1 from pg_event_trigger where evtname = 'ensure_rls') then
+    create event trigger ensure_rls
+      on ddl_command_end
+      when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      execute function public.rls_auto_enable();
+  end if;
+end $$;
+
 -- handle_new_user fires as an auth.users INSERT trigger to seed a
 -- profiles row. There's no reason it should be callable via REST RPC —
 -- the trigger fires regardless of grants.
@@ -24,9 +78,9 @@
 -- two functions below.
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
--- rls_auto_enable is an event-trigger helper that auto-enables RLS on
--- newly created tables. Same deal — event triggers don't need RPC
--- grants.
+-- rls_auto_enable now exists (created above on fresh installs, or
+-- already existed on prod). Lock it down — event triggers don't need
+-- RPC grants.
 revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
 
 -- increment_daily_ai_usage(p_user_id) was trusting its parameter for
