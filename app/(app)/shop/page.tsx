@@ -39,7 +39,17 @@ const AISLE_LABELS: Record<string, string> = {
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
   const { fresh } = await searchParams;
-  const bypassPriceCache = typeof fresh === "string" && fresh.length > 0;
+  // Only honor `fresh` when it's a recent timestamp (< 5 minutes old).
+  // Without this guard, a bookmarked or shared `/shop?fresh=…` URL
+  // would permanently bypass the 24h Kroger price cache, burning the
+  // API quota and slowing every visit. The button generates a fresh
+  // Date.now() each click, so 5min is plenty for the redirect to land.
+  const FRESH_TTL_MS = 5 * 60 * 1000;
+  const freshMs = fresh ? Number(fresh) : NaN;
+  const bypassPriceCache =
+    Number.isFinite(freshMs) &&
+    freshMs > 0 &&
+    Date.now() - freshMs <= FRESH_TTL_MS;
   const supabase = await createClient();
   const {
     data: { user },
