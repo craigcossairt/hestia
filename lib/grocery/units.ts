@@ -220,24 +220,61 @@ export function canonicalize(
   return { name, unit: "each", category: "count", baseQty: qty };
 }
 
+// Names that legitimately measure by volume at grocery scale. Anything
+// not in this list gets capped at "cup" for volume display, so we don't
+// produce nonsense like "1.3 gallons of spinach" or "1.1 gallons of
+// seedless white grapes" when the AI aggregates cup-quantities across
+// recipes (5 cups × 4 recipes = 20 cups = 960 tsp, which would
+// otherwise round up to 1.25 gallon).
+//
+// Pattern matches whole words (case-insensitive) so descriptors like
+// "ice water" or "olive oil" still hit the liquid branch.
+const LIQUID_NAME_PATTERNS: RegExp[] = [
+  /\b(milk|cream|yogurt|kefir|buttermilk|half[-\s]?and[-\s]?half)\b/i,
+  /\b(water|juice|soda|beer|wine|kombucha|smoothie|tea|coffee|cider)\b/i,
+  /\b(broth|stock|consomm[eé]|bouillon)\b/i,
+  /\b(oil|vinegar|sauce|syrup|honey|molasses|dressing|marinade|paste)\b/i,
+  /\b(extract|essence|flavoring)\b/i,
+];
+
+function isLiquidName(name: string): boolean {
+  return LIQUID_NAME_PATTERNS.some((re) => re.test(name));
+}
+
 // Given a base-unit total and category, pick the most natural display
-// unit + qty for the user.
+// unit + qty for the user. The name is used to decide whether volume
+// units above "cup" make sense (liquids: yes; solids: no — see
+// LIQUID_NAME_PATTERNS).
+export interface DisplayOpts {
+  unitHint?: string;
+  name?: string;
+}
+
 export function displayQty(
   category: UnitCategory,
   baseQty: number,
-  unitHint?: string,
+  opts: DisplayOpts = {},
 ): { qty: number; unit: string } {
   if (category === "volume") {
-    // Pick the largest unit where qty is at least 1.
-    if (baseQty >= 768) return { qty: round(baseQty / 768), unit: "gallon" };
-    if (baseQty >= 192) return { qty: round(baseQty / 192), unit: "qt" };
-    if (baseQty >= 96) return { qty: round(baseQty / 96), unit: "pt" };
+    const liquid = opts.name ? isLiquidName(opts.name) : false;
+    // Liquids: full hierarchy. Gallons of milk / quarts of broth / pints
+    // of cream all make sense on a grocery list.
+    if (liquid) {
+      if (baseQty >= 768) return { qty: round(baseQty / 768), unit: "gallon" };
+      if (baseQty >= 192) return { qty: round(baseQty / 192), unit: "qt" };
+      if (baseQty >= 96) return { qty: round(baseQty / 96), unit: "pt" };
+    }
+    // Non-liquid OR unknown: cap at cup. "20 cups of spinach" reads
+    // better than "1.25 gallons of spinach" on a shopping list.
     if (baseQty >= 48) return { qty: round(baseQty / 48), unit: "cup" };
     if (baseQty >= 3) return { qty: round(baseQty / 3), unit: "tbsp" };
     return { qty: round(baseQty), unit: "tsp" };
   }
   if (category === "weight") {
-    if (baseQty >= 1000) return { qty: round(baseQty / 1000), unit: "kg" };
+    // US-grocery audience (Kroger / Smith's integration is the only
+    // store connector). Display in lb rather than kg even at multi-kg
+    // totals, since that's what the store's shelf signage uses. Drop
+    // to oz under 1 lb, to g under 1 oz for spice-scale weights.
     if (baseQty >= 453.592) return { qty: round(baseQty / 453.592), unit: "lb" };
     if (baseQty >= 28.3495) return { qty: round(baseQty / 28.3495), unit: "oz" };
     return { qty: round(baseQty), unit: "g" };
@@ -246,7 +283,7 @@ export function displayQty(
     return { qty: round(baseQty), unit: "each" };
   }
   // package or other — preserve the original unit since they don't convert.
-  return { qty: round(baseQty), unit: unitHint ?? "" };
+  return { qty: round(baseQty), unit: opts.unitHint ?? "" };
 }
 
 function round(n: number): number {

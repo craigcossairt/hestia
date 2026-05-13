@@ -4,12 +4,29 @@ import { deriveGroceryList } from "@/lib/grocery/derive";
 import { GroceryRow } from "@/components/grocery/grocery-row";
 import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
 import { BulkActionLink } from "@/components/grocery/bulk-actions";
+import { ShopRefresh } from "@/components/grocery/shop-refresh";
 import { clearCheckedGroceryItems } from "./actions";
 import { lookupPricesForList } from "@/lib/kroger/products";
 import { getUserKrogerSession } from "@/lib/kroger/oauth";
 import { computeUnitsNeeded } from "@/lib/kroger/package-size";
 import { SendToCart } from "@/components/grocery/send-to-cart";
 import type { Ingredient } from "@/lib/types/database";
+
+interface ShopPageProps {
+  // `fresh` is a millisecond `Date.now()` set by the Refresh-prices
+  // button (see components/grocery/shop-refresh.tsx). The page parses
+  // it as a number and only bypasses the Kroger price cache when the
+  // value is finite, positive, NOT in the future, and at most 5
+  // minutes old. Stale, future-dated, or tampered values (bookmarks,
+  // hand-edited URLs, ?fresh=99999999999999) fall back to normal 24h-
+  // TTL cached behavior so the cache-bypass can't be made permanent
+  // by anyone sharing a /shop?fresh=… link.
+  //
+  // Typed as string | string[] because Next.js represents repeated
+  // query keys (?fresh=a&fresh=b) as arrays — the impl takes the
+  // first element.
+  searchParams: Promise<{ fresh?: string | string[] }>;
+}
 
 interface GroceryPurchaseRow {
   id: string;
@@ -28,7 +45,28 @@ const AISLE_LABELS: Record<string, string> = {
   spices: "spices",
 };
 
-export default async function ShopPage() {
+export default async function ShopPage({ searchParams }: ShopPageProps) {
+  const { fresh } = await searchParams;
+  // Only honor `fresh` when it's a recent timestamp (< 5 minutes old)
+  // AND not in the future. Without this guard:
+  //  - a bookmarked or shared /shop?fresh=… URL would permanently
+  //    bypass the 24h Kroger price cache (burns API quota, slow
+  //    visits)
+  //  - a tampered far-future timestamp (e.g. ?fresh=99999999999999)
+  //    would yield a negative age and still pass any "<= TTL" check
+  // The button generates a fresh Date.now() each click, so 5min is
+  // plenty for the redirect to land.
+  // Normalize array-shaped query (?fresh=a&fresh=b) to first value
+  // before parsing.
+  const FRESH_TTL_MS = 5 * 60 * 1000;
+  const freshRaw = Array.isArray(fresh) ? fresh[0] : fresh;
+  const freshMs = freshRaw ? Number(freshRaw) : NaN;
+  const ageMs = Date.now() - freshMs;
+  const bypassPriceCache =
+    Number.isFinite(freshMs) &&
+    freshMs > 0 &&
+    ageMs >= 0 &&
+    ageMs <= FRESH_TTL_MS;
   const supabase = await createClient();
   const {
     data: { user },
@@ -146,6 +184,7 @@ export default async function ShopPage() {
         supabase,
         locationId: krogerLocationId,
         queries: allItemNames,
+        bypassCache: bypassPriceCache,
       }).catch(() => emptyPriceMap)
     : emptyPriceMap;
 
@@ -190,10 +229,15 @@ export default async function ShopPage() {
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-3xl mx-auto flex flex-col gap-8">
       <header className="flex flex-col gap-2">
-        <Label>derived from your plan</Label>
-        <H size="xl" as="h1">
-          Shop
-        </H>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-2">
+            <Label>derived from your plan</Label>
+            <H size="xl" as="h1">
+              Shop
+            </H>
+          </div>
+          <ShopRefresh withPrices={!!krogerLocationId} />
+        </div>
         <Body size="lg" dim>
           {list.total} items · {list.inPantry} already in inventory
           {krogerLocationId && estCovered > 0 ? (
