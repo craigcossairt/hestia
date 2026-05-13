@@ -74,6 +74,12 @@ export function StreamingPreviewModal({
   // wasteful, so we omit it explicitly via lint-disable.
   useEffect(() => {
     if (!open) {
+      // Abort any in-flight save BEFORE clearing refs. handleClose
+      // covers the user-click path, but the parent can also flip
+      // `open` directly (e.g., on route change). A reopen without
+      // this abort could stack a second save against the same plan.
+      saveCtrlRef.current?.abort();
+      saveCtrlRef.current = null;
       submittedRef.current = false;
       savedRef.current = false;
       setPhase("streaming");

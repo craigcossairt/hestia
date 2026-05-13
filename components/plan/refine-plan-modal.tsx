@@ -84,6 +84,13 @@ export function RefinePlanModal({
 
   function applyDiff() {
     if (!object) return;
+    // Re-entry guard: phase === "applying" means a request is already
+    // in flight (or just resolved + state hasn't flipped yet). Without
+    // this check, double-clicking Apply created a second AbortController,
+    // orphaned the first request (its setState chain still ran into an
+    // unmounted-or-stale component), and could enqueue duplicate writes
+    // server-side.
+    if (phase === "applying") return;
     setPhase("applying");
     setError(null);
     applyCtrlRef.current = new AbortController();
