@@ -80,6 +80,9 @@ export async function logPlannedMeal(planEntryId: string) {
 
   revalidatePath("/today");
   revalidatePath("/plan");
+  // Pantry can shrink (auto-decrement) or recipe history can shift,
+  // both of which affect what /shop says you still need.
+  revalidatePath("/shop");
 }
 
 export async function skipPlannedMeal(planEntryId: string) {
@@ -91,6 +94,9 @@ export async function skipPlannedMeal(planEntryId: string) {
     .eq("user_id", user.id);
   revalidatePath("/today");
   revalidatePath("/plan");
+  // Pantry can shrink (auto-decrement) or recipe history can shift,
+  // both of which affect what /shop says you still need.
+  revalidatePath("/shop");
 }
 
 // Log an ad-hoc meal not tied to the plan. The slot (if provided) is now
@@ -141,6 +147,10 @@ export async function logCustomMeal(payload: {
 
   revalidatePath("/today");
   revalidatePath("/stats");
+  // Custom logs can flip an existing plan entry to "logged" (and may
+  // shrink pantry indirectly if the user later auto-decrements). /shop
+  // reads plan + pantry, so refresh it.
+  revalidatePath("/shop");
 }
 
 export async function removeMealLog(logId: string) {
@@ -185,6 +195,9 @@ export async function removeMealLog(logId: string) {
   revalidatePath("/today");
   revalidatePath("/plan");
   revalidatePath("/stats");
+  // Removing a log can flip a plan entry back to "planned" + restore
+  // its place on the shop list, so refresh /shop too.
+  revalidatePath("/shop");
 }
 
 // Backwards-compatible alias for older imports.

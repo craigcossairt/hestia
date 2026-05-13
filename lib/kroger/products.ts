@@ -130,22 +130,28 @@ async function lookupOne(args: {
   supabase: SupabaseClient;
   locationId: string;
   query: string;
+  // When true, skip the cache hit-check and force a live fetch. Used
+  // by the /shop "Refresh prices" button so users can bust stale
+  // prices on demand without waiting for the 24h TTL.
+  bypassCache?: boolean;
 }): Promise<KrogerProductMatch | null> {
   const q = args.query.trim().toLowerCase();
   if (!q) return null;
 
-  const { data: cached } = await args.supabase
-    .from("kroger_price_cache")
-    .select(
-      "product_id, description, price_cents, sale_price_cents, aisle_number, size_text, fetched_at",
-    )
-    .eq("location_id", args.locationId)
-    .eq("query", q)
-    .maybeSingle();
+  if (!args.bypassCache) {
+    const { data: cached } = await args.supabase
+      .from("kroger_price_cache")
+      .select(
+        "product_id, description, price_cents, sale_price_cents, aisle_number, size_text, fetched_at",
+      )
+      .eq("location_id", args.locationId)
+      .eq("query", q)
+      .maybeSingle();
 
-  if (cached) {
-    const fetchedAt = new Date(cached.fetched_at as string).getTime();
-    if (Date.now() - fetchedAt < TTL_MS) return rowToMatch(cached as CacheRow);
+    if (cached) {
+      const fetchedAt = new Date(cached.fetched_at as string).getTime();
+      if (Date.now() - fetchedAt < TTL_MS) return rowToMatch(cached as CacheRow);
+    }
   }
 
   // Cache miss or stale — fetch from Kroger.
@@ -185,11 +191,21 @@ export async function lookupPricesForList(args: {
   supabase: SupabaseClient;
   locationId: string;
   queries: string[];
+  // Force-refresh path: when true, every lookup ignores the cache and
+  // refetches live from Kroger. Used by the /shop refresh button.
+  bypassCache?: boolean;
 }): Promise<Map<string, KrogerProductMatch | null>> {
   const result = new Map<string, KrogerProductMatch | null>();
   const unique = [...new Set(args.queries.map((q) => q.trim().toLowerCase()).filter(Boolean))];
   const matches = await Promise.all(
-    unique.map((q) => lookupOne({ supabase: args.supabase, locationId: args.locationId, query: q })),
+    unique.map((q) =>
+      lookupOne({
+        supabase: args.supabase,
+        locationId: args.locationId,
+        query: q,
+        bypassCache: args.bypassCache,
+      }),
+    ),
   );
   for (let i = 0; i < unique.length; i++) {
     result.set(unique[i], matches[i]);

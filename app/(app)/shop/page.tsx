@@ -4,12 +4,21 @@ import { deriveGroceryList } from "@/lib/grocery/derive";
 import { GroceryRow } from "@/components/grocery/grocery-row";
 import { LogPurchaseForm } from "@/components/grocery/log-purchase-form";
 import { BulkActionLink } from "@/components/grocery/bulk-actions";
+import { ShopRefresh } from "@/components/grocery/shop-refresh";
 import { clearCheckedGroceryItems } from "./actions";
 import { lookupPricesForList } from "@/lib/kroger/products";
 import { getUserKrogerSession } from "@/lib/kroger/oauth";
 import { computeUnitsNeeded } from "@/lib/kroger/package-size";
 import { SendToCart } from "@/components/grocery/send-to-cart";
 import type { Ingredient } from "@/lib/types/database";
+
+interface ShopPageProps {
+  // `fresh` is a millisecond timestamp set by the Refresh-prices
+  // button; presence (any value) signals "bypass the Kroger price
+  // cache for this load". The value itself is just a cachebuster so
+  // Next.js doesn't dedupe to a prior RSC payload.
+  searchParams: Promise<{ fresh?: string }>;
+}
 
 interface GroceryPurchaseRow {
   id: string;
@@ -28,7 +37,9 @@ const AISLE_LABELS: Record<string, string> = {
   spices: "spices",
 };
 
-export default async function ShopPage() {
+export default async function ShopPage({ searchParams }: ShopPageProps) {
+  const { fresh } = await searchParams;
+  const bypassPriceCache = typeof fresh === "string" && fresh.length > 0;
   const supabase = await createClient();
   const {
     data: { user },
@@ -146,6 +157,7 @@ export default async function ShopPage() {
         supabase,
         locationId: krogerLocationId,
         queries: allItemNames,
+        bypassCache: bypassPriceCache,
       }).catch(() => emptyPriceMap)
     : emptyPriceMap;
 
@@ -190,10 +202,15 @@ export default async function ShopPage() {
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-3xl mx-auto flex flex-col gap-8">
       <header className="flex flex-col gap-2">
-        <Label>derived from your plan</Label>
-        <H size="xl" as="h1">
-          Shop
-        </H>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-2">
+            <Label>derived from your plan</Label>
+            <H size="xl" as="h1">
+              Shop
+            </H>
+          </div>
+          <ShopRefresh withPrices={!!krogerLocationId} />
+        </div>
         <Body size="lg" dim>
           {list.total} items · {list.inPantry} already in inventory
           {krogerLocationId && estCovered > 0 ? (

@@ -157,10 +157,16 @@ export function deriveGroceryList(args: {
     }
   }
 
-  // Convert each merged entry to a display-friendly { qty, unit }.
+  // Convert each merged entry to a display-friendly { qty, unit }. Pass
+  // the name through so displayQty can decide whether large volume
+  // units ("gallon", "quart") apply — only for liquids like milk/oil.
+  // "1.3 gallons of spinach" used to slip through here.
   const grouped = new Map<Aisle, GroceryItem[]>();
   for (const [key, item] of merged.entries()) {
-    const display = displayQty(item.category, item.baseQty, item.preferredUnit);
+    const display = displayQty(item.category, item.baseQty, {
+      unitHint: item.preferredUnit,
+      name: item.name,
+    });
     if (display.qty <= 0) continue;
     const groceryItem: GroceryItem = {
       key: `${item.aisle}:${key}`,
