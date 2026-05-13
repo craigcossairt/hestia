@@ -13,10 +13,13 @@ import { SendToCart } from "@/components/grocery/send-to-cart";
 import type { Ingredient } from "@/lib/types/database";
 
 interface ShopPageProps {
-  // `fresh` is a millisecond timestamp set by the Refresh-prices
-  // button; presence (any value) signals "bypass the Kroger price
-  // cache for this load". The value itself is just a cachebuster so
-  // Next.js doesn't dedupe to a prior RSC payload.
+  // `fresh` is a millisecond `Date.now()` set by the Refresh-prices
+  // button (see components/grocery/shop-refresh.tsx). The page parses
+  // it as a number and only bypasses the Kroger price cache when the
+  // value is finite, positive, and at most 5 minutes old. Stale or
+  // tampered values (bookmarks, hand-edited URLs) fall back to normal
+  // 24h-TTL cached behavior so the cache-bypass can't be made
+  // permanent by anyone sharing a /shop?fresh=… link.
   searchParams: Promise<{ fresh?: string }>;
 }
 
