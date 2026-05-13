@@ -100,12 +100,16 @@ export async function POST(req: NextRequest) {
     // Standard photo-resolution chain. Vision-parsed recipes don't
     // have a source URL, but the AI may still surface an image_url
     // (rare) and the chain has Pexels / Brave / AI image generation
-    // as fallbacks so the recipe card has a usable photo.
+    // as fallbacks so the recipe card has a usable photo. supabase + user
+    // passed so the ai-gen fallback can upload to Storage rather than
+    // returning a data: URI.
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
       sourceUrl: null,
       aiImageUrl: object.image_url ?? null,
       promptHint: object.tags?.slice(0, 3).join(", "),
+      supabase,
+      userId: user.id,
     });
 
     return NextResponse.json({

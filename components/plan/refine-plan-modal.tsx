@@ -40,6 +40,10 @@ export function RefinePlanModal({
     added: number;
   } | null>(null);
   const submittedRef = useRef(false);
+  // AbortController for the /refine/apply fetch — mirrors the pattern
+  // in StreamingPreviewModal so closing mid-apply doesn't leave a
+  // request running for up to 5min on the server.
+  const applyCtrlRef = useRef<AbortController | null>(null);
 
   const { object, submit, isLoading, stop } = useObject({
     api: "/api/ai/plan-week/refine",
@@ -50,7 +54,10 @@ export function RefinePlanModal({
     },
   });
 
-  // Kick off the stream once when the modal opens.
+  // Kick off the stream once when the modal opens. `submit` is a new
+  // ref every render (useObject doesn't memoize); we explicitly omit it
+  // from deps because the submittedRef guard makes re-invocation safe
+  // but wasteful.
   useEffect(() => {
     if (!open) {
       submittedRef.current = false;
@@ -65,26 +72,29 @@ export function RefinePlanModal({
       week_start: weekStart,
       user_request: userRequest,
     });
-  }, [open, submit, weekStart, userRequest]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, weekStart, userRequest]);
 
-  // Once streaming is done, the user reviews the diff and clicks Apply
-  // (or Cancel). We don't auto-apply.
+  // Abort any in-flight apply on unmount.
   useEffect(() => {
-    if (!isLoading && phase === "streaming" && object) {
-      // Stream complete — wait for user input. Nothing to do here.
-    }
-  }, [isLoading, phase, object]);
+    return () => {
+      applyCtrlRef.current?.abort();
+    };
+  }, []);
 
   function applyDiff() {
     if (!object) return;
     setPhase("applying");
     setError(null);
+    applyCtrlRef.current = new AbortController();
+    const signal = applyCtrlRef.current.signal;
     (async () => {
       try {
         const res = await fetch("/api/ai/plan-week/refine/apply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ diff: object }),
+          signal,
         });
         const text = await res.text();
         let json: {
@@ -112,6 +122,7 @@ export function RefinePlanModal({
         setPhase("done");
         router.refresh();
       } catch (err) {
+        if ((err as { name?: string }).name === "AbortError") return;
         setError((err as Error).message);
         setPhase("error");
       }
@@ -120,6 +131,7 @@ export function RefinePlanModal({
 
   function handleClose() {
     if (phase === "streaming") stop();
+    applyCtrlRef.current?.abort();
     onClose();
   }
 

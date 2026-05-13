@@ -80,6 +80,8 @@ export async function POST(req: NextRequest) {
           recipeName: t.recipeName,
           aiImageUrl: t.aiImageUrl,
           promptHint: t.promptHint,
+          supabase,
+          userId: user.id,
         }).catch(() => null),
       ),
     );
