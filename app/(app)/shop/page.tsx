@@ -16,11 +16,16 @@ interface ShopPageProps {
   // `fresh` is a millisecond `Date.now()` set by the Refresh-prices
   // button (see components/grocery/shop-refresh.tsx). The page parses
   // it as a number and only bypasses the Kroger price cache when the
-  // value is finite, positive, and at most 5 minutes old. Stale or
-  // tampered values (bookmarks, hand-edited URLs) fall back to normal
-  // 24h-TTL cached behavior so the cache-bypass can't be made
-  // permanent by anyone sharing a /shop?fresh=… link.
-  searchParams: Promise<{ fresh?: string }>;
+  // value is finite, positive, NOT in the future, and at most 5
+  // minutes old. Stale, future-dated, or tampered values (bookmarks,
+  // hand-edited URLs, ?fresh=99999999999999) fall back to normal 24h-
+  // TTL cached behavior so the cache-bypass can't be made permanent
+  // by anyone sharing a /shop?fresh=… link.
+  //
+  // Typed as string | string[] because Next.js represents repeated
+  // query keys (?fresh=a&fresh=b) as arrays — the impl takes the
+  // first element.
+  searchParams: Promise<{ fresh?: string | string[] }>;
 }
 
 interface GroceryPurchaseRow {
@@ -42,17 +47,26 @@ const AISLE_LABELS: Record<string, string> = {
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
   const { fresh } = await searchParams;
-  // Only honor `fresh` when it's a recent timestamp (< 5 minutes old).
-  // Without this guard, a bookmarked or shared `/shop?fresh=…` URL
-  // would permanently bypass the 24h Kroger price cache, burning the
-  // API quota and slowing every visit. The button generates a fresh
-  // Date.now() each click, so 5min is plenty for the redirect to land.
+  // Only honor `fresh` when it's a recent timestamp (< 5 minutes old)
+  // AND not in the future. Without this guard:
+  //  - a bookmarked or shared /shop?fresh=… URL would permanently
+  //    bypass the 24h Kroger price cache (burns API quota, slow
+  //    visits)
+  //  - a tampered far-future timestamp (e.g. ?fresh=99999999999999)
+  //    would yield a negative age and still pass any "<= TTL" check
+  // The button generates a fresh Date.now() each click, so 5min is
+  // plenty for the redirect to land.
+  // Normalize array-shaped query (?fresh=a&fresh=b) to first value
+  // before parsing.
   const FRESH_TTL_MS = 5 * 60 * 1000;
-  const freshMs = fresh ? Number(fresh) : NaN;
+  const freshRaw = Array.isArray(fresh) ? fresh[0] : fresh;
+  const freshMs = freshRaw ? Number(freshRaw) : NaN;
+  const ageMs = Date.now() - freshMs;
   const bypassPriceCache =
     Number.isFinite(freshMs) &&
     freshMs > 0 &&
-    Date.now() - freshMs <= FRESH_TTL_MS;
+    ageMs >= 0 &&
+    ageMs <= FRESH_TTL_MS;
   const supabase = await createClient();
   const {
     data: { user },
