@@ -20,6 +20,7 @@
 //   5. null — caller renders a FoodImage SVG fallback.
 
 import { experimental_generateImage } from "ai";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImageModel } from "./provider";
 
 export interface ResolvedPhoto {
@@ -37,8 +38,18 @@ export async function resolveRecipePhoto(args: {
   // Short cuisine / style hint for AI image gen and search refinement
   // (e.g. "creamy pasta dish, Italian, photographed from above").
   promptHint?: string;
+  // Supabase client + userId — required to enable the AI image-generation
+  // fallback. AI-gen images come back as base64 and are uploaded to the
+  // recipe-photos bucket under {userId}/ai-gen/{ts}.png so we can persist
+  // a normal https:// URL on recipes.photo_url. Without these, the AI-gen
+  // fallback is skipped (returns null after web search) to avoid the
+  // previous bug where multi-MB base64 data URIs were stored in the DB
+  // and re-served in every HTML payload, locking up browsers.
+  supabase?: SupabaseClient;
+  userId?: string;
 }): Promise<ResolvedPhoto | null> {
-  const { recipeName, sourceUrl, aiImageUrl, promptHint } = args;
+  const { recipeName, sourceUrl, aiImageUrl, promptHint, supabase, userId } =
+    args;
 
   // 0. AI's own search result
   if (aiImageUrl) {
@@ -60,9 +71,18 @@ export async function resolveRecipePhoto(args: {
   const web = await tryWebImageSearch(recipeName, promptHint);
   if (web) return { url: web, source: "web" };
 
-  // 4. AI image generation (slowest + most expensive).
-  const ai = await tryGenerateAiPhoto(recipeName, promptHint);
-  if (ai) return { url: ai, source: "ai_gen" };
+  // 4. AI image generation (slowest + most expensive). Only when we have
+  //    a Supabase client + user — otherwise we'd persist a data URI which
+  //    is a known browser-lockup vector at scale.
+  if (supabase && userId) {
+    const ai = await tryGenerateAiPhoto({
+      name: recipeName,
+      hint: promptHint,
+      supabase,
+      userId,
+    });
+    if (ai) return { url: ai, source: "ai_gen" };
+  }
 
   return null;
 }
@@ -206,13 +226,23 @@ async function tryPexelsSearch(query: string): Promise<string | null> {
   }
 }
 
-// Returns a data: URL or remote URL for the generated image. Generated
-// images are returned as base64 by most providers; we encode as data: URL
-// so the client can render directly without a CDN.
-async function tryGenerateAiPhoto(
-  name: string,
-  hint?: string,
-): Promise<string | null> {
+// Generates an image via the configured AI provider, uploads it to the
+// recipe-photos bucket, and returns the public URL.
+//
+// Previously this returned a `data:image/png;base64,…` URL directly. That
+// looked convenient but was a memory-leak vector: the resulting ~1.3 MB
+// string got persisted to recipes.photo_url and inlined into every HTML
+// page that listed the recipe. A 21-meal plan + Today + Recipes index
+// could push 30 MB of base64 into one document and lock up the browser.
+// Storing to Storage and returning the public URL fixes this — every
+// downstream page now just sees a normal https:// asset URL.
+async function tryGenerateAiPhoto(args: {
+  name: string;
+  hint?: string;
+  supabase: SupabaseClient;
+  userId: string;
+}): Promise<string | null> {
+  const { name, hint, supabase, userId } = args;
   const model = getImageModel();
   if (!model) return null;
   try {
@@ -228,12 +258,34 @@ async function tryGenerateAiPhoto(
     });
     const image = result.image;
     if (!image) return null;
-    const base64 = (image as { base64?: string; mimeType?: string }).base64
-      ?? (typeof image === "string" ? image : null);
+    const base64 =
+      (image as { base64?: string; mimeType?: string }).base64 ??
+      (typeof image === "string" ? image : null);
     if (!base64) return null;
     const mime = (image as { mimeType?: string }).mimeType ?? "image/png";
-    return `data:${mime};base64,${base64}`;
-  } catch {
+    const ext = mime.split("/")[1]?.split("+")[0] ?? "png";
+
+    // Stash under {userId}/ai-gen/ so the recipe-photos RLS policy
+    // (first folder segment must equal auth.uid()) allows the write.
+    // No recipe_id in the path because at photo-resolution time the
+    // recipe row hasn't been inserted yet — collisions are avoided
+    // with a timestamp + random suffix.
+    const buffer = Buffer.from(base64, "base64");
+    const rand = Math.random().toString(36).slice(2, 10);
+    const path = `${userId}/ai-gen/${Date.now()}-${rand}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("recipe-photos")
+      .upload(path, buffer, { contentType: mime, upsert: false });
+    if (upErr) {
+      console.warn("ai photo upload failed", upErr.message);
+      return null;
+    }
+    const { data: pub } = supabase.storage
+      .from("recipe-photos")
+      .getPublicUrl(path);
+    return pub.publicUrl;
+  } catch (err) {
+    console.warn("ai photo generation failed", (err as Error).message);
     return null;
   }
 }

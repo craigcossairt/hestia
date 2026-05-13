@@ -139,12 +139,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: friendly }, { status: 500 });
     }
 
-    // Photo: AI image url → og:image → web → pexels → ai-gen.
+    // Photo: AI image url → og:image → web → pexels → ai-gen. supabase +
+    // user passed so the ai-gen fallback can upload to Storage and
+    // return an https:// URL instead of a multi-MB data: URI (see
+    // lib/ai/photo.ts).
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
       sourceUrl: parsed.data.url,
       aiImageUrl: object.image_url ?? null,
       promptHint: object.tags?.slice(0, 3).join(", "),
+      supabase,
+      userId: user.id,
     });
 
     return NextResponse.json({

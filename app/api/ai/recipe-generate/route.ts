@@ -112,11 +112,15 @@ export async function POST(req: NextRequest) {
 
     // Best-effort photo. Doesn't block the recipe — null falls through to
     // the FoodImage SVG on the client. AI's own image_url (if any) gets
-    // first crack so we don't pay for two web searches.
+    // first crack so we don't pay for two web searches. supabase + user
+    // passed so the ai-gen fallback can upload to Storage (we never
+    // return data: URIs — see lib/ai/photo.ts).
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
       aiImageUrl: object.image_url ?? null,
       promptHint: object.tags?.slice(0, 3).join(", "),
+      supabase,
+      userId: user.id,
     });
 
     return NextResponse.json({

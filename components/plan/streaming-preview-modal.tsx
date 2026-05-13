@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { Sparkles, Check } from "lucide-react";
@@ -49,6 +49,12 @@ export function StreamingPreviewModal({
   } | null>(null);
   const submittedRef = useRef(false);
   const savedRef = useRef(false);
+  // AbortController for the /save fetch. Closing the modal mid-save used
+  // to leave the request running for up to 5min on the server, with the
+  // setState chain in the .then handler firing into an unmounted
+  // component. Worse, an impatient user who closed + re-clicked Generate
+  // would stack a second concurrent save against the same rows.
+  const saveCtrlRef = useRef<AbortController | null>(null);
 
   const { object, submit, isLoading, stop } = useObject({
     api: "/api/ai/plan-week/preview",
@@ -62,8 +68,18 @@ export function StreamingPreviewModal({
   const [elapsed, setElapsed] = useState(0);
 
   // Kick off the stream once when the modal opens.
+  // `submit` from useObject is a new function reference every render
+  // (the SDK does not memoize it). Including it in deps would fire this
+  // effect on every render — the submittedRef guard makes that safe but
+  // wasteful, so we omit it explicitly via lint-disable.
   useEffect(() => {
     if (!open) {
+      // Abort any in-flight save BEFORE clearing refs. handleClose
+      // covers the user-click path, but the parent can also flip
+      // `open` directly (e.g., on route change). A reopen without
+      // this abort could stack a second save against the same plan.
+      saveCtrlRef.current?.abort();
+      saveCtrlRef.current = null;
       submittedRef.current = false;
       savedRef.current = false;
       setPhase("streaming");
@@ -81,15 +97,17 @@ export function StreamingPreviewModal({
       include_beverage: includeBeverage,
       regenerate,
     });
-  }, [
-    open,
-    submit,
-    weekStart,
-    includeSnack,
-    includeDessert,
-    includeBeverage,
-    regenerate,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, weekStart, includeSnack, includeDessert, includeBeverage, regenerate]);
+
+  // Abort any in-flight save when the component unmounts. handleClose
+  // also aborts proactively (more reliable than relying on unmount
+  // because the parent may keep the dialog mounted with open=false).
+  useEffect(() => {
+    return () => {
+      saveCtrlRef.current?.abort();
+    };
+  }, []);
 
   // 1Hz timer while the request is in flight so the long wait feels
   // intentional. Counter resets on close.
@@ -117,6 +135,8 @@ export function StreamingPreviewModal({
     }
     savedRef.current = true;
     setPhase("saving");
+    saveCtrlRef.current = new AbortController();
+    const signal = saveCtrlRef.current.signal;
     (async () => {
       try {
         const res = await fetch("/api/ai/plan-week/save", {
@@ -130,6 +150,7 @@ export function StreamingPreviewModal({
             regenerate,
             result: object,
           }),
+          signal,
         });
         const text = await res.text();
         let json: {
@@ -157,6 +178,10 @@ export function StreamingPreviewModal({
         setPhase("done");
         router.refresh();
       } catch (err) {
+        // Aborts come through here as a DOMException with name "AbortError"
+        // (or the polyfilled equivalent). Treat as silent — the user
+        // closed the modal intentionally; don't flash an error.
+        if ((err as { name?: string }).name === "AbortError") return;
         setError((err as Error).message);
         setPhase("error");
       }
@@ -175,6 +200,10 @@ export function StreamingPreviewModal({
 
   function handleClose() {
     if (phase === "streaming") stop();
+    // Abort the save unconditionally — even in "saving" phase the user
+    // gets to back out instead of waiting up to 5min for the request
+    // to complete on its own.
+    saveCtrlRef.current?.abort();
     onClose();
   }
 
@@ -195,23 +224,39 @@ export function StreamingPreviewModal({
     return raw;
   }
 
-  // Group streamed meals by date for the preview list.
-  const mealsByDate = new Map<string, Array<{ slot: string; name: string | null; isLeftover: boolean }>>();
-  for (const m of object?.meals ?? []) {
-    if (!m?.date || !m?.slot) continue;
-    const arr = mealsByDate.get(m.date) ?? [];
-    arr.push({
-      slot: m.slot,
-      name: m.recipe?.name ?? null,
-      isLeftover: typeof m.is_leftover_of_index === "number",
-    });
-    mealsByDate.set(m.date, arr);
-  }
-  const orderedDates = [...mealsByDate.keys()].sort();
-  const total = object?.meals?.length ?? 0;
-  const named = (object?.meals ?? []).filter(
-    (m) => m?.recipe?.name || typeof m?.is_leftover_of_index === "number",
-  ).length;
+  // Group streamed meals by date for the preview list. Memoized on the
+  // meals array so the Map rebuild + sort doesn't re-run on every
+  // unrelated render (the 1Hz timer alone forces a re-render every
+  // second; previously each one rebuilt this structure from scratch,
+  // which compounded with useObject's per-chunk re-renders during a
+  // 21-meal stream to noticeably pin the main thread).
+  const { mealsByDate, orderedDates, total, named } = useMemo(() => {
+    const byDate = new Map<
+      string,
+      Array<{ slot: string; name: string | null; isLeftover: boolean }>
+    >();
+    const meals = object?.meals ?? [];
+    for (const m of meals) {
+      if (!m?.date || !m?.slot) continue;
+      const arr = byDate.get(m.date) ?? [];
+      arr.push({
+        slot: m.slot,
+        name: m.recipe?.name ?? null,
+        isLeftover: typeof m.is_leftover_of_index === "number",
+      });
+      byDate.set(m.date, arr);
+    }
+    const dates = [...byDate.keys()].sort();
+    const namedCount = meals.filter(
+      (m) => m?.recipe?.name || typeof m?.is_leftover_of_index === "number",
+    ).length;
+    return {
+      mealsByDate: byDate,
+      orderedDates: dates,
+      total: meals.length,
+      named: namedCount,
+    };
+  }, [object?.meals]);
 
   // Rotating progress hint while we wait for the stream's first tokens.
   // Once meals start arriving, the meal list itself is the progress.
