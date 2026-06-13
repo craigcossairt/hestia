@@ -38,7 +38,13 @@ export const RecipeSchema = z.object({
     .array(
       z.object({
         name: z.string(),
-        qty: z.number().nonnegative(),
+        qty: z
+          .number()
+          .nonnegative()
+          .describe(
+            "Amount for this ingredient. Must be greater than zero — never 0. " +
+              "Use realistic cooking amounts (e.g. 0.5 cup milk, 0.75 cup sugar).",
+          ),
         unit: z.string(),
         aisle: z
           .enum(["produce", "protein", "dairy", "pantry", "frozen", "spices", "bakery"])
@@ -185,6 +191,12 @@ ${pantry_hints.length ? `- Prefer ingredients the user already has when natural:
 ${household_size ? `- Servings should match the household: ~${household_size} adult portions when reasonable.` : ""}
 ${familyBlock}
 
+Ingredient quantities:
+- Every ingredient MUST have a realistic qty greater than zero. Never use 0.
+- Use US-style units (cup, tbsp, tsp, oz, lb, each, g).
+- For "to taste" items (salt, pepper), set optional: true with a small amount
+  (e.g. 0.25 tsp) rather than qty 0.
+
 User request: "${prompt}"
 
 Return ONLY a valid recipe object matching the schema. No commentary.`);
@@ -198,6 +210,7 @@ into the strict schema.
 Rules:
 - Use only what you can clearly read on the photo. Don't invent ingredients
   or steps. If quantity is illegible, use a sensible default (1 cup, 1 tbsp).
+  Never use qty 0.
 - US-style units when possible (cup, tbsp, tsp, oz, lb, each).
 - If macros aren't on the page, estimate from the ingredients (round to whole numbers).
 - If multiple recipes are visible, pick the most prominent / largest one.
@@ -220,6 +233,8 @@ ${args.htmlExcerpt.slice(0, 12000)}
 
 Rules:
 - Use only what is on the page. Do not invent ingredients or steps.
+- Every ingredient needs a realistic qty greater than zero. If quantity is
+  missing on the page, use a sensible default (1 cup, 1 tbsp, 2 each).
 - If macros aren't on the page, estimate them from the ingredients (and round to whole numbers).
 - Convert any ambiguous units to common ones (cup, tbsp, tsp, g, kg, oz, lb, ml, l, each).
 - If the page has multiple recipes, pick the primary one.

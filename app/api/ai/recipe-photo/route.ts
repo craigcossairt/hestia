@@ -19,6 +19,7 @@ import {
   getProviderOptions,
 } from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
+import { normalizeGeneratedRecipe } from "@/lib/recipes/normalize-generated-recipe";
 import {
   RecipeSchema,
   parseRecipeFromPhotoPrompt,
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
           },
         ],
       });
-      object = result.object;
+      object = normalizeGeneratedRecipe(result.object);
     } catch (err) {
       const e = err as Error;
       console.error("recipe-photo failed", {
