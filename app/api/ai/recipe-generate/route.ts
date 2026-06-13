@@ -78,7 +78,12 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: RecipeSchema,
-        providerOptions: getProviderOptions(),
+        // Disable xAI's auto live-search. The model can invent a recipe from
+        // the prompt alone; photos are resolved separately via
+        // resolveRecipePhoto(). Search has been known to surface opaque
+        // "Gone" / 503 errors from blocked hosts even when generation
+        // would succeed without it (same fix as recipe-parse).
+        providerOptions: getProviderOptions({ disableSearch: true }),
         ...getModelOpts(),
         prompt: generateRecipePrompt({
           prompt: parsed.data.prompt,
@@ -104,10 +109,24 @@ export async function POST(req: NextRequest) {
       });
       object = result.object;
     } catch (err) {
-      return NextResponse.json(
-        { error: `Generation failed: ${(err as Error).message}` },
-        { status: 500 },
-      );
+      const e = err as Error & { cause?: unknown };
+      console.error("recipe-generate failed", {
+        name: e.name,
+        message: e.message,
+        cause: e.cause,
+      });
+      const lower = (e.message || "").toLowerCase();
+      const friendly =
+        lower.includes("zod") || lower.includes("schema") || lower.includes("validation")
+          ? "Hestia couldn't shape this into a recipe — try rephrasing your request."
+          : lower.includes("timeout") || lower.includes("timed out")
+            ? "The model took too long. Try again."
+            : lower.includes("rate") || lower.includes("429")
+              ? "The model is rate-limited right now. Try again in a minute."
+              : lower === "gone" || lower.includes("410")
+                ? "The AI service hit a temporary search error. Try again — if it keeps failing, contact support."
+                : `Generation failed: ${e.message || "unknown error"}.`;
+      return NextResponse.json({ error: friendly }, { status: 500 });
     }
 
     // Best-effort photo. Doesn't block the recipe — null falls through to
