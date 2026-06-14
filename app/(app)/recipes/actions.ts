@@ -154,7 +154,7 @@ export async function updateRecipe(recipeId: string, patch: RecipePatch) {
     return { error: "You can't edit a recipe you don't own." };
   }
 
-  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const update: Record<string, unknown> = {};
   if (patch.name !== undefined) update.name = patch.name;
   if (patch.photo_url !== undefined) update.photo_url = patch.photo_url;
   if (patch.time_min !== undefined) update.time_min = patch.time_min;
@@ -221,7 +221,7 @@ export async function uploadRecipePhoto(args: {
   // DB stay in sync even if the user navigates away before saving.
   await supabase
     .from("recipes")
-    .update({ photo_url: pub.publicUrl, updated_at: new Date().toISOString() })
+    .update({ photo_url: pub.publicUrl })
     .eq("id", args.recipeId)
     .eq("owner_id", user.id);
 

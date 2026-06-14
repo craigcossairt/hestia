@@ -10,6 +10,7 @@ import {
   getProviderOptions,
 } from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
+import { normalizeGeneratedRecipe } from "@/lib/recipes/normalize-generated-recipe";
 import { parseRecipeFromUrlPrompt, RecipeSchema } from "@/lib/ai/prompts/recipe";
 
 const Body = z.object({ url: z.string().url() });
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
           htmlExcerpt: text,
         }),
       });
-      object = result.object;
+      object = normalizeGeneratedRecipe(result.object);
     } catch (err) {
       // Log the full error server-side so future failures are
       // diagnosable from Vercel logs (the user only sees the friendly

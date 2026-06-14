@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Dialog, H, Body, Btn, Label, Mono } from "@/components/ds";
+import { Dialog, H, Body, Btn, Label, Mono, Chip } from "@/components/ds";
 import { saveGeneratedRecipe } from "@/app/(app)/recipes/actions";
 import { parseIngredientPaste } from "@/lib/recipes/parse-ingredient-line";
 import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
@@ -302,16 +302,37 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
   );
 }
 
+const COMMON_TAGS = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "dessert",
+  "snack",
+  "beverage",
+  "high-protein",
+  "vegetarian",
+  "vegan",
+  "under-30min",
+  "one-pan",
+  "low-carb",
+  "gluten-free",
+];
+
 function ManualMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [ingredientsText, setIngredientsText] = useState("");
   const [stepsText, setStepsText] = useState("");
-  const [kcal, setKcal] = useState("");
-  const [protein, setProtein] = useState("");
-  const [time, setTime] = useState("");
+  const [tipsText, setTipsText] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [servings, setServings] = useState("4");
+  const [prepMin, setPrepMin] = useState("");
+  const [cookMin, setCookMin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  const totalMin =
+    (prepMin ? Number(prepMin) : 0) + (cookMin ? Number(cookMin) : 0);
 
   function save() {
     setError(null);
@@ -328,16 +349,23 @@ function ManualMode({ onClose }: { onClose: () => void }) {
       setError("Need a name, at least 2 ingredients, and 2 steps.");
       return;
     }
+    const tips = tipsText
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const servingsNum = servings ? Number(servings) : 4;
+
     start(async () => {
       const result = await saveGeneratedRecipe({
         name: name.trim(),
-        kcal: kcal ? Number(kcal) : 0,
-        protein: protein ? Number(protein) : 0,
+        kcal: 0,
+        protein: 0,
         carbs: 0,
         fat: 0,
-        time_min: time ? Number(time) : 0,
-        servings: 4,
-        tags: [],
+        time_min: totalMin > 0 ? totalMin : 0,
+        servings: servingsNum > 0 ? servingsNum : 4,
+        tags,
+        tips,
         ingredients,
         steps,
       });
@@ -371,27 +399,66 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         rows={5}
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
       />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <input
-          value={kcal}
-          onChange={(e) => setKcal(e.target.value)}
-          placeholder="kcal"
+          value={servings}
+          onChange={(e) => setServings(e.target.value)}
+          placeholder="Servings"
           inputMode="numeric"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent"
         />
         <input
-          value={protein}
-          onChange={(e) => setProtein(e.target.value)}
-          placeholder="Protein (g)"
+          value={prepMin}
+          onChange={(e) => setPrepMin(e.target.value)}
+          placeholder="Prep (min)"
           inputMode="numeric"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent"
         />
         <input
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          placeholder="Time (min)"
+          value={cookMin}
+          onChange={(e) => setCookMin(e.target.value)}
+          placeholder="Bake/cook (min)"
           inputMode="numeric"
           className="px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-mono text-[14px] outline-none focus:border-accent"
+        />
+        <input
+          value={totalMin > 0 ? String(totalMin) : ""}
+          readOnly
+          placeholder="Total (min)"
+          tabIndex={-1}
+          className="px-3 py-2 rounded-thumb border border-ink-l bg-paper-2 text-ink-3 font-mono text-[14px] cursor-default"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label>tags</Label>
+        <div className="flex flex-wrap gap-2">
+          {COMMON_TAGS.map((t) => (
+            <Chip
+              key={t}
+              variant={tags.includes(t) ? "fill" : "default"}
+              interactive
+              onClick={() =>
+                setTags((cur) =>
+                  cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t],
+                )
+              }
+            >
+              {t}
+            </Chip>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label>tips</Label>
+        <Body size="xs" dim>
+          One tip per line.
+        </Body>
+        <textarea
+          value={tipsText}
+          onChange={(e) => setTipsText(e.target.value)}
+          placeholder="Use very ripe bananas for extra sweetness."
+          rows={3}
+          className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
         />
       </div>
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}

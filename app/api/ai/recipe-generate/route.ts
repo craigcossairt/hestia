@@ -9,6 +9,7 @@ import {
   getProviderOptions,
 } from "@/lib/ai/provider";
 import { resolveRecipePhoto } from "@/lib/ai/photo";
+import { normalizeGeneratedRecipe } from "@/lib/recipes/normalize-generated-recipe";
 import { generateRecipePrompt, RecipeSchema } from "@/lib/ai/prompts/recipe";
 import type { FamilyMember } from "@/lib/family";
 
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
           })),
         }),
       });
-      object = result.object;
+      object = normalizeGeneratedRecipe(result.object);
     } catch (err) {
       const e = err as Error & { cause?: unknown };
       console.error("recipe-generate failed", {
