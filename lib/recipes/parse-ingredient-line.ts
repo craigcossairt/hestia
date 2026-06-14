@@ -3,6 +3,12 @@
 // ranges (3–4) common in home-recipe copy/paste.
 
 import { classifyAisle, type Aisle } from "@/lib/grocery/derive";
+import {
+  expandUnicodeFractions,
+  normalizeRecipeUnit,
+  parseQtyToken,
+  UNIT_ALIASES,
+} from "@/lib/recipes/quantity";
 
 export interface ParsedIngredient {
   qty: number;
@@ -17,111 +23,15 @@ function withAisle(
   return { ...row, aisle: classifyAisle(row.name) };
 }
 
-const UNICODE_FRACTION: Record<string, number> = {
-  "½": 0.5,
-  "⅓": 1 / 3,
-  "⅔": 2 / 3,
-  "¼": 0.25,
-  "¾": 0.75,
-  "⅛": 0.125,
-  "⅜": 0.375,
-  "⅝": 0.625,
-  "⅞": 0.875,
-};
-
-const UNIT_ALIASES: Record<string, string> = {
-  c: "cup",
-  cups: "cup",
-  cup: "cup",
-  tbsp: "tablespoon",
-  tbs: "tablespoon",
-  tablespoon: "tablespoon",
-  tablespoons: "tablespoon",
-  tsp: "teaspoon",
-  teaspoon: "teaspoon",
-  teaspoons: "teaspoon",
-  oz: "ounce",
-  ounce: "ounce",
-  ounces: "ounce",
-  lb: "pound",
-  lbs: "pound",
-  pound: "pound",
-  pounds: "pound",
-  g: "g",
-  gram: "g",
-  grams: "g",
-  kg: "kg",
-  ml: "ml",
-  l: "l",
-  liter: "l",
-  litre: "l",
-  stick: "stick",
-  sticks: "stick",
-  clove: "clove",
-  cloves: "clove",
-  large: "large",
-  medium: "medium",
-  small: "small",
-  each: "each",
-  ea: "each",
-  can: "can",
-  cans: "can",
-  package: "package",
-  pkg: "package",
-  slice: "slice",
-  slices: "slice",
-  pinch: "pinch",
-  pinches: "pinch",
-};
-
-function expandUnicodeFractions(text: string): string {
-  let s = text.replace(/[\u2013\u2014]/g, "-");
-  s = s.replace(/(\d)([½⅓⅔¼¾⅛⅜⅝⅞])/g, (_, whole, frac) => {
-    const n = Number(whole) + (UNICODE_FRACTION[frac] ?? 0);
-    return String(n);
-  });
-  for (const [char, val] of Object.entries(UNICODE_FRACTION)) {
-    s = s.replaceAll(char, String(val));
-  }
-  return s;
-}
-
-function parseNumberToken(token: string): number | null {
-  const t = token.trim();
-  if (!t) return null;
-  if (t.includes("/")) {
-    const [a, b] = t.split("/").map(Number);
-    if (b > 0 && Number.isFinite(a) && Number.isFinite(b)) return a / b;
-    return null;
-  }
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** "3-4" or "55-65" → average; single number passthrough. */
-function parseQtyToken(token: string): number | null {
-  const t = token.trim();
-  const range = t.match(/^(\d+(?:\.\d+)?(?:\/\d+)?)\s*-\s*(\d+(?:\.\d+)?(?:\/\d+)?)$/);
-  if (range) {
-    const a = parseNumberToken(range[1]);
-    const b = parseNumberToken(range[2]);
-    if (a != null && b != null) return (a + b) / 2;
-    return null;
-  }
-  return parseNumberToken(t);
-}
-
-function normalizeUnit(raw: string): string {
-  const key = raw.toLowerCase().replace(/\./g, "");
-  return UNIT_ALIASES[key] ?? raw.toLowerCase();
-}
-
 const KNOWN_UNITS = new Set(Object.values(UNIT_ALIASES));
 
 function isKnownUnit(word: string): boolean {
-  const n = normalizeUnit(word);
+  const n = normalizeRecipeUnit(word);
   return KNOWN_UNITS.has(n);
 }
+
+const QTY_PATTERN =
+  /(?:\d+\s+\d+\/\d+|\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?(?:\/\d+)?)?)/;
 
 /**
  * Returns parsed fields when the line looks like "½ cup flour" or
@@ -146,7 +56,7 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
 
   // qty + unit + name  OR  qty + name (count)
   const withUnit = text.match(
-    /^(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?(?:\/\d+)?)?)\s+([a-zA-Z][\w.]*)\s+(.+)$/,
+    new RegExp(`^(${QTY_PATTERN.source})\\s+([a-zA-Z][\\w.]*)\\s+(.+)$`),
   );
   if (withUnit) {
     const qty = parseQtyToken(withUnit[1]);
@@ -155,14 +65,14 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
     if (isKnownUnit(maybeUnit)) {
       return withAisle({
         qty,
-        unit: normalizeUnit(maybeUnit),
+        unit: normalizeRecipeUnit(maybeUnit),
         name: withUnit[3].trim(),
       });
     }
   }
 
   const countOnly = text.match(
-    /^(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?(?:\/\d+)?)?)\s+(.+)$/,
+    new RegExp(`^(${QTY_PATTERN.source})\\s+(.+)$`),
   );
   if (countOnly) {
     const qty = parseQtyToken(countOnly[1]);

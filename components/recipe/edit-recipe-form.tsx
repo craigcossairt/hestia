@@ -27,6 +27,12 @@ import {
   normalizeSteps,
   normalizeTips,
 } from "@/lib/recipes/normalize-recipe-form";
+import {
+  formatQuantity,
+  normalizeRecipeUnit,
+  parseQuantityInput,
+  RECIPE_UNIT_OPTIONS,
+} from "@/lib/recipes/quantity";
 import { cn } from "@/lib/utils";
 
 const COMMON_TAGS = [
@@ -54,6 +60,15 @@ const AISLE_OPTIONS = [
   "spices",
   "bakery",
 ] as const;
+
+function unitSelectOptions(unit: string): string[] {
+  const normalized = unit ? normalizeRecipeUnit(unit) : "";
+  const known = new Set<string>(RECIPE_UNIT_OPTIONS);
+  if (normalized && !known.has(normalized)) {
+    return [normalized, ...RECIPE_UNIT_OPTIONS];
+  }
+  return [...RECIPE_UNIT_OPTIONS];
+}
 
 interface InitialRecipe {
   name: string;
@@ -100,6 +115,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
   const [macroPending, startMacro] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
 
   const totalMin = form.prep_min + form.cook_min;
 
@@ -123,10 +139,31 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
   function parseIngredientRow(index: number, raw: string) {
     const parsed = parseIngredientLine(raw);
     if (!parsed) return;
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
     setForm((cur) => ({
       ...cur,
       ingredients: cur.ingredients.map((x, j) =>
         j === index ? mergeParsedIngredient(x, parsed) : x,
+      ),
+    }));
+  }
+
+  function commitQtyDraft(index: number, raw: string) {
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+    const parsed = parseQuantityInput(raw);
+    if (parsed == null) return;
+    setForm((cur) => ({
+      ...cur,
+      ingredients: cur.ingredients.map((x, j) =>
+        j === index ? { ...x, qty: parsed } : x,
       ),
     }));
   }
@@ -399,7 +436,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
         </div>
         <ul className="flex flex-col gap-2">
           {form.ingredients.map((ing, i) => (
-            <li key={i} className="grid grid-cols-[1fr_70px_90px_100px_28px] gap-2 items-center">
+            <li key={i} className="grid grid-cols-[1fr_82px_100px_100px_28px] gap-2 items-center">
               <input
                 value={ing.name}
                 onChange={(e) =>
@@ -416,33 +453,35 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
                 className={inputClass}
               />
               <input
-                type="number"
-                step="0.25"
-                min={0}
-                value={ing.qty}
+                value={qtyDrafts[i] ?? formatQuantity(ing.qty)}
+                onChange={(e) =>
+                  setQtyDrafts((prev) => ({ ...prev, [i]: e.target.value }))
+                }
+                onBlur={(e) => commitQtyDraft(i, e.target.value)}
+                placeholder="qty"
+                inputMode="text"
+                className={inputClass}
+              />
+              <select
+                value={normalizeRecipeUnit(ing.unit) || "each"}
                 onChange={(e) =>
                   patch(
                     "ingredients",
                     form.ingredients.map((x, j) =>
-                      j === i ? { ...x, qty: Number(e.target.value) || 0 } : x,
+                      j === i
+                        ? { ...x, unit: normalizeRecipeUnit(e.target.value) }
+                        : x,
                     ),
                   )
                 }
                 className={inputClass}
-              />
-              <input
-                value={ing.unit}
-                onChange={(e) =>
-                  patch(
-                    "ingredients",
-                    form.ingredients.map((x, j) =>
-                      j === i ? { ...x, unit: e.target.value } : x,
-                    ),
-                  )
-                }
-                placeholder="unit"
-                className={inputClass}
-              />
+              >
+                {unitSelectOptions(ing.unit).map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
               <select
                 value={ing.aisle ?? ""}
                 onChange={(e) =>
