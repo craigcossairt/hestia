@@ -2,7 +2,7 @@
 
 function parseMinutesToken(token: string): number | null {
   const t = token.trim().toLowerCase();
-  const range = t.match(/^(\d+)\s*-\s*(\d+)$/);
+  const range = t.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
   if (range) {
     return (Number(range[1]) + Number(range[2])) / 2;
   }
