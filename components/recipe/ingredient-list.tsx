@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { Body, Mono, Chip, Check } from "@/components/ds";
 import { SubstitutionDrawer } from "./substitution-drawer";
+import { formatQuantity } from "@/lib/recipes/quantity";
 import type { Ingredient } from "@/lib/types/database";
 
 interface IngredientListProps {
@@ -43,7 +44,7 @@ export function IngredientList({
               <Check checked={isChecked} onChange={() => toggle(i)} />
               <div className="flex-1 flex items-baseline gap-2 flex-wrap">
                 <Mono className="text-ink-3 text-[12.5px]">
-                  {ing.qty} {ing.unit}
+                  {formatQuantity(ing.qty)} {ing.unit}
                 </Mono>
                 <Body
                   className={isChecked ? "line-through text-ink-3" : "text-ink"}

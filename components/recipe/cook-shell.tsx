@@ -20,6 +20,7 @@ import {
   formatIngredientChip,
 } from "@/lib/recipes/match-ingredients";
 import { useCookTimer } from "@/lib/recipes/use-cook-timer";
+import { formatQuantity } from "@/lib/recipes/quantity";
 import { uploadRecipePhoto } from "@/app/(app)/recipes/actions";
 import type { Ingredient, Step } from "@/lib/types/database";
 
@@ -163,7 +164,7 @@ export function CookShell({
                         {ing.name}
                       </Body>
                       <Mono className="text-ink-2 text-[12px] tabular-nums shrink-0">
-                        {ing.qty} {ing.unit}
+                        {formatQuantity(ing.qty)} {ing.unit}
                       </Mono>
                     </li>
                   );

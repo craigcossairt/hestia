@@ -11,6 +11,7 @@
 // path which must be instant.
 
 import type { Ingredient } from "@/lib/types/database";
+import { formatQuantity } from "@/lib/recipes/quantity";
 
 // Strip a trailing 's' for plural-tolerant matching, but not for words
 // where the plural is a separate noun ("oats", "greens"). Keep the rule
@@ -103,6 +104,6 @@ export function matchIngredientsInStep(
 // ingredients with qty=0).
 export function formatIngredientChip(ing: Ingredient): string {
   if (!ing.qty || ing.qty <= 0) return ing.name;
-  const qty = Number.isInteger(ing.qty) ? String(ing.qty) : ing.qty.toFixed(2).replace(/\.?0+$/, "");
+  const qty = formatQuantity(ing.qty);
   return `${ing.name} · ${qty} ${ing.unit}`.trim();
 }

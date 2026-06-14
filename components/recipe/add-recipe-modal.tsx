@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Dialog, H, Body, Btn, Label, Mono, Chip } from "@/components/ds";
 import { saveGeneratedRecipe } from "@/app/(app)/recipes/actions";
 import { parseIngredientPaste } from "@/lib/recipes/parse-ingredient-line";
+import { formatQuantity } from "@/lib/recipes/quantity";
 import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
 import { cn } from "@/lib/utils";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
@@ -499,7 +500,7 @@ function RecipePreview({ recipe }: { recipe: GeneratedRecipe }) {
           {recipe.ingredients.slice(0, 8).map((ing, i) => (
             <li key={i} className="text-ink-2 font-sans text-[13px]">
               <Mono className="text-ink-3">
-                {ing.qty} {ing.unit}
+                {formatQuantity(ing.qty)} {ing.unit}
               </Mono>{" "}
               {ing.name}
             </li>
