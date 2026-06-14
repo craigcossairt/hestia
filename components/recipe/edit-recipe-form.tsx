@@ -8,9 +8,20 @@ import {
   updateRecipe,
   uploadRecipePhoto,
   deleteRecipe,
+  recalculateRecipeMacros,
   type RecipePatch,
 } from "@/app/(app)/recipes/actions";
 import type { Ingredient, Step } from "@/lib/types/database";
+import {
+  parseIngredientLine,
+  parseIngredientPaste,
+} from "@/lib/recipes/parse-ingredient-line";
+import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
+import {
+  normalizeIngredients,
+  normalizeSteps,
+  normalizeTips,
+} from "@/lib/recipes/normalize-recipe-form";
 import { cn } from "@/lib/utils";
 
 const COMMON_TAGS = [
@@ -54,6 +65,22 @@ interface InitialRecipe {
   tips: string[];
 }
 
+interface FormState extends InitialRecipe {
+  prep_min: number;
+  cook_min: number;
+}
+
+function buildInitialForm(initial: InitialRecipe): FormState {
+  return {
+    ...initial,
+    tips: normalizeTips(initial.tips),
+    ingredients: normalizeIngredients(initial.ingredients),
+    steps: normalizeSteps(initial.steps),
+    prep_min: 0,
+    cook_min: initial.time_min,
+  };
+}
+
 interface EditRecipeFormProps {
   recipeId: string;
   initial: InitialRecipe;
@@ -61,13 +88,121 @@ interface EditRecipeFormProps {
 
 export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
   const router = useRouter();
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState<FormState>(() => buildInitialForm(initial));
   const [pending, start] = useTransition();
+  const [macroPending, startMacro] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  function patch<K extends keyof InitialRecipe>(key: K, value: InitialRecipe[K]) {
+  const totalMin = form.prep_min + form.cook_min;
+
+  function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((cur) => ({ ...cur, [key]: value }));
+  }
+
+  function parseIngredientRow(index: number, raw: string) {
+    const parsed = parseIngredientLine(raw);
+    if (!parsed) return;
+    setForm((cur) => ({
+      ...cur,
+      ingredients: cur.ingredients.map((x, j) =>
+        j === index
+          ? { ...x, qty: parsed.qty, unit: parsed.unit, name: parsed.name }
+          : x,
+      ),
+    }));
+  }
+
+  function parseAllIngredients() {
+    setForm((cur) => ({
+      ...cur,
+      ingredients: cur.ingredients.map((ing) => {
+        const parsed = parseIngredientLine(ing.name);
+        if (!parsed) return ing;
+        return { ...ing, qty: parsed.qty, unit: parsed.unit, name: parsed.name };
+      }),
+    }));
+  }
+
+  function handleIngredientPaste(
+    e: React.ClipboardEvent<HTMLInputElement>,
+    index: number,
+  ) {
+    const text = e.clipboardData.getData("text");
+    if (!text.includes("\n")) return;
+    e.preventDefault();
+    const rows = parseIngredientPaste(text);
+    if (rows.length === 0) return;
+    setForm((cur) => {
+      const next = [...cur.ingredients];
+      next[index] = {
+        ...next[index],
+        qty: rows[0].qty,
+        unit: rows[0].unit,
+        name: rows[0].name,
+      };
+      for (let i = 1; i < rows.length; i++) {
+        next.splice(index + i, 0, {
+          name: rows[i].name,
+          qty: rows[i].qty,
+          unit: rows[i].unit,
+        });
+      }
+      return { ...cur, ingredients: next };
+    });
+  }
+
+  function parseStepRow(index: number) {
+    setForm((cur) => {
+      const step = cur.steps[index];
+      if (!step?.text.trim()) return cur;
+      if (step.timer_sec != null && step.timer_sec > 0) return cur;
+      const sec = parseStepTimer(step.text);
+      if (sec == null) return cur;
+      return {
+        ...cur,
+        steps: cur.steps.map((x, j) =>
+          j === index ? { ...x, timer_sec: sec } : x,
+        ),
+      };
+    });
+  }
+
+  function parseAllStepTimers() {
+    setForm((cur) => ({
+      ...cur,
+      steps: cur.steps.map((step) => {
+        if (step.timer_sec != null && step.timer_sec > 0) return step;
+        const sec = parseStepTimer(step.text);
+        if (sec == null) return step;
+        return { ...step, timer_sec: sec };
+      }),
+    }));
+  }
+
+  function recalcMacros() {
+    setStatus(null);
+    startMacro(async () => {
+      const r = await recalculateRecipeMacros(recipeId, {
+        ingredients: form.ingredients,
+        servings: form.servings,
+      });
+      if (r?.error) {
+        setStatus(`Error: ${r.error}`);
+        return;
+      }
+      if (!r?.ok) return;
+      setForm((cur) => ({
+        ...cur,
+        kcal: r.kcal ?? cur.kcal,
+        protein: r.protein ?? cur.protein,
+        carbs: r.carbs ?? cur.carbs,
+        fat: r.fat ?? cur.fat,
+      }));
+      const cov =
+        r.coverage != null ? ` (${Math.round(r.coverage * 100)}% ingredients matched)` : "";
+      setStatus(`Macros recalculated${cov}.`);
+    });
   }
 
   function save() {
@@ -75,7 +210,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     const payload: RecipePatch = {
       name: form.name,
       photo_url: form.photo_url,
-      time_min: form.time_min,
+      time_min: totalMin ?? form.time_min,
       servings: form.servings,
       kcal: form.kcal,
       protein: form.protein,
@@ -84,7 +219,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       ingredients: form.ingredients,
       steps: form.steps,
       tags: form.tags,
-      tips: form.tips,
+      tips: form.tips.filter((t) => t.trim()),
     };
     start(async () => {
       const r = await updateRecipe(recipeId, payload);
@@ -117,15 +252,38 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
             className={inputClass}
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Time (minutes)">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Field label="Prep (min)">
             <input
               type="number"
-              min={1}
+              min={0}
               max={480}
-              value={form.time_min}
-              onChange={(e) => patch("time_min", Number(e.target.value) || 0)}
+              value={form.prep_min}
+              onChange={(e) =>
+                patch("prep_min", Math.max(0, Number(e.target.value) || 0))
+              }
               className={inputClass}
+            />
+          </Field>
+          <Field label="Cook / bake (min)">
+            <input
+              type="number"
+              min={0}
+              max={480}
+              value={form.cook_min}
+              onChange={(e) =>
+                patch("cook_min", Math.max(0, Number(e.target.value) || 0))
+              }
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Total (min)">
+            <input
+              type="number"
+              readOnly
+              value={totalMin}
+              className={cn(inputClass, "bg-paper-2 text-ink-3 cursor-default")}
+              aria-label="Total time in minutes"
             />
           </Field>
           <Field label="Servings">
@@ -142,11 +300,21 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       </Card>
 
       <Card className="p-6 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Label accent>macros (per serving)</Label>
-          <Body size="xs" dim>
-            Edit only when AI / USDA estimates are wrong.
-          </Body>
+          <div className="flex items-center gap-2">
+            <Body size="xs" dim className="hidden sm:inline">
+              Edit only when AI / USDA estimates are wrong.
+            </Body>
+            <Btn
+              variant="outline"
+              size="sm"
+              onClick={recalcMacros}
+              disabled={macroPending || pending}
+            >
+              {macroPending ? "Calculating…" : "Recalculate macros"}
+            </Btn>
+          </div>
         </div>
         <div className="grid grid-cols-4 gap-2">
           <Field label="kcal">
@@ -191,18 +359,27 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       <Card className="p-6 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <Label accent>ingredients</Label>
-          <button
-            type="button"
-            onClick={() =>
-              patch("ingredients", [
-                ...form.ingredients,
-                { name: "", qty: 1, unit: "each" },
-              ])
-            }
-            className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
-          >
-            <Plus size={12} /> add row
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={parseAllIngredients}
+              className="text-ink-3 hover:text-ink text-[12px]"
+            >
+              parse quantities
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                patch("ingredients", [
+                  ...form.ingredients,
+                  { name: "", qty: 1, unit: "each" },
+                ])
+              }
+              className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
+            >
+              <Plus size={12} /> add row
+            </button>
+          </div>
         </div>
         <ul className="flex flex-col gap-2">
           {form.ingredients.map((ing, i) => (
@@ -217,6 +394,8 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
                     ),
                   )
                 }
+                onBlur={(e) => parseIngredientRow(i, e.target.value)}
+                onPaste={(e) => handleIngredientPaste(e, i)}
                 placeholder="ingredient"
                 className={inputClass}
               />
@@ -295,13 +474,22 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       <Card className="p-6 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <Label accent>steps</Label>
-          <button
-            type="button"
-            onClick={() => patch("steps", [...form.steps, { text: "" }])}
-            className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
-          >
-            <Plus size={12} /> add step
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={parseAllStepTimers}
+              className="text-ink-3 hover:text-ink text-[12px]"
+            >
+              parse timers
+            </button>
+            <button
+              type="button"
+              onClick={() => patch("steps", [...form.steps, { text: "" }])}
+              className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
+            >
+              <Plus size={12} /> add step
+            </button>
+          </div>
         </div>
         <ol className="flex flex-col gap-2">
           {form.steps.map((step, i) => (
@@ -319,6 +507,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
                     ),
                   )
                 }
+                onBlur={() => parseStepRow(i)}
                 rows={2}
                 className={cn(inputClass, "flex-1 resize-y")}
               />
@@ -383,24 +572,55 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       </Card>
 
       <Card className="p-6 flex flex-col gap-3">
-        <Label accent>tips</Label>
-        <Body size="xs" dim>
-          One tip per line.
-        </Body>
-        <textarea
-          value={form.tips.join("\n")}
-          onChange={(e) =>
-            patch(
-              "tips",
-              e.target.value
-                .split("\n")
-                .map((s) => s.trim())
-                .filter(Boolean),
-            )
-          }
-          rows={4}
-          className={cn(inputClass, "resize-y")}
-        />
+        <div className="flex items-center justify-between">
+          <Label accent>tips</Label>
+          <button
+            type="button"
+            onClick={() => patch("tips", [...form.tips, ""])}
+            className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
+          >
+            <Plus size={12} /> add tip
+          </button>
+        </div>
+        <ol className="flex flex-col gap-2">
+          {form.tips.map((tip, i) => (
+            <li key={i} className="flex gap-2 items-start">
+              <Mono className="text-ink-3 text-[14px] mt-2 w-7 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </Mono>
+              <textarea
+                value={tip}
+                onChange={(e) =>
+                  patch(
+                    "tips",
+                    form.tips.map((x, j) => (j === i ? e.target.value : x)),
+                  )
+                }
+                rows={2}
+                placeholder="Tip for best results…"
+                className={cn(inputClass, "flex-1 resize-y")}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  patch(
+                    "tips",
+                    form.tips.filter((_, j) => j !== i),
+                  )
+                }
+                className="text-ink-3 hover:text-danger p-1 rounded mt-2"
+                aria-label="remove tip"
+              >
+                <Trash2 size={14} />
+              </button>
+            </li>
+          ))}
+        </ol>
+        {form.tips.length === 0 ? (
+          <Body size="xs" dim>
+            No tips yet — add one above.
+          </Body>
+        ) : null}
       </Card>
 
       <div className="sticky bottom-4 z-10 flex items-center justify-between gap-3 bg-paper/90 backdrop-blur p-3 rounded-card border border-ink-l/40">

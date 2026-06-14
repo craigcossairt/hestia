@@ -4,6 +4,8 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog, H, Body, Btn, Label, Mono, Chip } from "@/components/ds";
 import { saveGeneratedRecipe } from "@/app/(app)/recipes/actions";
+import { parseIngredientPaste } from "@/lib/recipes/parse-ingredient-line";
+import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
 import { cn } from "@/lib/utils";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
 
@@ -334,27 +336,15 @@ function ManualMode({ onClose }: { onClose: () => void }) {
 
   function save() {
     setError(null);
-    const ingredients = ingredientsText
-      .split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((line) => {
-        // crude parse: "2 eggs" → qty 2, unit each, name eggs
-        const m = line.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)$/);
-        if (m) {
-          return {
-            qty: Number(m[1]),
-            unit: m[2] ?? "each",
-            name: m[3].trim(),
-          };
-        }
-        return { qty: 1, unit: "each", name: line };
-      });
+    const ingredients = parseIngredientPaste(ingredientsText);
     const steps = stepsText
       .split(/\n/)
       .map((l) => l.trim())
       .filter(Boolean)
-      .map((text) => ({ text }));
+      .map((text) => {
+        const timer_sec = parseStepTimer(text);
+        return timer_sec != null ? { text, timer_sec } : { text };
+      });
     if (!name.trim() || ingredients.length < 2 || steps.length < 2) {
       setError("Need a name, at least 2 ingredients, and 2 steps.");
       return;

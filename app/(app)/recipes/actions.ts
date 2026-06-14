@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
-import { maybeRefineRecipe } from "@/lib/nutrition/recipe-macros";
+import { maybeRefineRecipe, refineRecipeMacros } from "@/lib/nutrition/recipe-macros";
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -227,4 +227,60 @@ export async function uploadRecipePhoto(args: {
 
   revalidatePath(`/recipes/${args.recipeId}`);
   return { ok: true, url: pub.publicUrl };
+}
+
+/** Re-estimate per-serving macros from current ingredients via USDA. */
+export async function recalculateRecipeMacros(
+  recipeId: string,
+  data: {
+    ingredients: NonNullable<RecipePatch["ingredients"]>;
+    servings: number;
+  },
+) {
+  const { supabase, user } = await getUserOrRedirect();
+
+  const { data: existing } = await supabase
+    .from("recipes")
+    .select("owner_id")
+    .eq("id", recipeId)
+    .maybeSingle();
+  if (!existing) return { error: "Recipe not found." };
+  if (existing.owner_id !== user.id) {
+    return { error: "You can't edit a recipe you don't own." };
+  }
+
+  const refined = await refineRecipeMacros({
+    ingredients: data.ingredients,
+    servings: data.servings,
+  });
+  if (!refined) {
+    return {
+      error:
+        "Could not estimate macros — check USDA_API_KEY and that ingredient names/qty are parseable.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("recipes")
+    .update({
+      kcal: refined.kcal,
+      protein: refined.protein,
+      carbs: refined.carbs,
+      fat: refined.fat,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", recipeId)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/recipes");
+  revalidatePath(`/recipes/${recipeId}`);
+  return {
+    ok: true,
+    kcal: refined.kcal,
+    protein: refined.protein,
+    carbs: refined.carbs,
+    fat: refined.fat,
+    coverage: refined.coverage,
+  };
 }
