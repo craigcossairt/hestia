@@ -267,7 +267,6 @@ export async function recalculateRecipeMacros(
       protein: refined.protein,
       carbs: refined.carbs,
       fat: refined.fat,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", recipeId)
     .eq("owner_id", user.id);

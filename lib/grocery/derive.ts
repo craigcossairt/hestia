@@ -44,7 +44,7 @@ interface PlanRowForDerive {
   ingredients: Ingredient[];
 }
 
-function classifyAisle(name: string, hint?: string): Aisle {
+export function classifyAisle(name: string, hint?: string): Aisle {
   if (hint && (AISLE_ORDER as string[]).includes(hint)) return hint as Aisle;
   const n = name.toLowerCase();
   if (/(spinach|kale|tomato|onion|garlic|carrot|pepper|lettuce|cucumber|berr|apple|banana|lemon|lime|broccoli|zucchini|mushroom|avocado|herb|cilantro|parsley)/.test(n))
