@@ -363,6 +363,8 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         carbs: 0,
         fat: 0,
         time_min: totalMin > 0 ? totalMin : 0,
+        prep_min: prepMin ? Number(prepMin) : 0,
+        cook_min: cookMin ? Number(cookMin) : 0,
         servings: servingsNum > 0 ? servingsNum : 4,
         tags,
         tips,

@@ -53,6 +53,8 @@ export default async function EditRecipePage({
           name: recipe.name,
           photo_url: recipe.photo_url ?? null,
           time_min: recipe.time_min ?? 30,
+          prep_min: recipe.prep_min,
+          cook_min: recipe.cook_min,
           servings: recipe.servings ?? 4,
           kcal: recipe.kcal ?? 0,
           protein: recipe.protein ?? 0,

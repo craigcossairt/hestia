@@ -66,6 +66,8 @@ export interface Recipe {
   carbs: number | null;
   fat: number | null;
   time_min: number | null;
+  prep_min: number | null;
+  cook_min: number | null;
   servings: number;
   tags: string[];
   created_at: string;

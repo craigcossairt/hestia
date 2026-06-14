@@ -59,6 +59,8 @@ interface InitialRecipe {
   name: string;
   photo_url: string | null;
   time_min: number;
+  prep_min?: number | null;
+  cook_min?: number | null;
   servings: number;
   kcal: number;
   protein: number;
@@ -81,8 +83,8 @@ function buildInitialForm(initial: InitialRecipe): FormState {
     tips: normalizeTips(initial.tips),
     ingredients: normalizeIngredients(initial.ingredients),
     steps: normalizeSteps(initial.steps),
-    prep_min: 0,
-    cook_min: initial.time_min,
+    prep_min: initial.prep_min ?? 0,
+    cook_min: initial.cook_min ?? initial.time_min,
   };
 }
 
@@ -223,6 +225,8 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       name: form.name,
       photo_url: form.photo_url,
       time_min: totalMin || form.time_min,
+      prep_min: form.prep_min,
+      cook_min: form.cook_min,
       servings: form.servings,
       kcal: form.kcal,
       protein: form.protein,

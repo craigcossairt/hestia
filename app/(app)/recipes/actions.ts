@@ -24,6 +24,8 @@ export async function saveGeneratedRecipe(
     source_url?: string | null;
     source_image_url?: string | null;
     photo_url?: string | null;
+    prep_min?: number | null;
+    cook_min?: number | null;
   },
 ) {
   const { supabase, user } = await getUserOrRedirect();
@@ -48,6 +50,8 @@ export async function saveGeneratedRecipe(
       carbs: refined.carbs,
       fat: refined.fat,
       time_min: refined.time_min,
+      prep_min: recipe.prep_min ?? null,
+      cook_min: recipe.cook_min ?? null,
       servings: refined.servings ?? 4,
       family_notes_json: refined.family_modifications ?? [],
       tips_json: refined.tips ?? [],
@@ -124,6 +128,8 @@ export interface RecipePatch {
   name?: string;
   photo_url?: string | null;
   time_min?: number;
+  prep_min?: number | null;
+  cook_min?: number | null;
   servings?: number;
   kcal?: number;
   protein?: number;
@@ -162,6 +168,8 @@ export async function updateRecipe(recipeId: string, patch: RecipePatch) {
   if (patch.name !== undefined) update.name = patch.name;
   if (patch.photo_url !== undefined) update.photo_url = patch.photo_url;
   if (patch.time_min !== undefined) update.time_min = patch.time_min;
+  if (patch.prep_min !== undefined) update.prep_min = patch.prep_min;
+  if (patch.cook_min !== undefined) update.cook_min = patch.cook_min;
   if (patch.servings !== undefined) update.servings = patch.servings;
   if (patch.kcal !== undefined) update.kcal = patch.kcal;
   if (patch.protein !== undefined) update.protein = patch.protein;
