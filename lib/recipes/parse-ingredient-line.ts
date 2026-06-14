@@ -2,10 +2,19 @@
 // Handles unicode fractions (½, 1¾), vulgar fractions (1/2), and
 // ranges (3–4) common in home-recipe copy/paste.
 
+import { classifyAisle, type Aisle } from "@/lib/grocery/derive";
+
 export interface ParsedIngredient {
   qty: number;
   unit: string;
   name: string;
+  aisle?: Aisle;
+}
+
+function withAisle(
+  row: Omit<ParsedIngredient, "aisle">,
+): ParsedIngredient {
+  return { ...row, aisle: classifyAisle(row.name) };
 }
 
 const UNICODE_FRACTION: Record<string, number> = {
@@ -132,7 +141,7 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
     const avg = (Number(paren[1]) + Number(paren[2])) / 2;
     const unit = paren[3].toLowerCase();
     const name = text.slice(paren[0].length).trim();
-    if (name) return { qty: avg, unit, name };
+    if (name) return withAisle({ qty: avg, unit, name });
   }
 
   // qty + unit + name  OR  qty + name (count)
@@ -144,11 +153,11 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
     if (qty == null || qty <= 0) return null;
     const maybeUnit = withUnit[2];
     if (isKnownUnit(maybeUnit)) {
-      return {
+      return withAisle({
         qty,
         unit: normalizeUnit(maybeUnit),
         name: withUnit[3].trim(),
-      };
+      });
     }
   }
 
@@ -162,13 +171,13 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
     // "2 large eggs" — unit is size descriptor
     const sizeMatch = rest.match(/^(large|medium|small)\s+(.+)$/i);
     if (sizeMatch) {
-      return {
+      return withAisle({
         qty,
         unit: sizeMatch[1].toLowerCase(),
         name: sizeMatch[2].trim(),
-      };
+      });
     }
-    return { qty, unit: "each", name: rest };
+    return withAisle({ qty, unit: "each", name: rest });
   }
 
   return null;
@@ -180,5 +189,9 @@ export function parseIngredientPaste(blob: string): ParsedIngredient[] {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .map((line) => parseIngredientLine(line) ?? { qty: 1, unit: "each", name: line });
+    .map(
+      (line) =>
+        parseIngredientLine(line) ??
+        withAisle({ qty: 1, unit: "each", name: line }),
+    );
 }

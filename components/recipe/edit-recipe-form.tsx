@@ -12,11 +12,16 @@ import {
   type RecipePatch,
 } from "@/app/(app)/recipes/actions";
 import type { Ingredient, Step } from "@/lib/types/database";
+import type { ParsedIngredient } from "@/lib/recipes/parse-ingredient-line";
 import {
   parseIngredientLine,
   parseIngredientPaste,
 } from "@/lib/recipes/parse-ingredient-line";
 import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
+import {
+  combineStepTimer,
+  splitStepTimer,
+} from "@/lib/recipes/step-timer-display";
 import {
   normalizeIngredients,
   normalizeSteps,
@@ -100,15 +105,26 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     setForm((cur) => ({ ...cur, [key]: value }));
   }
 
+  function mergeParsedIngredient(
+    ing: Ingredient,
+    parsed: ParsedIngredient,
+  ): Ingredient {
+    return {
+      ...ing,
+      qty: parsed.qty,
+      unit: parsed.unit,
+      name: parsed.name,
+      aisle: ing.aisle ?? parsed.aisle,
+    };
+  }
+
   function parseIngredientRow(index: number, raw: string) {
     const parsed = parseIngredientLine(raw);
     if (!parsed) return;
     setForm((cur) => ({
       ...cur,
       ingredients: cur.ingredients.map((x, j) =>
-        j === index
-          ? { ...x, qty: parsed.qty, unit: parsed.unit, name: parsed.name }
-          : x,
+        j === index ? mergeParsedIngredient(x, parsed) : x,
       ),
     }));
   }
@@ -119,7 +135,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       ingredients: cur.ingredients.map((ing) => {
         const parsed = parseIngredientLine(ing.name);
         if (!parsed) return ing;
-        return { ...ing, qty: parsed.qty, unit: parsed.unit, name: parsed.name };
+        return mergeParsedIngredient(ing, parsed);
       }),
     }));
   }
@@ -134,17 +150,13 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     const rows = parseIngredientPaste(text);
     setForm((cur) => {
       const next = [...cur.ingredients];
-      next[index] = {
-        ...next[index],
-        qty: rows[0].qty,
-        unit: rows[0].unit,
-        name: rows[0].name,
-      };
+      next[index] = mergeParsedIngredient(next[index], rows[0]);
       for (let i = 1; i < rows.length; i++) {
         next.splice(index + i, 0, {
           name: rows[i].name,
           qty: rows[i].qty,
           unit: rows[i].unit,
+          aisle: rows[i].aisle,
         });
       }
       return { ...cur, ingredients: next };
@@ -510,28 +522,68 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
                 rows={2}
                 className={cn(inputClass, "flex-1 resize-y")}
               />
-              <input
-                type="number"
-                min={0}
-                placeholder="timer s"
-                value={step.timer_sec ?? ""}
-                onChange={(e) =>
-                  patch(
-                    "steps",
-                    form.steps.map((x, j) =>
-                      j === i
-                        ? {
-                            ...x,
-                            timer_sec: e.target.value
-                              ? Number(e.target.value)
-                              : undefined,
-                          }
-                        : x,
-                    ),
-                  )
-                }
-                className={cn(inputClass, "w-20 mt-1")}
-              />
+              <div className="flex gap-1 mt-1 shrink-0">
+                {(() => {
+                  const { hours, minutes } = splitStepTimer(step.timer_sec);
+                  return (
+                    <>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="h"
+                        aria-label="timer hours"
+                        value={hours > 0 ? hours : ""}
+                        onChange={(e) => {
+                          const h =
+                            e.target.value === "" ? 0 : Number(e.target.value);
+                          patch(
+                            "steps",
+                            form.steps.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    timer_sec: combineStepTimer(
+                                      h,
+                                      splitStepTimer(x.timer_sec).minutes,
+                                    ),
+                                  }
+                                : x,
+                            ),
+                          );
+                        }}
+                        className={cn(inputClass, "w-12")}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        max={59}
+                        placeholder="m"
+                        aria-label="timer minutes"
+                        value={minutes > 0 ? minutes : ""}
+                        onChange={(e) => {
+                          const m =
+                            e.target.value === "" ? 0 : Number(e.target.value);
+                          patch(
+                            "steps",
+                            form.steps.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    timer_sec: combineStepTimer(
+                                      splitStepTimer(x.timer_sec).hours,
+                                      m,
+                                    ),
+                                  }
+                                : x,
+                            ),
+                          );
+                        }}
+                        className={cn(inputClass, "w-12")}
+                      />
+                    </>
+                  );
+                })()}
+              </div>
               <button
                 type="button"
                 onClick={() =>
