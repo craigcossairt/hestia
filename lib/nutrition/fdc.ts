@@ -54,6 +54,11 @@ function getApiKey(): string | null {
   return k && k.length > 0 ? k : null;
 }
 
+/** Whether USDA_API_KEY is configured (for clearer macro-estimate errors). */
+export function hasUsdaApiKey(): boolean {
+  return getApiKey() != null;
+}
+
 // Pull our four macro values out of FDC's foodNutrients array. Returns
 // null if the food has no kcal data — those records are essentially
 // unusable for our purposes.
