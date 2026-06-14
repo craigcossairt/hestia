@@ -268,7 +268,8 @@ export async function recalculateRecipeMacros(
       carbs: refined.carbs,
       fat: refined.fat,
     })
-    .eq("id", recipeId);
+    .eq("id", recipeId)
+    .eq("owner_id", user.id);
   if (error) return { error: error.message };
 
   revalidatePath("/recipes");

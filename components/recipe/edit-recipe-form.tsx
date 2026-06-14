@@ -148,6 +148,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     if (!text.includes("\n")) return;
     e.preventDefault();
     const rows = parseIngredientPaste(text);
+    if (rows.length === 0) return;
     setForm((cur) => {
       const next = [...cur.ingredients];
       next[index] = mergeParsedIngredient(next[index], rows[0]);
@@ -230,7 +231,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       ingredients: form.ingredients,
       steps: form.steps,
       tags: form.tags,
-      tips: form.tips,
+      tips: form.tips.filter((t) => t.trim()),
     };
     start(async () => {
       const r = await updateRecipe(recipeId, payload);
