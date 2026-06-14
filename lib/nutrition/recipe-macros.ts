@@ -74,9 +74,10 @@ async function macrosForIngredient(
 // Public entrypoint. Returns refined macros (per serving) when coverage
 // is sufficient, else null — caller falls back to whatever the AI
 // generated.
-export async function refineRecipeMacros(
-  recipe: Pick<GeneratedRecipe, "ingredients" | "servings">,
-): Promise<RefinedMacros | null> {
+export async function refineRecipeMacros(recipe: {
+  ingredients: IngredientLine[];
+  servings: number;
+}): Promise<RefinedMacros | null> {
   const ingredients = recipe.ingredients ?? [];
   if (ingredients.length === 0) return null;
   const servings = Math.max(1, recipe.servings ?? 4);
@@ -130,7 +131,14 @@ export async function refineRecipeMacros(
 // values back into the recipe object, preserving everything else. If
 // refinement isn't usable, returns the input unchanged.
 export async function maybeRefineRecipe<
-  T extends Pick<GeneratedRecipe, "ingredients" | "servings" | "kcal" | "protein" | "carbs" | "fat">,
+  T extends {
+    ingredients: IngredientLine[];
+    servings: number;
+    kcal: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  },
 >(recipe: T): Promise<T> {
   const refined = await refineRecipeMacros(recipe);
   if (!refined) return recipe;
