@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import {
   matchIngredientsInStep,
   formatIngredientChip,
 } from "@/lib/recipes/match-ingredients";
+import { useCookTimer } from "@/lib/recipes/use-cook-timer";
 import { uploadRecipePhoto } from "@/app/(app)/recipes/actions";
 import type { Ingredient, Step } from "@/lib/types/database";
 
@@ -52,23 +53,11 @@ export function CookShell({
     [steps, ingredients],
   );
   const matchedForCurrent = step ? stepIngredients[i] : [];
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    setRemaining(step?.timer_sec ?? null);
-    setRunning(false);
-  }, [i, step?.timer_sec]);
-
-  useEffect(() => {
-    if (!running || remaining == null) return;
-    if (remaining <= 0) {
-      setRunning(false);
-      return;
-    }
-    const t = setInterval(() => setRemaining((r) => (r != null ? r - 1 : null)), 1000);
-    return () => clearInterval(t);
-  }, [running, remaining]);
+  const { remaining, running, toggle } = useCookTimer({
+    recipeId,
+    stepIndex: i,
+    timerSec: step?.timer_sec,
+  });
 
   if (!step) {
     return (
@@ -132,7 +121,7 @@ export function CookShell({
             </Mono>
             <button
               type="button"
-              onClick={() => setRunning((r) => !r)}
+              onClick={toggle}
               disabled={remaining <= 0}
               className="p-3 rounded-full bg-card border border-ink-l hover:border-ink-3 transition-colors disabled:opacity-50"
               aria-label={running ? "pause timer" : "start timer"}

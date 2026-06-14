@@ -10,7 +10,8 @@
 // not just covering "salt and pepper"). The thresholds are conservative
 // because a half-bad lookup is worse than the AI's whole-recipe guess.
 
-import { lookupFood } from "./fdc";
+import { hasUsdaApiKey, lookupFood } from "./fdc";
+import { normalizeIngredientNameForFdc } from "./normalize-ingredient-name";
 import { ingredientToGrams } from "./portion";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
 
@@ -58,7 +59,8 @@ async function macrosForIngredient(
   const portion = ingredientToGrams(ing.name, ing.qty, ing.unit);
   if (!portion) return null;
 
-  const food = await lookupFood(ing.name);
+  const searchName = normalizeIngredientNameForFdc(ing.name);
+  const food = await lookupFood(searchName);
   if (!food) return null;
 
   // FDC gives per-100g; scale by our gram weight.
@@ -71,25 +73,76 @@ async function macrosForIngredient(
   };
 }
 
+export type MacroRefineFailureReason =
+  | "no_ingredients"
+  | "missing_api_key"
+  | "low_coverage"
+  | "low_kcal";
+
+export type MacroRefineResult =
+  | { ok: true; macros: RefinedMacros }
+  | {
+      ok: false;
+      reason: MacroRefineFailureReason;
+      coverage: number;
+      matched: number;
+      intentionalSkip: number;
+      total: number;
+      kcalPerServing: number;
+    };
+
+export function formatMacroRefineError(
+  failure: Extract<MacroRefineResult, { ok: false }>,
+): string {
+  switch (failure.reason) {
+    case "missing_api_key":
+      return "USDA_API_KEY is not configured on the server. Add it in Vercel project settings and redeploy.";
+    case "no_ingredients":
+      return "Add at least one ingredient before estimating macros.";
+    case "low_coverage":
+      return `Could not match enough ingredients in USDA (${Math.round(failure.coverage * 100)}% coverage; need 60%). Use simple names like "all-purpose flour" and remove long parenthetical notes.`;
+    case "low_kcal":
+      return `Matched ingredients only account for ${Math.round(failure.kcalPerServing)} kcal per serving (need 150). Check quantities and units.`;
+  }
+}
+
 // Public entrypoint. Returns refined macros (per serving) when coverage
 // is sufficient, else null — caller falls back to whatever the AI
 // generated.
-export async function refineRecipeMacros(recipe: {
+export async function refineRecipeMacrosDetailed(recipe: {
   ingredients: IngredientLine[];
   servings: number;
-}): Promise<RefinedMacros | null> {
+}): Promise<MacroRefineResult> {
   const ingredients = recipe.ingredients ?? [];
-  if (ingredients.length === 0) return null;
+  if (ingredients.length === 0) {
+    return {
+      ok: false,
+      reason: "no_ingredients",
+      coverage: 0,
+      matched: 0,
+      intentionalSkip: 0,
+      total: 0,
+      kcalPerServing: 0,
+    };
+  }
+  if (!hasUsdaApiKey()) {
+    return {
+      ok: false,
+      reason: "missing_api_key",
+      coverage: 0,
+      matched: 0,
+      intentionalSkip: 0,
+      total: ingredients.length,
+      kcalPerServing: 0,
+    };
+  }
+
   const servings = Math.max(1, recipe.servings ?? 4);
 
-  // Look up everything in parallel. The fdc.ts inflight cache dedupes
-  // concurrent lookups for the same ingredient name automatically.
   const results = await Promise.all(
     ingredients.map((i) => macrosForIngredient(i)),
   );
 
-  // Account negligible / optional ingredients as "covered" (we made an
-  // intentional decision to skip them) so they don't drag coverage down.
   let matched = 0;
   let intentionalSkip = 0;
   let totalKcal = 0;
@@ -111,20 +164,50 @@ export async function refineRecipeMacros(recipe: {
   }
 
   const coverage = (matched + intentionalSkip) / ingredients.length;
-  // Threshold: at least 60% coverage AND at least 150 kcal of matched
-  // food per serving (i.e. we covered the *substantive* ingredients,
-  // not just water and seasonings).
-  if (coverage < 0.6) return null;
-  if (totalKcal / servings < 150) return null;
+  const kcalPerServing = totalKcal / servings;
+
+  if (coverage < 0.6) {
+    return {
+      ok: false,
+      reason: "low_coverage",
+      coverage,
+      matched,
+      intentionalSkip,
+      total: ingredients.length,
+      kcalPerServing,
+    };
+  }
+  if (kcalPerServing < 150) {
+    return {
+      ok: false,
+      reason: "low_kcal",
+      coverage,
+      matched,
+      intentionalSkip,
+      total: ingredients.length,
+      kcalPerServing,
+    };
+  }
 
   return {
-    kcal: Math.round(totalKcal / servings),
-    protein: Math.round(totalProtein / servings),
-    carbs: Math.round(totalCarbs / servings),
-    fat: Math.round(totalFat / servings),
-    coverage,
-    matchedKcal: totalKcal,
+    ok: true,
+    macros: {
+      kcal: Math.round(totalKcal / servings),
+      protein: Math.round(totalProtein / servings),
+      carbs: Math.round(totalCarbs / servings),
+      fat: Math.round(totalFat / servings),
+      coverage,
+      matchedKcal: totalKcal,
+    },
   };
+}
+
+export async function refineRecipeMacros(recipe: {
+  ingredients: IngredientLine[];
+  servings: number;
+}): Promise<RefinedMacros | null> {
+  const result = await refineRecipeMacrosDetailed(recipe);
+  return result.ok ? result.macros : null;
 }
 
 // Convenience wrapper: refine a recipe's macros and merge the refined

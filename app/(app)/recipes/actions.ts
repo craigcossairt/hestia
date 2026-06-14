@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
-import { maybeRefineRecipe, refineRecipeMacros } from "@/lib/nutrition/recipe-macros";
+import {
+  formatMacroRefineError,
+  maybeRefineRecipe,
+  refineRecipeMacrosDetailed,
+} from "@/lib/nutrition/recipe-macros";
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -249,16 +253,14 @@ export async function recalculateRecipeMacros(
     return { error: "You can't edit a recipe you don't own." };
   }
 
-  const refined = await refineRecipeMacros({
+  const result = await refineRecipeMacrosDetailed({
     ingredients: data.ingredients,
     servings: data.servings,
   });
-  if (!refined) {
-    return {
-      error:
-        "Could not estimate macros — check USDA_API_KEY and that ingredient names/qty are parseable.",
-    };
+  if (!result.ok) {
+    return { error: formatMacroRefineError(result) };
   }
+  const refined = result.macros;
 
   const { error } = await supabase
     .from("recipes")
