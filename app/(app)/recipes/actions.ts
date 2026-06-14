@@ -269,7 +269,8 @@ export async function recalculateRecipeMacros(
       fat: refined.fat,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", recipeId);
+    .eq("id", recipeId)
+    .eq("owner_id", user.id);
   if (error) return { error: error.message };
 
   revalidatePath("/recipes");

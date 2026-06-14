@@ -34,7 +34,7 @@ export function parseStepTimer(text: string): number | null {
   for (const m of normalized.matchAll(
     /(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(?:hr|hour|hours)\b/g,
   )) {
-    const hrs = parseMinutesToken(m[1].replace(/\.\d+/g, ""));
+    const hrs = parseMinutesToken(m[1]);
     if (hrs != null) candidates.push(hrs * 60);
   }
 

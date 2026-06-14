@@ -132,6 +132,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     if (!text.includes("\n")) return;
     e.preventDefault();
     const rows = parseIngredientPaste(text);
+    if (rows.length === 0) return;
     setForm((cur) => {
       const next = [...cur.ingredients];
       next[index] = {
@@ -209,7 +210,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
     const payload: RecipePatch = {
       name: form.name,
       photo_url: form.photo_url,
-      time_min: totalMin || form.time_min,
+      time_min: totalMin ?? form.time_min,
       servings: form.servings,
       kcal: form.kcal,
       protein: form.protein,
@@ -218,7 +219,7 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
       ingredients: form.ingredients,
       steps: form.steps,
       tags: form.tags,
-      tips: form.tips,
+      tips: form.tips.filter((t) => t.trim()),
     };
     start(async () => {
       const r = await updateRecipe(recipeId, payload);
