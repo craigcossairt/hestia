@@ -22,6 +22,7 @@
 import { experimental_generateImage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImageModel } from "./provider";
+import { assertSafeFetchUrl } from "@/lib/net/safe-url";
 
 export interface ResolvedPhoto {
   url: string;
@@ -91,24 +92,28 @@ export async function resolveRecipePhoto(args: {
 // starts with image/). Falls back to extension sniffing if HEAD isn't
 // allowed. Returns the (possibly canonical) URL on success; null otherwise.
 async function validateImageUrl(url: string): Promise<string | null> {
-  if (!/^https?:\/\//.test(url)) return null;
+  const safe = await assertSafeFetchUrl(url);
+  if (!safe.ok) return null;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url, {
+    const res = await fetch(safe.url.toString(), {
       method: "HEAD",
       signal: controller.signal,
       headers: { "User-Agent": "HestiaBot/1.0" },
+      redirect: "follow",
     });
     clearTimeout(timeout);
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") ?? "";
-    if (ct.startsWith("image/")) return url;
+    if (ct.startsWith("image/")) return safe.url.toString();
     return null;
   } catch {
     // HEAD blocked or network error — fall back to extension check so a
-    // direct .jpg/.png link still passes.
-    if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(url)) return url;
+    // direct .jpg/.png link still passes (host already SSRF-checked).
+    if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(safe.url.pathname)) {
+      return safe.url.toString();
+    }
     return null;
   }
 }
@@ -116,14 +121,17 @@ async function validateImageUrl(url: string): Promise<string | null> {
 // Lightweight og:image extractor. Avoids pulling in a full HTML parser —
 // regex is fine for the meta tag.
 async function tryExtractOgImage(url: string): Promise<string | null> {
+  const safe = await assertSafeFetchUrl(url);
+  if (!safe.ok) return null;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, {
+    const res = await fetch(safe.url.toString(), {
       signal: controller.signal,
       headers: {
         "User-Agent": "HestiaBot/1.0 (recipe photo extractor)",
       },
+      redirect: "follow",
     });
     clearTimeout(timeout);
     if (!res.ok) return null;
@@ -140,14 +148,18 @@ async function tryExtractOgImage(url: string): Promise<string | null> {
       );
     if (!m) return null;
     const candidate = m[1];
+    let absolute: string;
     if (!/^https?:\/\//.test(candidate)) {
       try {
-        return new URL(candidate, url).toString();
+        absolute = new URL(candidate, safe.url).toString();
       } catch {
         return null;
       }
+    } else {
+      absolute = candidate;
     }
-    return candidate;
+    // Re-validate the image URL itself (may be on a CDN host).
+    return validateImageUrl(absolute);
   } catch {
     return null;
   }

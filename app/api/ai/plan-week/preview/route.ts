@@ -13,6 +13,7 @@ import {
   type PlanSlot,
 } from "@/lib/ai/prompts/plan-week";
 import { buildProgramContext } from "@/lib/programs";
+import { startOfWeek, isValidDate } from "@/lib/dates/week";
 import type { FamilyMember } from "@/lib/family";
 
 // Streams the AI's plan as it's generated. The client renders meal cards
@@ -28,19 +29,6 @@ import type { FamilyMember } from "@/lib/family";
 export const maxDuration = 300;
 
 const REQUIRED_SLOTS: PlanSlot[] = ["breakfast", "lunch", "dinner"];
-
-function startOfWeek(d: Date): Date {
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const out = new Date(d);
-  out.setDate(d.getDate() + diff);
-  out.setHours(0, 0, 0, 0);
-  return out;
-}
-
-function isValidDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
-}
 
 interface RequestBody {
   week_start?: string;

@@ -10,24 +10,9 @@
 // Deliberately heuristic, not AI — this runs in the cook-mode render
 // path which must be instant.
 
+import { singularizeNoun as singularize } from "@/lib/grocery/singularize";
 import type { Ingredient } from "@/lib/types/database";
 import { formatQuantity } from "@/lib/recipes/quantity";
-
-// Strip a trailing 's' for plural-tolerant matching, but not for words
-// where the plural is a separate noun ("oats", "greens"). Keep the rule
-// minimal — false negatives are fine, the user can still scan the chips
-// or the full ingredient list.
-function singularize(word: string): string {
-  if (word.length < 4) return word;
-  // Words that look plural but really aren't standalone — skip
-  // singularization to avoid pathological matches.
-  const KEEP_AS_IS = /(oats|greens|grits|chips|sprouts|nuts|seeds|leaves)$/;
-  if (KEEP_AS_IS.test(word)) return word;
-  if (word.endsWith("ies")) return word.slice(0, -3) + "y"; // berries → berry
-  if (word.endsWith("es")) return word.slice(0, -2); // tomatoes → tomato
-  if (word.endsWith("s")) return word.slice(0, -1); // onions → onion
-  return word;
-}
 
 // Build a regex per ingredient that matches the ingredient name as a
 // whole word (case-insensitive). For a multi-word ingredient like

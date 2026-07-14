@@ -12,6 +12,7 @@ import {
 import { resolveRecipePhoto } from "@/lib/ai/photo";
 import { normalizeGeneratedRecipe } from "@/lib/recipes/normalize-generated-recipe";
 import { parseRecipeFromUrlPrompt, RecipeSchema } from "@/lib/ai/prompts/recipe";
+import { assertSafeFetchUrl } from "@/lib/net/safe-url";
 
 const Body = z.object({ url: z.string().url() });
 
@@ -35,34 +36,63 @@ export async function POST(req: NextRequest) {
     const quota = await checkAiQuota(supabase, user.id);
     if (!quota.ok && quota.response) return quota.response;
 
+    const safeUrl = await assertSafeFetchUrl(parsed.data.url);
+    if (!safeUrl.ok) {
+      return NextResponse.json({ error: safeUrl.error }, { status: 400 });
+    }
+
     let html = "";
     try {
-      const res = await fetch(parsed.data.url, {
+      const res = await fetch(safeUrl.url.toString(), {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Hestia recipe parser; contact: support@hestia.local)",
           Accept: "text/html",
         },
         signal: AbortSignal.timeout(10_000),
+        redirect: "manual",
       });
-      if (!res.ok) {
-        // Friendlier per-status messages so the modal doesn't surface
-        // bare codes like "Gone" or "Forbidden".
+      let finalRes = res;
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        if (!loc) {
+          return NextResponse.json(
+            { error: "Recipe site returned a redirect without a Location." },
+            { status: 422 },
+          );
+        }
+        const next = await assertSafeFetchUrl(
+          new URL(loc, safeUrl.url).toString(),
+        );
+        if (!next.ok) {
+          return NextResponse.json({ error: next.error }, { status: 400 });
+        }
+        finalRes = await fetch(next.url.toString(), {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Hestia recipe parser; contact: support@hestia.local)",
+            Accept: "text/html",
+          },
+          signal: AbortSignal.timeout(10_000),
+          redirect: "manual",
+        });
+      }
+      if (!finalRes.ok) {
         const friendly =
-          res.status === 410
+          finalRes.status === 410
             ? "That recipe page is gone — the site removed it. Try a different URL."
-            : res.status === 404
+            : finalRes.status === 404
               ? "Couldn't find that page (404). Double-check the URL."
-              : res.status === 403 || res.status === 401
+              : finalRes.status === 403 || finalRes.status === 401
                 ? "That site blocked the request. Try a different recipe source."
-                : res.status === 429
+                : finalRes.status === 429
                   ? "That site is rate-limiting requests. Try again in a minute."
-                  : res.status >= 500
+                  : finalRes.status >= 500
                     ? "The recipe site is having issues right now. Try again later."
-                    : `Couldn't fetch the page (${res.status} ${res.statusText || ""}).`;
+                    : `Couldn't fetch the page (${finalRes.status} ${finalRes.statusText || ""}).`;
         return NextResponse.json({ error: friendly }, { status: 422 });
       }
-      html = await res.text();
+      html = await finalRes.text();
     } catch (err) {
       const msg = (err as Error).message;
       const friendly =
@@ -74,8 +104,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: friendly }, { status: 422 });
     }
 
-    // Pull og:image before stripping markup so the parser keeps the
-    // page's marketing photo for the recipe card.
     const ogMatch =
       html.match(
         /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -85,15 +113,6 @@ export async function POST(req: NextRequest) {
       );
     const sourceImageUrl = ogMatch?.[1] ?? null;
 
-    // Strip scripts, styles, then all remaining tags. The previous regex
-    // chain was flagged by CodeQL (js/bad-tag-filter +
-    // js/incomplete-multi-character-sanitization) because hand-rolled
-    // tag regexes can be bypassed by nested patterns like
-    // `<scr<script>ipt>` and don't handle attribute values with `>`
-    // characters. striptags is a small dedicated parser that handles
-    // both cases. The output is fed straight to the AI prompt — there's
-    // no XSS surface here, but using a real parser also eliminates the
-    // class of CodeQL alert.
     const text = striptags(html, [], " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -103,13 +122,6 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: RecipeSchema,
-        // Disable xAI's auto live-search for this route. We already
-        // have the page's HTML, so search is at best wasted budget and
-        // at worst a source of opaque errors (xAI's search subsystem
-        // has been known to surface "Gone" / "503" type errors when a
-        // searched host blocks its crawler — those bubble up as the
-        // generateObject error message even though our own fetch
-        // returned 200).
         providerOptions: getProviderOptions({ disableSearch: true }),
         ...getModelOpts(),
         prompt: parseRecipeFromUrlPrompt({
@@ -119,9 +131,6 @@ export async function POST(req: NextRequest) {
       });
       object = normalizeGeneratedRecipe(result.object);
     } catch (err) {
-      // Log the full error server-side so future failures are
-      // diagnosable from Vercel logs (the user only sees the friendly
-      // message). Categorise into something actionable when we can.
       const e = err as Error & { name?: string; cause?: unknown };
       console.error("recipe-parse failed", {
         name: e.name,
@@ -130,7 +139,9 @@ export async function POST(req: NextRequest) {
       });
       const lower = (e.message || "").toLowerCase();
       const friendly =
-        lower.includes("zod") || lower.includes("schema") || lower.includes("validation")
+        lower.includes("zod") ||
+        lower.includes("schema") ||
+        lower.includes("validation")
           ? "Hestia couldn't read this page as a recipe — the page layout might be too unusual. Try a simpler recipe URL."
           : lower.includes("timeout") || lower.includes("timed out")
             ? "The model took too long to parse this page. Try again."
@@ -140,10 +151,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: friendly }, { status: 500 });
     }
 
-    // Photo: AI image url → og:image → web → pexels → ai-gen. supabase +
-    // user passed so the ai-gen fallback can upload to Storage and
-    // return an https:// URL instead of a multi-MB data: URI (see
-    // lib/ai/photo.ts).
     const photo = await resolveRecipePhoto({
       recipeName: object.name,
       sourceUrl: parsed.data.url,

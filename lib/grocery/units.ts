@@ -14,6 +14,8 @@
 //   4. Picks the most natural display unit on the way out (lb when
 //      qty ≥ 16 oz, etc.).
 
+import { singularizeNoun } from "@/lib/grocery/singularize";
+
 export type UnitCategory = "volume" | "weight" | "count" | "package" | "other";
 
 // Volumes expressed in teaspoons (smallest US kitchen volume).
@@ -121,26 +123,6 @@ const SIZE_ADJECTIVE_UNITS = new Set([
   "extra large",
   "jumbo",
 ]);
-
-// Singularise an ingredient name so "apples" and "apple" merge on the
-// shopping list. Conservative — only the common English suffix
-// transforms — and leaves words shorter than 4 chars alone (oil, egg,
-// rib) plus a small block-list of words that look plural but aren't
-// (oats, greens). False negatives are fine; the user can edit the
-// recipe to clean it up.
-function singularizeNoun(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.length < 4) return name;
-  const KEEP_AS_IS = /(oats|greens|grits|chips|sprouts|leaves|seeds|nuts|peas|berries)$/;
-  if (KEEP_AS_IS.test(lower)) return name;
-  if (lower.endsWith("ies")) return name.slice(0, -3) + "y"; // berries → berry
-  if (lower.endsWith("ches") || lower.endsWith("shes") || lower.endsWith("xes")) {
-    return name.slice(0, -2); // peaches → peach
-  }
-  if (lower.endsWith("oes")) return name.slice(0, -2); // tomatoes → tomato
-  if (lower.endsWith("s") && !lower.endsWith("ss")) return name.slice(0, -1);
-  return name;
-}
 
 // Apply singularization to every word in a multi-word name so
 // "medium apples" and "medium apple" both land on "medium apple".

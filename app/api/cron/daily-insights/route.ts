@@ -1,18 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { generateText } from "ai";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import { insightPrompt } from "@/lib/ai/prompts/insight";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
+function bearerMatches(authHeader: string | null, secret: string): boolean {
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice("Bearer ".length);
+  const a = Buffer.from(token);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 // Vercel Cron hits this once a day. For each onboarded user that doesn't
 // already have a fresh insight today, generate one with prompt #8 (Noom-
 // style behavioural nudge). Authenticated via the CRON_SECRET env var that
-// Vercel passes as Bearer token.
+// Vercel passes as Bearer token. proxy.ts treats /api/cron as public so
+// the request reaches this handler without a Supabase session.
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
   const expected = process.env.CRON_SECRET;
   if (!expected) {
     return NextResponse.json(
@@ -20,7 +30,7 @@ export async function GET(req: NextRequest) {
       { status: 500 },
     );
   }
-  if (auth !== `Bearer ${expected}`) {
+  if (!bearerMatches(req.headers.get("authorization"), expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -47,16 +57,12 @@ export async function GET(req: NextRequest) {
     protein_target: number | null;
     dietary_restrictions: string[];
   };
-  const xai = (() => {
-    try {
-      return getXai();
-    } catch {
-      return null;
-    }
-  })();
-  if (!xai) {
+  let model;
+  try {
+    model = getModel("fast");
+  } catch {
     return NextResponse.json(
-      { error: "XAI_API_KEY not configured" },
+      { error: "AI provider not configured" },
       { status: 500 },
     );
   }
@@ -126,7 +132,7 @@ export async function GET(req: NextRequest) {
 
     try {
       const { text } = await generateText({
-        model: xai(MODELS.fast),
+        model,
         prompt: insightPrompt({
           name: profile.name,
           goal: profile.goal ?? "maintain",

@@ -12,6 +12,7 @@ import {
   getRedirectUriFromRequest,
 } from "@/lib/kroger/oauth";
 import { isKrogerConfigured } from "@/lib/kroger/client";
+import { sanitizeReturnPath } from "@/lib/net/safe-url";
 import crypto from "crypto";
 
 const STATE_COOKIE = "kroger_oauth_state";
@@ -40,7 +41,10 @@ export async function GET(req: NextRequest) {
   }
 
   const state = crypto.randomBytes(24).toString("hex");
-  const returnPath = req.nextUrl.searchParams.get("return") || "/shop";
+  const returnPath = sanitizeReturnPath(
+    req.nextUrl.searchParams.get("return"),
+    "/shop",
+  );
   const redirectUri = getRedirectUriFromRequest(req);
   const url = buildAuthorizeUrl(state, redirectUri);
   if (!url) {

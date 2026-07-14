@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { computeTargets, type TargetInputs } from "@/lib/ai/targets";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
+import { assertAiQuota } from "@/lib/ai/quota";
 import { blueprintPrompt } from "@/lib/ai/prompts/blueprint";
 
 export interface OnboardSubmission {
@@ -37,28 +38,32 @@ export async function submitOnboarding(submission: OnboardSubmission) {
     goal: submission.goal,
   });
 
-  // Best-effort AI narrative — if the call fails (no key, network), persist
-  // numbers anyway and skip the narrative.
+  // Best-effort AI narrative — if the call fails (no key, network, quota),
+  // persist numbers anyway and skip the narrative.
   let narrative: string | null = null;
-  try {
-    const xai = getXai();
-    const { text } = await generateText({
-      model: xai(MODELS.fast),
-      prompt: blueprintPrompt(
-        {
-          sex: submission.sex,
-          age: submission.age,
-          height_cm: submission.height_cm,
-          weight_kg: submission.weight_kg,
-          activity: submission.activity,
-          goal: submission.goal,
-        },
-        targets,
-      ),
-    });
-    narrative = text.trim();
-  } catch (err) {
-    console.warn("Blueprint narrative skipped:", (err as Error).message);
+  const quota = await assertAiQuota(supabase, user.id);
+  if (!quota.ok) {
+    console.warn("Blueprint narrative skipped:", quota.error);
+  } else {
+    try {
+      const { text } = await generateText({
+        model: getModel("fast"),
+        prompt: blueprintPrompt(
+          {
+            sex: submission.sex,
+            age: submission.age,
+            height_cm: submission.height_cm,
+            weight_kg: submission.weight_kg,
+            activity: submission.activity,
+            goal: submission.goal,
+          },
+          targets,
+        ),
+      });
+      narrative = text.trim();
+    } catch (err) {
+      console.warn("Blueprint narrative skipped:", (err as Error).message);
+    }
   }
 
   const { error } = await supabase

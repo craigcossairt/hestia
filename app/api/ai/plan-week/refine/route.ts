@@ -12,25 +12,13 @@ import {
   refinePlanPrompt,
 } from "@/lib/ai/prompts/refine-plan";
 import { buildProgramContext } from "@/lib/programs";
+import { startOfWeek, isValidDate } from "@/lib/dates/week";
 import type { FamilyMember } from "@/lib/family";
 import type { PlanSlot } from "@/lib/ai/prompts/plan-week";
 
 // Refines are usually small (1-3 new recipes), but a "regenerate the
 // whole week as vegetarian" diff can rival a full plan. Use Vercel default.
 export const maxDuration = 300;
-
-function startOfWeek(d: Date): Date {
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const out = new Date(d);
-  out.setDate(d.getDate() + diff);
-  out.setHours(0, 0, 0, 0);
-  return out;
-}
-
-function isValidDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
-}
 
 interface RequestBody {
   week_start?: string;

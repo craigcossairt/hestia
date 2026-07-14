@@ -1,6 +1,6 @@
-// Hand-rolled DB types matching supabase/migrations/0001_init.sql.
-// Replace with `supabase gen types typescript --project-id … > database.ts` once
-// the Supabase project is provisioned.
+// Hand-rolled DB types matching supabase/migrations through 0023.
+// Regenerate with `supabase gen types typescript --project-id … > database.ts`
+// when possible.
 
 export type Sex = "male" | "female" | "other";
 export type Activity = "sedentary" | "light" | "moderate" | "active" | "very_active";
@@ -31,9 +31,24 @@ export interface Profile {
   carbs_target: number | null;
   fat_target: number | null;
   dietary_restrictions: string[];
+  allergies: string[];
+  disliked_foods: string[];
+  medical_conditions: string[];
+  active_programs: string[];
+  // Stored as jsonb; shape is FamilyMember[] in lib/family (avoid circular import).
+  family_json: unknown[];
   schedule_json: Record<string, unknown>;
   accent_preset: AccentPreset;
   dark_mode: boolean;
+  auto_decrement_pantry: boolean;
+  never_shop_items: string[];
+  preferred_kroger_location_id: string | null;
+  preferred_kroger_location_name: string | null;
+  preferred_kroger_zip: string | null;
+  kroger_user_id: string | null;
+  kroger_token_expires_at: string | null;
+  // Note: kroger_access_token / kroger_refresh_token intentionally OMITTED
+  // from the client-facing Profile type.
   onboarded_at: string | null;
   created_at: string;
   updated_at: string;
@@ -61,6 +76,7 @@ export interface Recipe {
   source_image_url: string | null;
   ingredients_json: Ingredient[];
   steps_json: Step[];
+  tips_json: string[];
   kcal: number | null;
   protein: number | null;
   carbs: number | null;
@@ -104,6 +120,8 @@ export interface MealLog {
   logged_at: string;
   recipe_id: string | null;
   custom_name: string | null;
+  slot: Slot | null;
+  family_member_id: string | null;
   kcal: number | null;
   protein: number | null;
   carbs: number | null;

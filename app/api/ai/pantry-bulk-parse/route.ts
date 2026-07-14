@@ -3,7 +3,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import { bulkParsePrompt, PantryItemsSchema } from "@/lib/ai/prompts/pantry";
 
 const Body = z.object({ text: z.string().min(2).max(8000) });
@@ -25,9 +25,8 @@ export async function POST(req: NextRequest) {
   if (!quota.ok && quota.response) return quota.response;
 
   try {
-    const xai = getXai();
     const { object } = await generateObject({
-      model: xai(MODELS.fast),
+      model: getModel("fast"),
       schema: PantryItemsSchema,
       prompt: bulkParsePrompt(parsed.data.text),
     });
