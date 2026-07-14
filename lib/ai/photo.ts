@@ -22,6 +22,7 @@
 import { experimental_generateImage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImageModel } from "./provider";
+import { assertSafeFetchUrl, fetchWithSafeRedirects } from "@/lib/net/safe-url";
 
 export interface ResolvedPhoto {
   url: string;
@@ -91,24 +92,27 @@ export async function resolveRecipePhoto(args: {
 // starts with image/). Falls back to extension sniffing if HEAD isn't
 // allowed. Returns the (possibly canonical) URL on success; null otherwise.
 async function validateImageUrl(url: string): Promise<string | null> {
-  if (!/^https?:\/\//.test(url)) return null;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url, {
+    const fetched = await fetchWithSafeRedirects(url, {
       method: "HEAD",
-      signal: controller.signal,
       headers: { "User-Agent": "HestiaBot/1.0" },
+      timeoutMs: 4000,
+      maxRedirects: 3,
     });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.startsWith("image/")) return url;
+    if (!fetched.ok) {
+      // HEAD may be blocked — fall back to extension sniff after SSRF check.
+      const safe = await assertSafeFetchUrl(url);
+      if (!safe.ok) return null;
+      if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(safe.url.pathname)) {
+        return safe.url.toString();
+      }
+      return null;
+    }
+    if (!fetched.response.ok) return null;
+    const ct = fetched.response.headers.get("content-type") ?? "";
+    if (ct.startsWith("image/")) return fetched.finalUrl.toString();
     return null;
   } catch {
-    // HEAD blocked or network error — fall back to extension check so a
-    // direct .jpg/.png link still passes.
-    if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(url)) return url;
     return null;
   }
 }
@@ -117,17 +121,15 @@ async function validateImageUrl(url: string): Promise<string | null> {
 // regex is fine for the meta tag.
 async function tryExtractOgImage(url: string): Promise<string | null> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, {
-      signal: controller.signal,
+    const fetched = await fetchWithSafeRedirects(url, {
       headers: {
         "User-Agent": "HestiaBot/1.0 (recipe photo extractor)",
       },
+      timeoutMs: 6000,
+      maxRedirects: 3,
     });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const html = await res.text();
+    if (!fetched.ok || !fetched.response.ok) return null;
+    const html = await fetched.response.text();
     const m =
       html.match(
         /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -140,14 +142,18 @@ async function tryExtractOgImage(url: string): Promise<string | null> {
       );
     if (!m) return null;
     const candidate = m[1];
+    let absolute: string;
     if (!/^https?:\/\//.test(candidate)) {
       try {
-        return new URL(candidate, url).toString();
+        absolute = new URL(candidate, fetched.finalUrl).toString();
       } catch {
         return null;
       }
+    } else {
+      absolute = candidate;
     }
-    return candidate;
+    // Re-validate the image URL itself (may be on a CDN host).
+    return validateImageUrl(absolute);
   } catch {
     return null;
   }

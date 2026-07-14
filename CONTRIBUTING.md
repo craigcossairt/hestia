@@ -48,12 +48,11 @@ feedback is honest, and we're all just trying to feed our families.
 
 ## Tests
 
-There is no test suite (yet). Hestia has been verified by hand against
-the README checklist. If your PR adds a piece of logic that's hard to
-sanity-check by clicking through the UI (date math, unit conversion,
-program-conflict resolution, RLS policies), include a short test in
-`__tests__/` next to the file under test. Vitest is the assumed runner;
-wire it up in your PR if it's not there yet.
+Vitest covers pure helpers under `lib/**/*.test.ts`. Run `npm test`.
+Hestia is still primarily verified by hand against the README checklist.
+If your PR adds logic that's hard to sanity-check by clicking through the UI
+(date math, unit conversion, SSRF URL guards, program-conflict resolution,
+RLS policies), add a short test next to the file under test.
 
 ## Database changes
 

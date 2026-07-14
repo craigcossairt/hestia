@@ -2,11 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { computeTargets, type TargetInputs } from "@/lib/ai/targets";
-import { getXai, MODELS } from "@/lib/ai/grok";
-import { blueprintPrompt } from "@/lib/ai/prompts/blueprint";
+import { generateBlueprintInsight } from "@/lib/ai/blueprint-insight";
 import type { Activity, Goal, Sex } from "@/lib/types/database";
 import {
   buildPlanStaleHint,
@@ -148,21 +146,14 @@ export async function recomputeTargets() {
     .eq("id", user.id);
   if (patchErr) return { error: patchErr.message };
 
-  // Best-effort fresh narrative.
-  try {
-    const xai = getXai();
-    const { text } = await generateText({
-      model: xai(MODELS.fast),
-      prompt: blueprintPrompt(inputs, targets),
-    });
-    await supabase.from("insights").insert({
-      user_id: user.id,
-      kind: "blueprint",
-      body: text.trim(),
-    });
-  } catch (err) {
-    console.warn("Recompute narrative skipped:", (err as Error).message);
-  }
+  // Best-effort fresh narrative — skip AI if quota blocked so math still works.
+  await generateBlueprintInsight({
+    supabase,
+    userId: user.id,
+    inputs,
+    targets,
+    warnLabel: "Recompute narrative skipped",
+  });
 
   revalidatePath("/me");
   revalidatePath("/today");

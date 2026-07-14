@@ -3,7 +3,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import {
   FamilyTonightSchema,
   familyTonightPrompt,
@@ -69,9 +69,8 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   try {
-    const xai = getXai();
     const { object } = await generateObject({
-      model: xai(MODELS.fast),
+      model: getModel("fast"),
       schema: FamilyTonightSchema,
       prompt: familyTonightPrompt({
         recipe_name: recipe.name,

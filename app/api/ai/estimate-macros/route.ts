@@ -3,7 +3,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import {
   MacroEstimateSchema,
   estimateMacrosPrompt,
@@ -37,9 +37,8 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   try {
-    const xai = getXai();
     const { object } = await generateObject({
-      model: xai(MODELS.fast),
+      model: getModel("fast"),
       schema: MacroEstimateSchema,
       prompt: estimateMacrosPrompt({
         description: parsed.data.description,

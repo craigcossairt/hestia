@@ -1,23 +1,51 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import { coachSystemPrompt } from "@/lib/ai/prompts/coach";
 import { buildProgramContext } from "@/lib/programs";
 import type { FamilyMember } from "@/lib/family";
 
 export const maxDuration = 30;
 
+const Body = z.object({
+  messages: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        role: z.enum(["user", "assistant", "system"]),
+        // AI SDK v6 UIMessage uses `parts`; older shapes may use `content`.
+        parts: z.array(z.record(z.string(), z.unknown())).optional(),
+        content: z.unknown().optional(),
+      }),
+    )
+    .max(50),
+});
+
 export async function POST(req: NextRequest) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const parsed = Body.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid body: messages must be an array of at most 50 well-formed items" },
+      { status: 400 },
+    );
+  }
+  const messages = parsed.data.messages as UIMessage[];
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return new Response("Unauthorized", { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const quota = await checkAiQuota(supabase, user.id);
@@ -61,9 +89,19 @@ export async function POST(req: NextRequest) {
     members: family,
   });
 
-  const xai = getXai();
+  let modelMessages;
+  try {
+    modelMessages = await convertToModelMessages(messages);
+  } catch (err) {
+    console.warn("coach/chat: convertToModelMessages failed", err);
+    return NextResponse.json(
+      { error: "Invalid message payload." },
+      { status: 400 },
+    );
+  }
+
   const result = streamText({
-    model: xai(MODELS.fast),
+    model: getModel("fast"),
     system: coachSystemPrompt({
       name: profile?.name ?? null,
       goal: profile?.goal ?? null,
@@ -88,7 +126,7 @@ export async function POST(req: NextRequest) {
         notes: f.notes,
       })),
     }),
-    messages: await convertToModelMessages(messages),
+    messages: modelMessages,
   });
 
   return result.toUIMessageStreamResponse();

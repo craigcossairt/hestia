@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
-import { getXai, MODELS } from "@/lib/ai/grok";
+import { getModel } from "@/lib/ai/provider";
 import { insightPrompt } from "@/lib/ai/prompts/insight";
 
 // Generate a fresh "Hestia spotted" insight for the current user using
@@ -66,9 +66,8 @@ export async function POST(_req: NextRequest) {
     .slice(0, 6);
 
   try {
-    const xai = getXai();
     const { text } = await generateText({
-      model: xai(MODELS.fast),
+      model: getModel("fast"),
       prompt: insightPrompt({
         name: profile.name,
         goal: profile.goal ?? "maintain",

@@ -5,6 +5,7 @@ import { GenerateWeekButton } from "@/components/plan/generate-week-button";
 import { RefinePlanForm } from "@/components/plan/refine-plan-form";
 import { WeekNavigator } from "@/components/plan/week-navigator";
 import { inferSlotDefaults } from "@/lib/programs";
+import { startOfWeek, isValidDate } from "@/lib/dates/week";
 import type { Slot } from "@/lib/types/database";
 
 const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
@@ -14,20 +15,6 @@ const BASE_SLOTS: Slot[] = ["breakfast", "lunch", "dinner"];
 // Optional slots — rendered only when at least one entry exists for them
 // in the current week.
 const OPTIONAL_SLOTS: Slot[] = ["snack", "dessert", "beverage"];
-
-function startOfWeek(d: Date): Date {
-  // Monday-anchored
-  const day = d.getDay(); // 0 = Sun
-  const diff = day === 0 ? -6 : 1 - day;
-  const out = new Date(d);
-  out.setDate(d.getDate() + diff);
-  out.setHours(0, 0, 0, 0);
-  return out;
-}
-
-function isValidDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
-}
 
 function snapToMonday(dateStr: string): Date {
   const d = new Date(`${dateStr}T00:00:00`);

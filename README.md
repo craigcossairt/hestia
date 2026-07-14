@@ -240,8 +240,12 @@ about $1. Plan generation is the biggest single cost (~$0.30 per
 21-meal plan with live web search enabled) so set `AI_DISABLE_SEARCH=true`
 if you want to drop that to ~$0.05.
 
-For multiple users on a shared hosted instance: rate-limit the AI
-endpoints. (Not yet implemented in this codebase — see open issues.)
+AI routes and AI-backed server actions are rate-limited per user via
+`checkAiQuota` / `assertAiQuota` (`lib/ai/quota.ts`), backed by the
+`daily_ai_usage` table and `increment_daily_ai_usage` RPC. Default cap is
+**100 calls/user/day** (UTC midnight reset). Override with
+`AI_DAILY_LIMIT_PER_USER`. In production the quota check **fails closed**
+if the RPC is unavailable (set `AI_QUOTA_FAIL_CLOSED=false` to override).
 
 ---
 
@@ -327,7 +331,7 @@ lib/
 ├── types/database.ts               # hand-rolled DB types
 └── family.ts                       # member typedef + helpers
 
-supabase/migrations/                # 0001 → 0018+, run in order
+supabase/migrations/                # 0001 → 0023+, run in order
 ```
 
 ---
@@ -339,6 +343,7 @@ supabase/migrations/                # 0001 → 0018+, run in order
 | Build green | `npm run build` |
 | Type-check | `npx tsc --noEmit` |
 | Lint | `npm run lint` |
+| Unit tests | `npm test` |
 | OTP sign-in | `/login` → enter email → paste code from inbox |
 | Onboarding | walk all steps → land on `/result` with kcal target |
 | AI generate | `/recipes` → + Add → "high-protein dinner" → recipe lands |

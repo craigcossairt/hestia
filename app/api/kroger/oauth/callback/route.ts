@@ -12,6 +12,7 @@ import {
   getRedirectUriFromRequest,
   persistUserTokens,
 } from "@/lib/kroger/oauth";
+import { sanitizeReturnPath } from "@/lib/net/safe-url";
 
 const STATE_COOKIE = "kroger_oauth_state";
 const RETURN_COOKIE = "kroger_oauth_return";
@@ -25,7 +26,8 @@ function clearCookies(res: NextResponse) {
 }
 
 function errorRedirect(req: NextRequest, returnPath: string, reason: string) {
-  const url = new URL(returnPath, req.url);
+  const safe = sanitizeReturnPath(returnPath, "/shop");
+  const url = new URL(safe, req.url);
   url.searchParams.set("kroger", "error");
   url.searchParams.set("reason", reason);
   return clearCookies(NextResponse.redirect(url));
@@ -43,7 +45,10 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
-  const returnPath = req.cookies.get(RETURN_COOKIE)?.value || "/shop";
+  const returnPath = sanitizeReturnPath(
+    req.cookies.get(RETURN_COOKIE)?.value,
+    "/shop",
+  );
   const expectedState = req.cookies.get(STATE_COOKIE)?.value;
 
   // Kroger sends ?error=access_denied when the user cancels.
@@ -88,7 +93,6 @@ export async function GET(req: NextRequest) {
   }
 
   await persistUserTokens({
-    supabase,
     userId: user.id,
     tokens,
     krogerUserId,

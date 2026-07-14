@@ -10,6 +10,7 @@
 // revalidate would be overkill.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { krogerFetch } from "./client";
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -166,21 +167,26 @@ async function lookupOne(args: {
   });
   const match = json?.data ? pickProduct(json.data) : null;
 
-  // Persist (even on null match — saves a future round-trip).
-  await args.supabase.from("kroger_price_cache").upsert(
-    {
-      location_id: args.locationId,
-      query: q,
-      product_id: match?.productId ?? null,
-      description: match?.description ?? null,
-      price_cents: match?.priceCents ?? null,
-      sale_price_cents: match?.salePriceCents ?? null,
-      aisle_number: match?.aisleNumber ?? null,
-      size_text: match?.sizeText ?? null,
-      fetched_at: new Date().toISOString(),
-    },
-    { onConflict: "location_id,query" },
-  );
+  // Persist via service role — authenticated clients cannot write the
+  // shared cache after migration 0023 (poisoning prevention).
+  try {
+    await createAdminClient().from("kroger_price_cache").upsert(
+      {
+        location_id: args.locationId,
+        query: q,
+        product_id: match?.productId ?? null,
+        description: match?.description ?? null,
+        price_cents: match?.priceCents ?? null,
+        sale_price_cents: match?.salePriceCents ?? null,
+        aisle_number: match?.aisleNumber ?? null,
+        size_text: match?.sizeText ?? null,
+        fetched_at: new Date().toISOString(),
+      },
+      { onConflict: "location_id,query" },
+    );
+  } catch (err) {
+    console.warn("kroger_price_cache upsert skipped:", (err as Error).message);
+  }
   return match;
 }
 

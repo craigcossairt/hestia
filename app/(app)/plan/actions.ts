@@ -20,13 +20,14 @@ export async function setPlanSlot(args: {
   recipe_id: string;
 }) {
   const { supabase, user } = await getUserOrRedirect();
-  // Replace any existing entry for (user, date, slot).
-  await supabase
+
+  const { error: delErr } = await supabase
     .from("meal_plan_entries")
     .delete()
     .eq("user_id", user.id)
     .eq("date", args.date)
     .eq("slot", args.slot);
+  if (delErr) return { error: delErr.message };
 
   const { error } = await supabase.from("meal_plan_entries").insert({
     user_id: user.id,
@@ -44,18 +45,20 @@ export async function setPlanSlot(args: {
 
 export async function clearPlanSlot(entryId: string) {
   const { supabase, user } = await getUserOrRedirect();
-  await supabase
+  const { error } = await supabase
     .from("meal_plan_entries")
     .delete()
     .eq("id", entryId)
     .eq("user_id", user.id);
+  if (error) return { error: error.message };
   revalidatePath("/plan");
   revalidatePath("/today");
   revalidatePath("/shop");
 }
 
 // Drag-and-drop: move a plan entry to a different date/slot. If the target
-// already has an entry, swap the two.
+// already has an entry, swap via the atomic RPC (three-phase park) so we
+// never trip UNIQUE (user_id, date, slot).
 export async function movePlanEntry(args: {
   fromEntryId: string;
   toDate: string;
@@ -65,40 +68,74 @@ export async function movePlanEntry(args: {
 
   const { data: from } = await supabase
     .from("meal_plan_entries")
-    .select("id, date, slot, recipe_id, status")
+    .select("id, date, slot")
     .eq("id", args.fromEntryId)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!from) return { error: "Source not found." };
 
-  // No-op if dropped on itself.
   if (from.date === args.toDate && from.slot === args.toSlot) return;
 
-  const { data: to } = await supabase
-    .from("meal_plan_entries")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("date", args.toDate)
-    .eq("slot", args.toSlot)
-    .maybeSingle();
+  const { error } = await supabase.rpc("swap_or_move_meal_plan_entry", {
+    p_from_id: args.fromEntryId,
+    p_to_date: args.toDate,
+    p_to_slot: args.toSlot,
+  });
 
-  // Two-phase swap to avoid the partial-uniqueness conflict if we ever add a
-  // (user_id, date, slot) unique constraint later: park the source on a
-  // sentinel slot, move target into source, then move source into target.
-  if (to) {
-    await supabase
+  if (error) {
+    // Only fall back when the RPC is missing (pre-migration 0023). Other
+    // failures (RLS, deadlock, uniqueness) must surface — the unlocked JS
+    // path reintroduces the race the RPC exists to prevent.
+    const code = (error as { code?: string }).code;
+    if (code !== "PGRST202") {
+      return { error: error.message };
+    }
+
+    const parkDate = "1900-01-01";
+    const { data: to } = await supabase
       .from("meal_plan_entries")
-      .update({ date: args.toDate, slot: args.toSlot })
-      .eq("id", args.fromEntryId);
-    await supabase
-      .from("meal_plan_entries")
-      .update({ date: from.date, slot: from.slot })
-      .eq("id", to.id);
-  } else {
-    await supabase
-      .from("meal_plan_entries")
-      .update({ date: args.toDate, slot: args.toSlot })
-      .eq("id", args.fromEntryId);
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("date", args.toDate)
+      .eq("slot", args.toSlot)
+      .maybeSingle();
+
+    if (to) {
+      const { error: e1 } = await supabase
+        .from("meal_plan_entries")
+        .update({ date: parkDate, slot: from.slot })
+        .eq("id", args.fromEntryId)
+        .eq("user_id", user.id);
+      if (e1) return { error: e1.message };
+
+      const { error: e2 } = await supabase
+        .from("meal_plan_entries")
+        .update({ date: from.date, slot: from.slot })
+        .eq("id", to.id)
+        .eq("user_id", user.id);
+      if (e2) {
+        await supabase
+          .from("meal_plan_entries")
+          .update({ date: from.date, slot: from.slot })
+          .eq("id", args.fromEntryId)
+          .eq("user_id", user.id);
+        return { error: e2.message };
+      }
+
+      const { error: e3 } = await supabase
+        .from("meal_plan_entries")
+        .update({ date: args.toDate, slot: args.toSlot })
+        .eq("id", args.fromEntryId)
+        .eq("user_id", user.id);
+      if (e3) return { error: e3.message };
+    } else {
+      const { error: moveErr } = await supabase
+        .from("meal_plan_entries")
+        .update({ date: args.toDate, slot: args.toSlot })
+        .eq("id", args.fromEntryId)
+        .eq("user_id", user.id);
+      if (moveErr) return { error: moveErr.message };
+    }
   }
 
   revalidatePath("/plan");
