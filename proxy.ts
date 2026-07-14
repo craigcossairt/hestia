@@ -5,7 +5,7 @@ const PUBLIC_PATHS = ["/", "/login", "/auth"];
 const DEV_PATHS = ["/dev"];
 // Cron is authenticated by Bearer CRON_SECRET inside the route — Vercel
 // Cron has no Supabase session, so the proxy must not redirect to /login.
-const CRON_PATHS = ["/api/cron"];
+const CRON_PATHS = ["/api/cron/daily-insights"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

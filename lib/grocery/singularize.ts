@@ -3,7 +3,7 @@
 // aggressive stemming.
 
 const KEEP_AS_IS =
-  /(oats|greens|grits|chips|sprouts|leaves|seeds|nuts|peas|berries)$/;
+  /(oats|greens|grits|chips|sprouts|leaves|seeds|nuts|peas|berries|hummus|asparagus|citrus)$/;
 
 export function singularizeNoun(name: string): string {
   const lower = name.toLowerCase();

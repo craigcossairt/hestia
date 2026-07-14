@@ -10,6 +10,15 @@ const BLOCKED_HOSTNAMES = new Set([
   "metadata",
 ]);
 
+/** Strip URL brackets from IPv6 hostnames (`[::1]` → `::1`). */
+export function normalizeHostname(host: string): string {
+  const lower = host.toLowerCase().replace(/\.$/, "");
+  if (lower.startsWith("[") && lower.endsWith("]")) {
+    return lower.slice(1, -1);
+  }
+  return lower;
+}
+
 function isPrivateOrReservedIpv4(ip: string): boolean {
   const parts = ip.split(".").map((p) => Number(p));
   if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
@@ -27,9 +36,10 @@ function isPrivateOrReservedIpv4(ip: string): boolean {
 }
 
 function isPrivateOrReservedIp(ip: string): boolean {
-  if (isIP(ip) === 4) return isPrivateOrReservedIpv4(ip);
+  const normalized = normalizeHostname(ip);
+  if (isIP(normalized) === 4) return isPrivateOrReservedIpv4(normalized);
 
-  const lower = ip.toLowerCase();
+  const lower = normalized.toLowerCase();
   if (lower === "::1" || lower === "::") return true;
   if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // ULA
   if (lower.startsWith("fe80")) return true; // link-local
@@ -57,9 +67,7 @@ export function assertPublicHttpUrl(raw: string): SafeUrlResult {
     return { ok: false, error: "Only http(s) URLs are allowed." };
   }
 
-  // Prefer HTTPS for outbound fetches; allow http only for non-local hosts
-  // that already passed IP checks (some recipe sites still redirect http→https).
-  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  const host = normalizeHostname(url.hostname);
   if (!host || BLOCKED_HOSTNAMES.has(host)) {
     return { ok: false, error: "That host is not allowed." };
   }
@@ -73,7 +81,6 @@ export function assertPublicHttpUrl(raw: string): SafeUrlResult {
     return { ok: false, error: "That host is not allowed." };
   }
 
-  // Block credentialed URLs and obvious open-proxy forms.
   if (url.username || url.password) {
     return { ok: false, error: "URLs with credentials are not allowed." };
   }
@@ -83,7 +90,7 @@ export function assertPublicHttpUrl(raw: string): SafeUrlResult {
 
 /** Resolve DNS and reject if any address is private/reserved. */
 export async function assertResolvesToPublicIp(url: URL): Promise<SafeUrlResult> {
-  const host = url.hostname;
+  const host = normalizeHostname(url.hostname);
   if (isIP(host)) {
     return isPrivateOrReservedIp(host)
       ? { ok: false, error: "That host is not allowed." }
@@ -113,6 +120,52 @@ export async function assertSafeFetchUrl(raw: string): Promise<SafeUrlResult> {
   return assertResolvesToPublicIp(parsed.url);
 }
 
+/**
+ * Fetch with redirect: "manual", re-validating each Location via
+ * assertSafeFetchUrl. Caps hops so a redirect loop cannot hang.
+ */
+export async function fetchWithSafeRedirects(
+  rawUrl: string,
+  init: RequestInit & { timeoutMs?: number; maxRedirects?: number } = {},
+): Promise<{ ok: true; response: Response; finalUrl: URL } | { ok: false; error: string }> {
+  const { timeoutMs = 10_000, maxRedirects = 3, ...fetchInit } = init;
+  let current = await assertSafeFetchUrl(rawUrl);
+  if (!current.ok) return current;
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(current.url.toString(), {
+        ...fetchInit,
+        signal: controller.signal,
+        redirect: "manual",
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      return { ok: false, error: (err as Error).message || "Fetch failed." };
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) {
+        return { ok: false, error: "Redirect without Location." };
+      }
+      const next = await assertSafeFetchUrl(new URL(loc, current.url).toString());
+      if (!next.ok) return next;
+      current = next;
+      continue;
+    }
+
+    return { ok: true, response: res, finalUrl: current.url };
+  }
+
+  return { ok: false, error: "Too many redirects." };
+}
+
 /** Same-origin relative path for OAuth return cookies (blocks open redirects). */
 export function sanitizeReturnPath(
   raw: string | null | undefined,
@@ -124,7 +177,6 @@ export function sanitizeReturnPath(
   if (trimmed.startsWith("//")) return fallback;
   if (trimmed.includes("://")) return fallback;
   if (trimmed.includes("\\")) return fallback;
-  // Disallow control chars / newlines that can break Location headers.
   if (/[\0-\x1f\x7f]/.test(trimmed)) return fallback;
   return trimmed;
 }

@@ -22,7 +22,7 @@
 import { experimental_generateImage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImageModel } from "./provider";
-import { assertSafeFetchUrl } from "@/lib/net/safe-url";
+import { assertSafeFetchUrl, fetchWithSafeRedirects } from "@/lib/net/safe-url";
 
 export interface ResolvedPhoto {
   url: string;
@@ -92,28 +92,27 @@ export async function resolveRecipePhoto(args: {
 // starts with image/). Falls back to extension sniffing if HEAD isn't
 // allowed. Returns the (possibly canonical) URL on success; null otherwise.
 async function validateImageUrl(url: string): Promise<string | null> {
-  const safe = await assertSafeFetchUrl(url);
-  if (!safe.ok) return null;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(safe.url.toString(), {
+    const fetched = await fetchWithSafeRedirects(url, {
       method: "HEAD",
-      signal: controller.signal,
       headers: { "User-Agent": "HestiaBot/1.0" },
-      redirect: "follow",
+      timeoutMs: 4000,
+      maxRedirects: 3,
     });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.startsWith("image/")) return safe.url.toString();
+    if (!fetched.ok) {
+      // HEAD may be blocked — fall back to extension sniff after SSRF check.
+      const safe = await assertSafeFetchUrl(url);
+      if (!safe.ok) return null;
+      if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(safe.url.pathname)) {
+        return safe.url.toString();
+      }
+      return null;
+    }
+    if (!fetched.response.ok) return null;
+    const ct = fetched.response.headers.get("content-type") ?? "";
+    if (ct.startsWith("image/")) return fetched.finalUrl.toString();
     return null;
   } catch {
-    // HEAD blocked or network error — fall back to extension check so a
-    // direct .jpg/.png link still passes (host already SSRF-checked).
-    if (/\.(jpe?g|png|webp|avif|gif)(\?|$)/i.test(safe.url.pathname)) {
-      return safe.url.toString();
-    }
     return null;
   }
 }
@@ -121,21 +120,16 @@ async function validateImageUrl(url: string): Promise<string | null> {
 // Lightweight og:image extractor. Avoids pulling in a full HTML parser —
 // regex is fine for the meta tag.
 async function tryExtractOgImage(url: string): Promise<string | null> {
-  const safe = await assertSafeFetchUrl(url);
-  if (!safe.ok) return null;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(safe.url.toString(), {
-      signal: controller.signal,
+    const fetched = await fetchWithSafeRedirects(url, {
       headers: {
         "User-Agent": "HestiaBot/1.0 (recipe photo extractor)",
       },
-      redirect: "follow",
+      timeoutMs: 6000,
+      maxRedirects: 3,
     });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const html = await res.text();
+    if (!fetched.ok || !fetched.response.ok) return null;
+    const html = await fetched.response.text();
     const m =
       html.match(
         /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -151,7 +145,7 @@ async function tryExtractOgImage(url: string): Promise<string | null> {
     let absolute: string;
     if (!/^https?:\/\//.test(candidate)) {
       try {
-        absolute = new URL(candidate, safe.url).toString();
+        absolute = new URL(candidate, fetched.finalUrl).toString();
       } catch {
         return null;
       }

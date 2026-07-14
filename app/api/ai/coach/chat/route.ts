@@ -11,7 +11,17 @@ import type { FamilyMember } from "@/lib/family";
 export const maxDuration = 30;
 
 const Body = z.object({
-  messages: z.array(z.any()).max(50),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        role: z.enum(["user", "assistant", "system"]),
+        // AI SDK v6 UIMessage uses `parts`; older shapes may use `content`.
+        parts: z.array(z.record(z.string(), z.unknown())).optional(),
+        content: z.unknown().optional(),
+      }),
+    )
+    .max(50),
 });
 
 export async function POST(req: NextRequest) {
@@ -24,7 +34,7 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid body: messages must be an array of at most 50 items" },
+      { error: "Invalid body: messages must be an array of at most 50 well-formed items" },
       { status: 400 },
     );
   }
@@ -79,6 +89,17 @@ export async function POST(req: NextRequest) {
     members: family,
   });
 
+  let modelMessages;
+  try {
+    modelMessages = await convertToModelMessages(messages);
+  } catch (err) {
+    console.warn("coach/chat: convertToModelMessages failed", err);
+    return NextResponse.json(
+      { error: "Invalid message payload." },
+      { status: 400 },
+    );
+  }
+
   const result = streamText({
     model: getModel("fast"),
     system: coachSystemPrompt({
@@ -105,7 +126,7 @@ export async function POST(req: NextRequest) {
         notes: f.notes,
       })),
     }),
-    messages: await convertToModelMessages(messages),
+    messages: modelMessages,
   });
 
   return result.toUIMessageStreamResponse();

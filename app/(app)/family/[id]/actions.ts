@@ -2,12 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { computeTargets, type TargetInputs } from "@/lib/ai/targets";
-import { getModel } from "@/lib/ai/provider";
-import { assertAiQuota } from "@/lib/ai/quota";
-import { blueprintPrompt } from "@/lib/ai/prompts/blueprint";
+import { generateBlueprintInsight } from "@/lib/ai/blueprint-insight";
 import type { FamilyMember } from "@/lib/family";
 import {
   buildPlanStaleHint,
@@ -143,24 +140,14 @@ export async function recomputeMemberTargets(memberId: string) {
 
   // Best-effort fresh narrative for the household member, stored as an insight
   // tagged with their name so the user can find it on Today.
-  const quota = await assertAiQuota(supabase, user.id);
-  if (!quota.ok) {
-    console.warn("Member recompute narrative skipped:", quota.error);
-  } else {
-    try {
-      const { text } = await generateText({
-        model: getModel("fast"),
-        prompt: blueprintPrompt(inputs, targets),
-      });
-      await supabase.from("insights").insert({
-        user_id: user.id,
-        kind: "blueprint",
-        body: `${m.name}'s plan: ${text.trim()}`,
-      });
-    } catch (err) {
-      console.warn("Member recompute narrative skipped:", (err as Error).message);
-    }
-  }
+  await generateBlueprintInsight({
+    supabase,
+    userId: user.id,
+    inputs,
+    targets,
+    bodyPrefix: `${m.name}'s plan: `,
+    warnLabel: "Member recompute narrative skipped",
+  });
 
   bumpRevalidations(memberId);
   return { ok: true, targets };

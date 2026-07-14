@@ -25,6 +25,15 @@ function shouldFailClosed(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+/** Exported for unit tests — production callers use checkAiQuota. */
+export function _shouldFailClosedForTests(): boolean {
+  return shouldFailClosed();
+}
+
+export function _getDailyLimitForTests(): number {
+  return getDailyLimit();
+}
+
 export interface QuotaResult {
   ok: boolean;
   used: number;

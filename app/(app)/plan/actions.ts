@@ -83,8 +83,14 @@ export async function movePlanEntry(args: {
   });
 
   if (error) {
-    // Fallback for environments that haven't applied migration 0023 yet:
-    // three-phase park using a sentinel date outside the planning range.
+    // Only fall back when the RPC is missing (pre-migration 0023). Other
+    // failures (RLS, deadlock, uniqueness) must surface — the unlocked JS
+    // path reintroduces the race the RPC exists to prevent.
+    const code = (error as { code?: string }).code;
+    if (code !== "PGRST202") {
+      return { error: error.message };
+    }
+
     const parkDate = "1900-01-01";
     const { data: to } = await supabase
       .from("meal_plan_entries")
@@ -108,7 +114,6 @@ export async function movePlanEntry(args: {
         .eq("id", to.id)
         .eq("user_id", user.id);
       if (e2) {
-        // Best-effort restore source from park.
         await supabase
           .from("meal_plan_entries")
           .update({ date: from.date, slot: from.slot })
