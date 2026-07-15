@@ -21,6 +21,8 @@ interface StepPhotoControlProps {
    * only — caller saves later. Defaults to true whenever recipeId is set.
    */
   persistImmediately?: boolean;
+  /** Parent-driven busy lock (e.g. cook-mode removal in flight). */
+  disabled?: boolean;
   /** Larger preview for cook mode. */
   size?: "sm" | "md" | "lg";
   /** Prefer camera capture (cook / mobile). */
@@ -38,13 +40,16 @@ export function StepPhotoControl({
   photoUrl,
   onChange,
   persistImmediately,
+  disabled = false,
   size = "sm",
   capture = false,
   className,
 }: StepPhotoControlProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, start] = useTransition();
+  const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const busy = uploading || reading || disabled;
 
   const dims =
     size === "lg"
@@ -54,11 +59,14 @@ export function StepPhotoControl({
         : "w-16 h-16";
 
   function handleFile(file: File) {
+    if (busy) return;
     setError(null);
+    setReading(true);
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
       const base64 = result.split(",")[1] ?? "";
+      setReading(false);
       start(async () => {
         const shouldPersist =
           recipeId != null && (persistImmediately ?? true);
@@ -84,7 +92,10 @@ export function StepPhotoControl({
         if ("url" in r && r.url) onChange(r.url);
       });
     };
-    reader.onerror = () => setError("Couldn't read that file.");
+    reader.onerror = () => {
+      setReading(false);
+      setError("Couldn't read that file.");
+    };
     reader.readAsDataURL(file);
   }
 
@@ -117,6 +128,7 @@ export function StepPhotoControl({
           accept="image/jpeg,image/png,image/webp,image/gif"
           capture={capture ? "environment" : undefined}
           className="hidden"
+          disabled={busy}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) handleFile(f);
@@ -127,19 +139,19 @@ export function StepPhotoControl({
           variant="ghost"
           size="sm"
           onClick={() => fileRef.current?.click()}
-          disabled={uploading}
+          disabled={busy}
           className="!px-2"
         >
           <span className="inline-flex items-center gap-1 text-[12px]">
             {capture ? <Camera size={13} /> : <Upload size={13} />}
-            {uploading ? "…" : photoUrl ? "Replace" : "Photo"}
+            {busy ? "…" : photoUrl ? "Replace" : "Photo"}
           </span>
         </Btn>
         {photoUrl ? (
           <button
             type="button"
             onClick={() => onChange(null)}
-            disabled={uploading}
+            disabled={busy}
             className="text-ink-3 hover:text-danger p-1 rounded disabled:opacity-40 disabled:pointer-events-none"
             aria-label="remove step photo"
           >

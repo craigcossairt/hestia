@@ -345,6 +345,44 @@ export async function uploadStepPhoto(args: {
   return { ok: true, url: uploaded.url };
 }
 
+/** Clear one step's photo_url using the server's current steps_json. */
+export async function clearStepPhoto(args: {
+  recipeId: string;
+  stepIndex: number;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+
+  const { data: existing } = await supabase
+    .from("recipes")
+    .select("owner_id, steps_json")
+    .eq("id", args.recipeId)
+    .maybeSingle();
+  if (!existing) return { error: "Recipe not found." };
+  if (existing.owner_id !== user.id) {
+    return { error: "You can't edit a recipe you don't own." };
+  }
+
+  const steps = [...((existing.steps_json ?? []) as Step[])];
+  if (args.stepIndex < 0 || args.stepIndex >= steps.length) {
+    return { error: "That step doesn't exist." };
+  }
+
+  const { photo_url: _removed, ...rest } = steps[args.stepIndex]!;
+  steps[args.stepIndex] = rest;
+
+  const { error } = await supabase
+    .from("recipes")
+    .update({ steps_json: steps })
+    .eq("id", args.recipeId)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/recipes/${args.recipeId}`);
+  revalidatePath(`/recipes/${args.recipeId}/cook`);
+  revalidatePath(`/recipes/${args.recipeId}/edit`);
+  return { ok: true };
+}
+
 // Upload an image without writing steps_json (create/edit deferred save).
 // Returns a public URL only — caller attaches it to a step and saves later.
 // Default folder is "draft"; pass `${recipeId}/steps` for edit flows.
