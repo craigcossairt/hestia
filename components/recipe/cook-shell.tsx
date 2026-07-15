@@ -65,9 +65,10 @@ export function CookShell({
 
   function setStepPhoto(url: string | null) {
     setPhotoError(null);
-    const previous = steps[i]?.photo_url ?? null;
+    const stepIndex = i;
+    const previous = steps[stepIndex]?.photo_url ?? null;
     const next = steps.map((s, idx) =>
-      idx === i ? { ...s, photo_url: url } : s,
+      idx === stepIndex ? { ...s, photo_url: url } : s,
     );
     setSteps(next);
     if (url == null) {
@@ -75,7 +76,9 @@ export function CookShell({
         if (r && "error" in r && r.error) {
           setSteps((cur) =>
             cur.map((s, idx) =>
-              idx === i ? { ...s, photo_url: previous } : s,
+              idx === stepIndex && s.photo_url == null
+                ? { ...s, photo_url: previous }
+                : s,
             ),
           );
           setPhotoError(r.error);

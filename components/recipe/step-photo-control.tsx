@@ -139,7 +139,8 @@ export function StepPhotoControl({
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="text-ink-3 hover:text-danger p-1 rounded"
+            disabled={uploading}
+            className="text-ink-3 hover:text-danger p-1 rounded disabled:opacity-40 disabled:pointer-events-none"
             aria-label="remove step photo"
           >
             <Trash2 size={13} />
