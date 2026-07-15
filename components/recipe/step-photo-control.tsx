@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Camera, Image as ImageIcon, Trash2, Upload } from "lucide-react";
 import { Body, Btn } from "@/components/ds";
 import {
@@ -23,6 +23,8 @@ interface StepPhotoControlProps {
   persistImmediately?: boolean;
   /** Parent-driven busy lock (e.g. cook-mode removal in flight). */
   disabled?: boolean;
+  /** Report internal read/upload activity to the parent (cook nav lock). */
+  onBusyChange?: (busy: boolean) => void;
   /** Larger preview for cook mode. */
   size?: "sm" | "md" | "lg";
   /** Prefer camera capture (cook / mobile). */
@@ -41,6 +43,7 @@ export function StepPhotoControl({
   onChange,
   persistImmediately,
   disabled = false,
+  onBusyChange,
   size = "sm",
   capture = false,
   className,
@@ -49,7 +52,13 @@ export function StepPhotoControl({
   const [uploading, start] = useTransition();
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const busy = uploading || reading || disabled;
+  const internalBusy = uploading || reading;
+  const busy = internalBusy || disabled;
+
+  useEffect(() => {
+    onBusyChange?.(internalBusy);
+    return () => onBusyChange?.(false);
+  }, [internalBusy, onBusyChange]);
 
   const dims =
     size === "lg"

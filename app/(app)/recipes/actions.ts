@@ -254,6 +254,12 @@ async function uploadToRecipePhotos(args: {
   return { url: pub.publicUrl };
 }
 
+function isValidStepIndex(stepIndex: number, length: number): boolean {
+  return (
+    Number.isInteger(stepIndex) && stepIndex >= 0 && stepIndex < length
+  );
+}
+
 // Upload a recipe hero photo. Path: {user_id}/{recipe_id}/{ts}.{ext}.
 // Persists immediately on recipes.photo_url.
 export async function uploadRecipePhoto(args: {
@@ -315,7 +321,7 @@ export async function uploadStepPhoto(args: {
   }
 
   const steps = [...((existing.steps_json ?? []) as Step[])];
-  if (args.stepIndex < 0 || args.stepIndex >= steps.length) {
+  if (!isValidStepIndex(args.stepIndex, steps.length)) {
     return { error: "That step doesn't exist." };
   }
 
@@ -363,7 +369,7 @@ export async function clearStepPhoto(args: {
   }
 
   const steps = [...((existing.steps_json ?? []) as Step[])];
-  if (args.stepIndex < 0 || args.stepIndex >= steps.length) {
+  if (!isValidStepIndex(args.stepIndex, steps.length)) {
     return { error: "That step doesn't exist." };
   }
 

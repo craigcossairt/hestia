@@ -69,9 +69,11 @@ export function CookShell({
     message: string;
   } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const navBusy = photoBusy || uploadBusy;
 
   function setStepPhoto(url: string | null) {
-    if (photoBusy) return;
+    if (navBusy) return;
     const stepIndex = i;
     if (photoError?.stepIndex === stepIndex) setPhotoError(null);
     const previous = steps[stepIndex]?.photo_url ?? null;
@@ -98,6 +100,7 @@ export function CookShell({
   }
 
   function goToStep(next: number) {
+    if (navBusy) return;
     setI(next);
   }
 
@@ -117,13 +120,23 @@ export function CookShell({
   return (
     <main className="min-h-screen flex flex-col bg-paper">
       <header className="flex items-center justify-between px-6 py-4 border-b border-ink-l/50">
-        <Link
-          href={`/recipes/${recipeId}`}
-          className="flex items-center gap-2 text-ink-3 hover:text-ink"
-        >
-          <X size={18} strokeWidth={1.5} />
-          <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
-        </Link>
+        {navBusy ? (
+          <span
+            className="flex items-center gap-2 text-ink-3 opacity-40 pointer-events-none"
+            aria-disabled="true"
+          >
+            <X size={18} strokeWidth={1.5} />
+            <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
+          </span>
+        ) : (
+          <Link
+            href={`/recipes/${recipeId}`}
+            className="flex items-center gap-2 text-ink-3 hover:text-ink"
+          >
+            <X size={18} strokeWidth={1.5} />
+            <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
+          </Link>
+        )}
         <div className="text-center">
           <Label>cook · {recipeName}</Label>
           <Mono className="text-ink text-[14px]">
@@ -158,6 +171,7 @@ export function CookShell({
           photoUrl={step.photo_url}
           persistImmediately
           disabled={photoBusy}
+          onBusyChange={setUploadBusy}
           capture
           size="lg"
           className="items-center w-full"
@@ -237,7 +251,7 @@ export function CookShell({
         <Btn
           variant="outline"
           onClick={() => goToStep(Math.max(0, i - 1))}
-          disabled={i === 0 || photoBusy}
+          disabled={i === 0 || navBusy}
         >
           <ChevronLeft size={16} /> Back
         </Btn>
@@ -247,7 +261,7 @@ export function CookShell({
             size="lg"
             onClick={() => setFinished(true)}
             full
-            disabled={photoBusy}
+            disabled={navBusy}
           >
             Done
           </Btn>
@@ -257,7 +271,7 @@ export function CookShell({
             size="lg"
             onClick={() => goToStep(Math.min(steps.length - 1, i + 1))}
             full
-            disabled={photoBusy}
+            disabled={navBusy}
           >
             Next <ChevronRight size={16} />
           </Btn>
