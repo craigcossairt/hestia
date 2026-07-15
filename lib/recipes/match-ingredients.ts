@@ -14,12 +14,9 @@ import { singularizeNoun as singularize } from "@/lib/grocery/singularize";
 import type { Ingredient } from "@/lib/types/database";
 import { formatQuantity } from "@/lib/recipes/quantity";
 
-// Build a regex per ingredient that matches the ingredient name as a
-// whole word (case-insensitive). For a multi-word ingredient like
-// "chicken breast" both words must appear in order (allowing one
-// adjective like "boneless" between them via \W+\w*\W*).
-function ingredientPattern(name: string): RegExp | null {
-  const cleaned = name
+/** Normalize an ingredient name the same way matching does. */
+function searchableIngredientName(name: string): string {
+  return name
     .trim()
     .toLowerCase()
     // Strip parenthetical asides ("(chopped)", "(approx)") — they're
@@ -27,6 +24,14 @@ function ingredientPattern(name: string): RegExp | null {
     .replace(/\([^)]*\)/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Build a regex per ingredient that matches the ingredient name as a
+// whole word (case-insensitive). For a multi-word ingredient like
+// "chicken breast" both words must appear in order (allowing one
+// adjective like "boneless" between them via \W+\w*\W*).
+function ingredientPattern(name: string): RegExp | null {
+  const cleaned = searchableIngredientName(name);
   if (!cleaned) return null;
 
   const words = cleaned.split(" ").map(singularize).filter(Boolean);
@@ -58,8 +63,16 @@ function findIngredientHitsInStep(
   if (!stepText || ingredients.length === 0) return [];
 
   const sorted = [...ingredients]
-    .map((ing, originalIndex) => ({ ing, originalIndex }))
-    .sort((a, b) => b.ing.name.length - a.ing.name.length);
+    .map((ing, originalIndex) => ({
+      ing,
+      originalIndex,
+      searchableLength: searchableIngredientName(ing.name).length,
+    }))
+    .sort(
+      (a, b) =>
+        b.searchableLength - a.searchableLength ||
+        a.originalIndex - b.originalIndex,
+    );
 
   let scratch = stepText;
   const hits: MatchHit[] = [];

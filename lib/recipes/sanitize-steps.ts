@@ -5,7 +5,7 @@ function sanitizeStepPhotoUrl(
   url: string | null | undefined,
 ): string | null | undefined {
   if (url == null || url === "") return url ?? undefined;
-  if (url.startsWith("data:")) return undefined;
+  if (/^\s*data:/i.test(url)) return undefined;
   return url;
 }
 
