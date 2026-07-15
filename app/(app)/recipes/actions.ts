@@ -263,6 +263,17 @@ export async function uploadRecipePhoto(args: {
   contentType: string;
 }) {
   const { supabase, user } = await getUserOrRedirect();
+
+  const { data: existing } = await supabase
+    .from("recipes")
+    .select("owner_id")
+    .eq("id", args.recipeId)
+    .maybeSingle();
+  if (!existing) return { error: "Recipe not found." };
+  if (existing.owner_id !== user.id) {
+    return { error: "You can't edit a recipe you don't own." };
+  }
+
   const uploaded = await uploadToRecipePhotos({
     folder: args.recipeId,
     filename: args.filename,
@@ -271,11 +282,12 @@ export async function uploadRecipePhoto(args: {
   });
   if ("error" in uploaded) return uploaded;
 
-  await supabase
+  const { error } = await supabase
     .from("recipes")
     .update({ photo_url: uploaded.url })
     .eq("id", args.recipeId)
     .eq("owner_id", user.id);
+  if (error) return { error: error.message };
 
   revalidatePath(`/recipes/${args.recipeId}`);
   return { ok: true, url: uploaded.url };
@@ -333,15 +345,17 @@ export async function uploadStepPhoto(args: {
   return { ok: true, url: uploaded.url };
 }
 
-// Upload an image before a recipe row exists (add-recipe flow). Returns
-// a public URL only — caller attaches it to a step and saves later.
+// Upload an image without writing steps_json (create/edit deferred save).
+// Returns a public URL only — caller attaches it to a step and saves later.
+// Default folder is "draft"; pass `${recipeId}/steps` for edit flows.
 export async function uploadDraftRecipeImage(args: {
   filename: string;
   base64: string;
   contentType: string;
+  folder?: string;
 }) {
   const uploaded = await uploadToRecipePhotos({
-    folder: "draft",
+    folder: args.folder ?? "draft",
     filename: args.filename,
     base64: args.base64,
     contentType: args.contentType,

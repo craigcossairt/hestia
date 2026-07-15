@@ -10,11 +10,17 @@ import {
 import { cn } from "@/lib/utils";
 
 interface StepPhotoControlProps {
-  /** When set, upload persists onto steps_json immediately. */
+  /** When set with persistImmediately, upload writes onto steps_json. */
   recipeId?: string;
   stepIndex: number;
   photoUrl?: string | null;
   onChange: (url: string | null) => void;
+  /**
+   * When true (and recipeId is set), persist photo_url into steps_json
+   * immediately via uploadStepPhoto. When false, upload returns a URL
+   * only — caller saves later. Defaults to true whenever recipeId is set.
+   */
+  persistImmediately?: boolean;
   /** Larger preview for cook mode. */
   size?: "sm" | "md" | "lg";
   /** Prefer camera capture (cook / mobile). */
@@ -24,13 +30,14 @@ interface StepPhotoControlProps {
 
 /**
  * Compact per-step photo attach/remove. Works with a saved recipe
- * (persists immediately) or draft create flow (returns URL only).
+ * (persists immediately) or draft/edit flows (returns URL only).
  */
 export function StepPhotoControl({
   recipeId,
   stepIndex,
   photoUrl,
   onChange,
+  persistImmediately,
   size = "sm",
   capture = false,
   className,
@@ -53,20 +60,23 @@ export function StepPhotoControl({
       const result = reader.result as string;
       const base64 = result.split(",")[1] ?? "";
       start(async () => {
-        const r =
-          recipeId != null
-            ? await uploadStepPhoto({
-                recipeId,
-                stepIndex,
-                filename: file.name,
-                base64,
-                contentType: file.type,
-              })
-            : await uploadDraftRecipeImage({
-                filename: file.name,
-                base64,
-                contentType: file.type,
-              });
+        const shouldPersist =
+          recipeId != null && (persistImmediately ?? true);
+        const r = shouldPersist
+          ? await uploadStepPhoto({
+              recipeId: recipeId!,
+              stepIndex,
+              filename: file.name,
+              base64,
+              contentType: file.type,
+            })
+          : await uploadDraftRecipeImage({
+              filename: file.name,
+              base64,
+              contentType: file.type,
+              folder:
+                recipeId != null ? `${recipeId}/steps` : undefined,
+            });
         if ("error" in r && r.error) {
           setError(r.error);
           return;
