@@ -21,7 +21,8 @@ import {
 } from "@/lib/recipes/match-ingredients";
 import { useCookTimer } from "@/lib/recipes/use-cook-timer";
 import { formatQuantity } from "@/lib/recipes/quantity";
-import { uploadRecipePhoto } from "@/app/(app)/recipes/actions";
+import { updateRecipe, uploadRecipePhoto } from "@/app/(app)/recipes/actions";
+import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 interface CookShellProps {
@@ -34,10 +35,11 @@ interface CookShellProps {
 export function CookShell({
   recipeId,
   recipeName,
-  steps,
+  steps: initialSteps,
   ingredients,
 }: CookShellProps) {
   const router = useRouter();
+  const [steps, setSteps] = useState(initialSteps);
   const [i, setI] = useState(0);
   const step = steps[i];
   const [showAllIngredients, setShowAllIngredients] = useState(false);
@@ -59,6 +61,18 @@ export function CookShell({
     stepIndex: i,
     timerSec: step?.timer_sec,
   });
+
+  function setStepPhoto(url: string | null) {
+    setSteps((prev) => {
+      const next = prev.map((s, idx) =>
+        idx === i ? { ...s, photo_url: url } : s,
+      );
+      if (url == null) {
+        void updateRecipe(recipeId, { steps: next });
+      }
+      return next;
+    });
+  }
 
   if (!step) {
     return (
@@ -110,6 +124,17 @@ export function CookShell({
         <Body size="lg" className="text-ink text-[20px] md:text-[24px] leading-[1.45]">
           {step.text}
         </Body>
+
+        <StepPhotoControl
+          recipeId={recipeId}
+          stepIndex={i}
+          photoUrl={step.photo_url}
+          persistImmediately
+          capture
+          size="lg"
+          className="items-center w-full"
+          onChange={setStepPhoto}
+        />
 
         {remaining != null ? (
           <div className="flex items-center gap-3">

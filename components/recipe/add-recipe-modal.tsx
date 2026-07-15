@@ -2,13 +2,16 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Plus, Trash2 } from "lucide-react";
 import { Dialog, H, Body, Btn, Label, Mono, Chip } from "@/components/ds";
 import { saveGeneratedRecipe } from "@/app/(app)/recipes/actions";
+import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import { parseIngredientPaste } from "@/lib/recipes/parse-ingredient-line";
 import { formatQuantity } from "@/lib/recipes/quantity";
 import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
 import { cn } from "@/lib/utils";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
+import type { Step } from "@/lib/types/database";
 
 type Mode = "ai" | "url" | "photo" | "manual";
 
@@ -68,6 +71,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [pending, start] = useTransition();
@@ -76,6 +80,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
     setError(null);
     setGenerating(true);
     setRecipe(null);
+    setSteps([]);
     try {
       const res = await fetch("/api/ai/recipe-generate", {
         method: "POST",
@@ -85,6 +90,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
+      setSteps(json.steps ?? []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -95,7 +101,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
   function save() {
     if (!recipe) return;
     start(async () => {
-      const result = await saveGeneratedRecipe(recipe);
+      const result = await saveGeneratedRecipe({ ...recipe, steps });
       if ("error" in result) setError(result.error!);
       else {
         onClose();
@@ -124,7 +130,9 @@ function AiMode({ onClose }: { onClose: () => void }) {
         ) : null}
       </div>
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
-      {recipe ? <RecipePreview recipe={recipe} /> : null}
+      {recipe ? (
+        <RecipePreview recipe={recipe} steps={steps} onStepsChange={setSteps} />
+      ) : null}
     </div>
   );
 }
@@ -133,6 +141,7 @@ function UrlMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [pending, start] = useTransition();
@@ -141,6 +150,7 @@ function UrlMode({ onClose }: { onClose: () => void }) {
     setError(null);
     setFetching(true);
     setRecipe(null);
+    setSteps([]);
     try {
       const res = await fetch("/api/ai/recipe-parse", {
         method: "POST",
@@ -150,6 +160,7 @@ function UrlMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
+      setSteps(json.steps ?? []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -160,7 +171,11 @@ function UrlMode({ onClose }: { onClose: () => void }) {
   function save() {
     if (!recipe) return;
     start(async () => {
-      const result = await saveGeneratedRecipe({ ...recipe, source_url: url });
+      const result = await saveGeneratedRecipe({
+        ...recipe,
+        steps,
+        source_url: url,
+      });
       if ("error" in result) setError(result.error!);
       else {
         onClose();
@@ -191,7 +206,9 @@ function UrlMode({ onClose }: { onClose: () => void }) {
         </div>
       ) : null}
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
-      {recipe ? <RecipePreview recipe={recipe} /> : null}
+      {recipe ? (
+        <RecipePreview recipe={recipe} steps={steps} onStepsChange={setSteps} />
+      ) : null}
     </div>
   );
 }
@@ -209,6 +226,7 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [recipe, setRecipe] = useState<ParsedPhotoRecipe | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -220,6 +238,7 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
     setError(null);
     setParsing(true);
     setRecipe(null);
+    setSteps([]);
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
@@ -236,6 +255,7 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
+      setSteps(json.steps ?? []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -246,12 +266,9 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
   function save() {
     if (!recipe) return;
     start(async () => {
-      // Pass the resolved photo_url through so the recipe card has an
-      // image. The server-side photo chain (Pexels / Brave / AI gen)
-      // already populated it; saveGeneratedRecipe just persists what
-      // it gets.
       const result = await saveGeneratedRecipe({
         ...recipe,
+        steps,
         photo_url: recipe.photo_url ?? null,
         source_image_url: recipe.source_image_url ?? null,
       });
@@ -298,7 +315,9 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
         </div>
       ) : null}
       {error ? <Body size="sm" className="text-danger">{error}</Body> : null}
-      {recipe ? <RecipePreview recipe={recipe} /> : null}
+      {recipe ? (
+        <RecipePreview recipe={recipe} steps={steps} onStepsChange={setSteps} />
+      ) : null}
     </div>
   );
 }
@@ -323,7 +342,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [ingredientsText, setIngredientsText] = useState("");
-  const [stepsText, setStepsText] = useState("");
+  const [steps, setSteps] = useState<Step[]>([{ text: "" }, { text: "" }]);
   const [tipsText, setTipsText] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [servings, setServings] = useState("4");
@@ -335,18 +354,25 @@ function ManualMode({ onClose }: { onClose: () => void }) {
   const totalMin =
     (prepMin ? Number(prepMin) : 0) + (cookMin ? Number(cookMin) : 0);
 
+  function updateStep(i: number, patch: Partial<Step>) {
+    setSteps((cur) => cur.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  }
+
   function save() {
     setError(null);
     const ingredients = parseIngredientPaste(ingredientsText);
-    const steps = stepsText
-      .split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((text) => {
-        const timer_sec = parseStepTimer(text);
-        return timer_sec != null ? { text, timer_sec } : { text };
-      });
-    if (!name.trim() || ingredients.length < 2 || steps.length < 2) {
+    const cleanedSteps = steps
+      .map((s) => {
+        const text = s.text.trim();
+        if (!text) return null;
+        const timer_sec = s.timer_sec ?? parseStepTimer(text) ?? undefined;
+        const step: Step = { text };
+        if (timer_sec != null && timer_sec > 0) step.timer_sec = timer_sec;
+        if (s.photo_url) step.photo_url = s.photo_url;
+        return step;
+      })
+      .filter((s): s is Step => s != null);
+    if (!name.trim() || ingredients.length < 2 || cleanedSteps.length < 2) {
       setError("Need a name, at least 2 ingredients, and 2 steps.");
       return;
     }
@@ -370,7 +396,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         tags,
         tips,
         ingredients,
-        steps,
+        steps: cleanedSteps,
       });
       if ("error" in result) setError(result.error!);
       else {
@@ -395,13 +421,72 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         rows={5}
         className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
       />
-      <textarea
-        value={stepsText}
-        onChange={(e) => setStepsText(e.target.value)}
-        placeholder={"Steps — one per line\nHeat oil in pan\nAdd eggs and cook 2 min\nAdd spinach, fold"}
-        rows={5}
-        className="px-4 py-3 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[14px] outline-none focus:border-accent resize-none"
-      />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label>steps</Label>
+          <button
+            type="button"
+            onClick={() => setSteps((cur) => [...cur, { text: "" }])}
+            className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
+          >
+            <Plus size={12} /> add step
+          </button>
+        </div>
+        <Body size="xs" dim>
+          Optional photo per step. Paste multiple lines into a step to split.
+        </Body>
+        <ol className="flex flex-col gap-2">
+          {steps.map((step, i) => (
+            <li key={i} className="flex gap-2 items-start">
+              <Mono className="text-ink-3 text-[13px] mt-2 w-6 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </Mono>
+              <StepPhotoControl
+                stepIndex={i}
+                photoUrl={step.photo_url}
+                persistImmediately={false}
+                onChange={(url) => updateStep(i, { photo_url: url })}
+              />
+              <textarea
+                value={step.text}
+                onChange={(e) => updateStep(i, { text: e.target.value })}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text");
+                  if (!text.includes("\n")) return;
+                  e.preventDefault();
+                  const lines = text
+                    .split(/\n/)
+                    .map((l) => l.trim())
+                    .filter(Boolean);
+                  if (lines.length === 0) return;
+                  setSteps((cur) => {
+                    const next = [...cur];
+                    next[i] = { ...next[i]!, text: lines[0]! };
+                    const extras = lines.slice(1).map((t) => ({ text: t }));
+                    next.splice(i + 1, 0, ...extras);
+                    return next;
+                  });
+                }}
+                rows={2}
+                placeholder="Step instruction"
+                className="flex-1 px-3 py-2 rounded-thumb border border-ink-l bg-card text-ink font-sans text-[13px] outline-none focus:border-accent resize-y"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setSteps((cur) =>
+                    cur.length <= 2 ? cur : cur.filter((_, j) => j !== i),
+                  )
+                }
+                className="text-ink-3 hover:text-danger p-1 rounded mt-2"
+                aria-label="remove step"
+              >
+                <Trash2 size={14} />
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <input
           value={servings}
@@ -474,7 +559,15 @@ function ManualMode({ onClose }: { onClose: () => void }) {
   );
 }
 
-function RecipePreview({ recipe }: { recipe: GeneratedRecipe }) {
+function RecipePreview({
+  recipe,
+  steps,
+  onStepsChange,
+}: {
+  recipe: GeneratedRecipe;
+  steps: Step[];
+  onStepsChange: (steps: Step[]) => void;
+}) {
   return (
     <div className="rounded-card border border-ink-l p-5 flex flex-col gap-3 bg-paper-2/40">
       <div className="flex items-center justify-between">
@@ -506,6 +599,33 @@ function RecipePreview({ recipe }: { recipe: GeneratedRecipe }) {
             </li>
           ))}
         </ul>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label>steps · add photos</Label>
+        <ol className="flex flex-col gap-2">
+          {steps.map((step, i) => (
+            <li key={i} className="flex gap-2 items-start">
+              <Mono className="text-ink-3 text-[12px] mt-1 w-5 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </Mono>
+              <StepPhotoControl
+                stepIndex={i}
+                photoUrl={step.photo_url}
+                persistImmediately={false}
+                onChange={(url) =>
+                  onStepsChange(
+                    steps.map((s, j) =>
+                      j === i ? { ...s, photo_url: url } : s,
+                    ),
+                  )
+                }
+              />
+              <Body size="sm" className="text-ink-2 pt-1 flex-1 min-w-0">
+                {step.text}
+              </Body>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

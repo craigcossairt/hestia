@@ -9,6 +9,9 @@ import {
   maybeRefineRecipe,
   refineRecipeMacrosDetailed,
 } from "@/lib/nutrition/recipe-macros";
+import { orderIngredientsByFirstUse } from "@/lib/recipes/match-ingredients";
+import { sanitizeStepsForSave } from "@/lib/recipes/sanitize-steps";
+import type { Ingredient, Step } from "@/lib/types/database";
 
 async function getUserOrRedirect() {
   const supabase = await createClient();
@@ -26,6 +29,8 @@ export async function saveGeneratedRecipe(
     photo_url?: string | null;
     prep_min?: number | null;
     cook_min?: number | null;
+    /** May include photo_url beyond the AI schema. */
+    steps?: Step[];
   },
 ) {
   const { supabase, user } = await getUserOrRedirect();
@@ -34,6 +39,11 @@ export async function saveGeneratedRecipe(
   // when USDA_API_KEY is configured. No-op (returns input unchanged) when
   // the key is missing or coverage is too low to trust.
   const refined = await maybeRefineRecipe(recipe);
+  const steps = sanitizeStepsForSave(recipe.steps ?? refined.steps);
+  const ingredients = orderIngredientsByFirstUse(
+    refined.ingredients,
+    steps,
+  );
 
   const { data, error } = await supabase
     .from("recipes")
@@ -43,8 +53,8 @@ export async function saveGeneratedRecipe(
       photo_url: refined.photo_url ?? null,
       source_url: refined.source_url ?? null,
       source_image_url: refined.source_image_url ?? null,
-      ingredients_json: refined.ingredients,
-      steps_json: refined.steps,
+      ingredients_json: ingredients,
+      steps_json: steps,
       kcal: refined.kcal,
       protein: refined.protein,
       carbs: refined.carbs,
@@ -142,7 +152,11 @@ export interface RecipePatch {
     aisle?: string;
     optional?: boolean;
   }>;
-  steps?: Array<{ text: string; timer_sec?: number }>;
+  steps?: Array<{
+    text: string;
+    timer_sec?: number;
+    photo_url?: string | null;
+  }>;
   tags?: string[];
   tips?: string[];
 }
@@ -156,7 +170,7 @@ export async function updateRecipe(recipeId: string, patch: RecipePatch) {
 
   const { data: existing } = await supabase
     .from("recipes")
-    .select("owner_id")
+    .select("owner_id, ingredients_json, steps_json")
     .eq("id", recipeId)
     .maybeSingle();
   if (!existing) return { error: "Recipe not found." };
@@ -175,11 +189,20 @@ export async function updateRecipe(recipeId: string, patch: RecipePatch) {
   if (patch.protein !== undefined) update.protein = patch.protein;
   if (patch.carbs !== undefined) update.carbs = patch.carbs;
   if (patch.fat !== undefined) update.fat = patch.fat;
-  if (patch.ingredients !== undefined)
-    update.ingredients_json = patch.ingredients;
-  if (patch.steps !== undefined) update.steps_json = patch.steps;
   if (patch.tags !== undefined) update.tags = patch.tags;
   if (patch.tips !== undefined) update.tips_json = patch.tips;
+
+  // Keep the ingredient list in first-use order whenever ingredients or
+  // steps change. Fetch the untouched side from the existing row.
+  if (patch.ingredients !== undefined || patch.steps !== undefined) {
+    const ingredients = (patch.ingredients ??
+      existing.ingredients_json ??
+      []) as Ingredient[];
+    const rawSteps = (patch.steps ?? existing.steps_json ?? []) as Step[];
+    const steps = sanitizeStepsForSave(rawSteps);
+    update.ingredients_json = orderIngredientsByFirstUse(ingredients, steps);
+    if (patch.steps !== undefined) update.steps_json = steps;
+  }
 
   const { error } = await supabase
     .from("recipes")
@@ -192,18 +215,17 @@ export async function updateRecipe(recipeId: string, patch: RecipePatch) {
   return { ok: true };
 }
 
-// Upload a recipe photo to the `recipe-photos` Storage bucket and
-// return the public URL. Path: {user_id}/{recipe_id}/{ts}.{ext}.
+// Upload an image to the `recipe-photos` Storage bucket and return the
+// public URL. Path: {user_id}/{folder}/{ts}.{ext}.
 //
-// Called via the edit form's <input type="file"> handler. We accept
-// the file as base64 from the client to keep this a simple server
-// action (Next.js server actions don't yet stream multipart well).
-export async function uploadRecipePhoto(args: {
-  recipeId: string;
-  filename: string; // original filename, used only for the extension
-  base64: string; // raw base64 without the data: prefix
+// Called via file inputs as base64 — Next.js server actions don't yet
+// stream multipart well. Never persists data: URIs to the DB.
+async function uploadToRecipePhotos(args: {
+  folder: string;
+  filename: string;
+  base64: string;
   contentType: string;
-}) {
+}): Promise<{ error: string } | { url: string }> {
   const { supabase, user } = await getUserOrRedirect();
   const ext = args.filename.split(".").pop()?.toLowerCase() || "jpg";
   if (!/^(jpe?g|png|webp|gif)$/.test(ext)) {
@@ -216,7 +238,7 @@ export async function uploadRecipePhoto(args: {
   }
 
   const buffer = Buffer.from(args.base64, "base64");
-  const path = `${user.id}/${args.recipeId}/${Date.now()}.${ext}`;
+  const path = `${user.id}/${args.folder}/${Date.now()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from("recipe-photos")
     .upload(path, buffer, {
@@ -229,16 +251,103 @@ export async function uploadRecipePhoto(args: {
     .from("recipe-photos")
     .getPublicUrl(path);
 
-  // Persist the new URL on the recipe immediately so the form state and
-  // DB stay in sync even if the user navigates away before saving.
+  return { url: pub.publicUrl };
+}
+
+// Upload a recipe hero photo. Path: {user_id}/{recipe_id}/{ts}.{ext}.
+// Persists immediately on recipes.photo_url.
+export async function uploadRecipePhoto(args: {
+  recipeId: string;
+  filename: string;
+  base64: string;
+  contentType: string;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+  const uploaded = await uploadToRecipePhotos({
+    folder: args.recipeId,
+    filename: args.filename,
+    base64: args.base64,
+    contentType: args.contentType,
+  });
+  if ("error" in uploaded) return uploaded;
+
   await supabase
     .from("recipes")
-    .update({ photo_url: pub.publicUrl })
+    .update({ photo_url: uploaded.url })
     .eq("id", args.recipeId)
     .eq("owner_id", user.id);
 
   revalidatePath(`/recipes/${args.recipeId}`);
-  return { ok: true, url: pub.publicUrl };
+  return { ok: true, url: uploaded.url };
+}
+
+// Upload a per-step photo. Path: {user_id}/{recipe_id}/steps/{ts}.{ext}.
+// Persists immediately onto steps_json[stepIndex].photo_url.
+export async function uploadStepPhoto(args: {
+  recipeId: string;
+  stepIndex: number;
+  filename: string;
+  base64: string;
+  contentType: string;
+}) {
+  const { supabase, user } = await getUserOrRedirect();
+
+  const { data: existing } = await supabase
+    .from("recipes")
+    .select("owner_id, steps_json")
+    .eq("id", args.recipeId)
+    .maybeSingle();
+  if (!existing) return { error: "Recipe not found." };
+  if (existing.owner_id !== user.id) {
+    return { error: "You can't edit a recipe you don't own." };
+  }
+
+  const steps = [...((existing.steps_json ?? []) as Step[])];
+  if (args.stepIndex < 0 || args.stepIndex >= steps.length) {
+    return { error: "That step doesn't exist." };
+  }
+
+  const uploaded = await uploadToRecipePhotos({
+    folder: `${args.recipeId}/steps`,
+    filename: args.filename,
+    base64: args.base64,
+    contentType: args.contentType,
+  });
+  if ("error" in uploaded) return uploaded;
+
+  steps[args.stepIndex] = {
+    ...steps[args.stepIndex]!,
+    photo_url: uploaded.url,
+  };
+
+  const { error } = await supabase
+    .from("recipes")
+    .update({ steps_json: steps })
+    .eq("id", args.recipeId)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/recipes/${args.recipeId}`);
+  revalidatePath(`/recipes/${args.recipeId}/cook`);
+  revalidatePath(`/recipes/${args.recipeId}/edit`);
+  return { ok: true, url: uploaded.url };
+}
+
+// Upload an image before a recipe row exists (add-recipe flow). Returns
+// a public URL only — caller attaches it to a step and saves later.
+export async function uploadDraftRecipeImage(args: {
+  filename: string;
+  base64: string;
+  contentType: string;
+}) {
+  const uploaded = await uploadToRecipePhotos({
+    folder: "draft",
+    filename: args.filename,
+    base64: args.base64,
+    contentType: args.contentType,
+  });
+  if ("error" in uploaded) return uploaded;
+  return { ok: true, url: uploaded.url };
 }
 
 /** Re-estimate per-serving macros from current ingredients via USDA. */

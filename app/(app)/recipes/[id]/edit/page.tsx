@@ -4,6 +4,7 @@ import { H, Body, Label } from "@/components/ds";
 import { createClient } from "@/lib/supabase/server";
 import { EditRecipeForm } from "@/components/recipe/edit-recipe-form";
 import type { Ingredient, Step } from "@/lib/types/database";
+import { orderIngredientsByFirstUse } from "@/lib/recipes/match-ingredients";
 
 export default async function EditRecipePage({
   params,
@@ -28,6 +29,12 @@ export default async function EditRecipePage({
   // a recipe they don't own. The server action would also reject, but a
   // pre-flight check keeps the UX clean.
   if (recipe.owner_id !== user.id) redirect(`/recipes/${id}`);
+
+  const steps = (recipe.steps_json ?? []) as Step[];
+  const ingredients = orderIngredientsByFirstUse(
+    (recipe.ingredients_json ?? []) as Ingredient[],
+    steps,
+  );
 
   return (
     <div className="px-6 md:px-12 py-8 md:py-12 max-w-3xl mx-auto flex flex-col gap-6">
@@ -60,8 +67,8 @@ export default async function EditRecipePage({
           protein: recipe.protein ?? 0,
           carbs: recipe.carbs ?? 0,
           fat: recipe.fat ?? 0,
-          ingredients: (recipe.ingredients_json ?? []) as Ingredient[],
-          steps: (recipe.steps_json ?? []) as Step[],
+          ingredients,
+          steps,
           tags: recipe.tags ?? [],
           tips: recipe.tips_json ?? [],
         }}

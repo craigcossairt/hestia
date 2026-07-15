@@ -45,35 +45,35 @@ function ingredientPattern(name: string): RegExp | null {
   }
 }
 
-// Match each ingredient against the step text and return the ones that
-// appear. Order in the returned array follows the original ingredients
-// list so chips read naturally.
-export function matchIngredientsInStep(
+type MatchHit = { originalIndex: number; start: number };
+
+// Find ingredients mentioned in step text. Longer names are matched
+// first so "chicken breast" wins over a separate "chicken" entry.
+// Returned hits include the character offset of the first match so
+// callers can sort by mention order within the step.
+function findIngredientHitsInStep(
   stepText: string,
   ingredients: Ingredient[],
-): Ingredient[] {
+): MatchHit[] {
   if (!stepText || ingredients.length === 0) return [];
-  // Sort by descending name length so longer (more-specific) ingredient
-  // names are tested first against an "occupied" string. We blank out
-  // matched substrings so a separate "chicken" entry doesn't double-
-  // match against "chicken breast".
+
   const sorted = [...ingredients]
     .map((ing, originalIndex) => ({ ing, originalIndex }))
     .sort((a, b) => b.ing.name.length - a.ing.name.length);
 
   let scratch = stepText;
-  const matchedIndices = new Set<number>();
+  const hits: MatchHit[] = [];
 
   for (const { ing, originalIndex } of sorted) {
     const pattern = ingredientPattern(ing.name);
     if (!pattern) continue;
     const m = scratch.match(pattern);
     if (m) {
-      matchedIndices.add(originalIndex);
+      const start = m.index ?? 0;
+      hits.push({ originalIndex, start });
       // Replace the matched span with spaces so position-sensitive
       // operations stay valid; subsequent matches won't re-hit this
       // span.
-      const start = m.index ?? 0;
       scratch =
         scratch.slice(0, start) +
         " ".repeat(m[0].length) +
@@ -81,7 +81,47 @@ export function matchIngredientsInStep(
     }
   }
 
-  return ingredients.filter((_, i) => matchedIndices.has(i));
+  return hits;
+}
+
+// Match each ingredient against the step text and return the ones that
+// appear, ordered by first mention in the step (cooking order).
+export function matchIngredientsInStep(
+  stepText: string,
+  ingredients: Ingredient[],
+): Ingredient[] {
+  return findIngredientHitsInStep(stepText, ingredients)
+    .sort((a, b) => a.start - b.start || a.originalIndex - b.originalIndex)
+    .map(({ originalIndex }) => ingredients[originalIndex]!);
+}
+
+/** Reorder ingredients by first use across recipe steps. */
+export function orderIngredientsByFirstUse<T extends Ingredient>(
+  ingredients: T[],
+  steps: Array<{ text: string }>,
+): T[] {
+  if (ingredients.length <= 1 || steps.length === 0) return ingredients;
+
+  const ordered: T[] = [];
+  const seen = new Set<number>();
+
+  for (const step of steps) {
+    const hits = findIngredientHitsInStep(step.text, ingredients)
+      .filter((h) => !seen.has(h.originalIndex))
+      .sort((a, b) => a.start - b.start || a.originalIndex - b.originalIndex);
+
+    for (const { originalIndex } of hits) {
+      seen.add(originalIndex);
+      ordered.push(ingredients[originalIndex]!);
+    }
+  }
+
+  // Ingredients never mentioned in steps keep their relative order at the end.
+  for (let i = 0; i < ingredients.length; i++) {
+    if (!seen.has(i)) ordered.push(ingredients[i]!);
+  }
+
+  return ordered;
 }
 
 // Format an ingredient as a compact chip label: "chicken breast · 1 lb".

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CookShell } from "@/components/recipe/cook-shell";
+import { orderIngredientsByFirstUse } from "@/lib/recipes/match-ingredients";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 export default async function CookPage({
@@ -19,12 +20,18 @@ export default async function CookPage({
 
   if (!recipe) notFound();
 
+  const steps = (recipe.steps_json ?? []) as Step[];
+  const ingredients = orderIngredientsByFirstUse(
+    (recipe.ingredients_json ?? []) as Ingredient[],
+    steps,
+  );
+
   return (
     <CookShell
       recipeId={recipe.id}
       recipeName={recipe.name}
-      steps={(recipe.steps_json ?? []) as Step[]}
-      ingredients={(recipe.ingredients_json ?? []) as Ingredient[]}
+      steps={steps}
+      ingredients={ingredients}
     />
   );
 }

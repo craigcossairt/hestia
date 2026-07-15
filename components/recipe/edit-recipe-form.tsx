@@ -11,6 +11,7 @@ import {
   recalculateRecipeMacros,
   type RecipePatch,
 } from "@/app/(app)/recipes/actions";
+import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import type { Ingredient, Step } from "@/lib/types/database";
 import type { ParsedIngredient } from "@/lib/recipes/parse-ingredient-line";
 import {
@@ -546,12 +547,25 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
             </button>
           </div>
         </div>
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-3">
           {form.steps.map((step, i) => (
             <li key={i} className="flex gap-2 items-start">
               <Mono className="text-ink-3 text-[14px] mt-2 w-7 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </Mono>
+              <StepPhotoControl
+                stepIndex={i}
+                photoUrl={step.photo_url}
+                persistImmediately={false}
+                onChange={(url) =>
+                  patch(
+                    "steps",
+                    form.steps.map((x, j) =>
+                      j === i ? { ...x, photo_url: url } : x,
+                    ),
+                  )
+                }
+              />
               <textarea
                 value={step.text}
                 onChange={(e) =>
