@@ -9,6 +9,11 @@ import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import { parseIngredientPaste } from "@/lib/recipes/parse-ingredient-line";
 import { formatQuantity } from "@/lib/recipes/quantity";
 import { parseStepTimer } from "@/lib/recipes/parse-step-timer";
+import {
+  newEditableStep,
+  toEditableSteps,
+  type EditableStep,
+} from "@/lib/recipes/editable-step";
 import { cn } from "@/lib/utils";
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
 import type { Step } from "@/lib/types/database";
@@ -71,7 +76,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
-  const [steps, setSteps] = useState<Step[]>([]);
+  const [steps, setSteps] = useState<EditableStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [pending, start] = useTransition();
@@ -90,7 +95,7 @@ function AiMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
-      setSteps(json.steps ?? []);
+      setSteps(toEditableSteps(json.steps ?? []));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -141,7 +146,7 @@ function UrlMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
-  const [steps, setSteps] = useState<Step[]>([]);
+  const [steps, setSteps] = useState<EditableStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [pending, start] = useTransition();
@@ -160,7 +165,7 @@ function UrlMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
-      setSteps(json.steps ?? []);
+      setSteps(toEditableSteps(json.steps ?? []));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -226,7 +231,7 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [recipe, setRecipe] = useState<ParsedPhotoRecipe | null>(null);
-  const [steps, setSteps] = useState<Step[]>([]);
+  const [steps, setSteps] = useState<EditableStep[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -255,7 +260,7 @@ function PhotoMode({ onClose }: { onClose: () => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setRecipe(json);
-      setSteps(json.steps ?? []);
+      setSteps(toEditableSteps(json.steps ?? []));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -342,7 +347,10 @@ function ManualMode({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [ingredientsText, setIngredientsText] = useState("");
-  const [steps, setSteps] = useState<Step[]>([{ text: "" }, { text: "" }]);
+  const [steps, setSteps] = useState<EditableStep[]>([
+    newEditableStep(),
+    newEditableStep(),
+  ]);
   const [tipsText, setTipsText] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [servings, setServings] = useState("4");
@@ -426,7 +434,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
           <Label>steps</Label>
           <button
             type="button"
-            onClick={() => setSteps((cur) => [...cur, { text: "" }])}
+            onClick={() => setSteps((cur) => [...cur, newEditableStep()])}
             className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
           >
             <Plus size={12} /> add step
@@ -437,7 +445,7 @@ function ManualMode({ onClose }: { onClose: () => void }) {
         </Body>
         <ol className="flex flex-col gap-2">
           {steps.map((step, i) => (
-            <li key={i} className="flex gap-2 items-start">
+            <li key={step.clientKey} className="flex gap-2 items-start">
               <Mono className="text-ink-3 text-[13px] mt-2 w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </Mono>
@@ -462,7 +470,9 @@ function ManualMode({ onClose }: { onClose: () => void }) {
                   setSteps((cur) => {
                     const next = [...cur];
                     next[i] = { ...next[i]!, text: lines[0]! };
-                    const extras = lines.slice(1).map((t) => ({ text: t }));
+                    const extras = lines
+                      .slice(1)
+                      .map((t) => newEditableStep({ text: t }));
                     next.splice(i + 1, 0, ...extras);
                     return next;
                   });
@@ -565,8 +575,8 @@ function RecipePreview({
   onStepsChange,
 }: {
   recipe: GeneratedRecipe;
-  steps: Step[];
-  onStepsChange: (steps: Step[]) => void;
+  steps: EditableStep[];
+  onStepsChange: (steps: EditableStep[]) => void;
 }) {
   return (
     <div className="rounded-card border border-ink-l p-5 flex flex-col gap-3 bg-paper-2/40">
@@ -604,7 +614,7 @@ function RecipePreview({
         <Label>steps · add photos</Label>
         <ol className="flex flex-col gap-2">
           {steps.map((step, i) => (
-            <li key={i} className="flex gap-2 items-start">
+            <li key={step.clientKey} className="flex gap-2 items-start">
               <Mono className="text-ink-3 text-[12px] mt-1 w-5 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </Mono>

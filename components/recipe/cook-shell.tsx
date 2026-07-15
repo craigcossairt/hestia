@@ -61,17 +61,27 @@ export function CookShell({
     stepIndex: i,
     timerSec: step?.timer_sec,
   });
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   function setStepPhoto(url: string | null) {
-    setSteps((prev) => {
-      const next = prev.map((s, idx) =>
-        idx === i ? { ...s, photo_url: url } : s,
-      );
-      if (url == null) {
-        void updateRecipe(recipeId, { steps: next });
-      }
-      return next;
-    });
+    setPhotoError(null);
+    const previous = steps[i]?.photo_url ?? null;
+    const next = steps.map((s, idx) =>
+      idx === i ? { ...s, photo_url: url } : s,
+    );
+    setSteps(next);
+    if (url == null) {
+      updateRecipe(recipeId, { steps: next }).then((r) => {
+        if (r && "error" in r && r.error) {
+          setSteps((cur) =>
+            cur.map((s, idx) =>
+              idx === i ? { ...s, photo_url: previous } : s,
+            ),
+          );
+          setPhotoError(r.error);
+        }
+      });
+    }
   }
 
   if (!step) {
@@ -135,6 +145,11 @@ export function CookShell({
           className="items-center w-full"
           onChange={setStepPhoto}
         />
+        {photoError ? (
+          <Body size="sm" className="text-danger">
+            {photoError}
+          </Body>
+        ) : null}
 
         {remaining != null ? (
           <div className="flex items-center gap-3">
