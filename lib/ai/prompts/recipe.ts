@@ -53,7 +53,12 @@ export const RecipeSchema = z.object({
       }),
     )
     .min(2)
-    .max(20),
+    .max(20)
+    .describe(
+      "Ingredients in the order they are first used in the steps. " +
+        "First ingredient mentioned in step 1 comes first; unused-until-later " +
+        "items (salt finish, garnish) go later.",
+    ),
   steps: z
     .array(
       z.object({
@@ -196,6 +201,8 @@ Ingredient quantities:
 - Use US-style units (cup, tbsp, tsp, oz, lb, each, g).
 - For "to taste" items (salt, pepper), set optional: true with a small amount
   (e.g. 0.25 tsp) rather than qty 0.
+- List ingredients in the order they are first used in the steps (mise en place
+  by cook order — oil before the thing you saute in it, garnish last).
 
 User request: "${prompt}"
 
@@ -216,6 +223,8 @@ Rules:
 - If multiple recipes are visible, pick the most prominent / largest one.
 - Strip extraneous prose ("a family favorite for generations…"). Keep steps
   imperative and concise.
+- Order the ingredients list by first use in the steps when the source order
+  differs (or when the source lists by aisle / shopping order).
 
 Return ONLY a valid recipe object matching the schema. No commentary.`);
 }
@@ -238,6 +247,8 @@ Rules:
 - If macros aren't on the page, estimate them from the ingredients (and round to whole numbers).
 - Convert any ambiguous units to common ones (cup, tbsp, tsp, g, kg, oz, lb, ml, l, each).
 - If the page has multiple recipes, pick the primary one.
+- Order the ingredients list by first use in the steps when the source lists
+  them differently (aisle / shopping order).
 
 Return ONLY a valid recipe object matching the schema. No commentary.`);
 }

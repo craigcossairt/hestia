@@ -65,6 +65,8 @@ export interface Ingredient {
 export interface Step {
   text: string;
   timer_sec?: number;
+  /** Optional photo illustrating this step (Storage URL or https). */
+  photo_url?: string | null;
 }
 
 export interface Recipe {

@@ -21,7 +21,11 @@ import {
 } from "@/lib/recipes/match-ingredients";
 import { useCookTimer } from "@/lib/recipes/use-cook-timer";
 import { formatQuantity } from "@/lib/recipes/quantity";
-import { uploadRecipePhoto } from "@/app/(app)/recipes/actions";
+import {
+  clearStepPhoto,
+  uploadRecipePhoto,
+} from "@/app/(app)/recipes/actions";
+import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import type { Ingredient, Step } from "@/lib/types/database";
 
 interface CookShellProps {
@@ -34,10 +38,11 @@ interface CookShellProps {
 export function CookShell({
   recipeId,
   recipeName,
-  steps,
+  steps: initialSteps,
   ingredients,
 }: CookShellProps) {
   const router = useRouter();
+  const [steps, setSteps] = useState(initialSteps);
   const [i, setI] = useState(0);
   const step = steps[i];
   const [showAllIngredients, setShowAllIngredients] = useState(false);
@@ -59,6 +64,45 @@ export function CookShell({
     stepIndex: i,
     timerSec: step?.timer_sec,
   });
+  const [photoError, setPhotoError] = useState<{
+    stepIndex: number;
+    message: string;
+  } | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const navBusy = photoBusy || uploadBusy;
+
+  function setStepPhoto(url: string | null) {
+    if (navBusy) return;
+    const stepIndex = i;
+    if (photoError?.stepIndex === stepIndex) setPhotoError(null);
+    const previous = steps[stepIndex]?.photo_url ?? null;
+    setSteps((prev) =>
+      prev.map((s, idx) =>
+        idx === stepIndex ? { ...s, photo_url: url } : s,
+      ),
+    );
+    if (url == null) {
+      setPhotoBusy(true);
+      clearStepPhoto({ recipeId, stepIndex }).then((r) => {
+        if (r && "error" in r && r.error) {
+          setSteps((cur) =>
+            cur.map((s, idx) =>
+              idx === stepIndex && s.photo_url == null
+                ? { ...s, photo_url: previous }
+                : s,
+            ),
+          );
+          setPhotoError({ stepIndex, message: r.error });
+        }
+      }).finally(() => setPhotoBusy(false));
+    }
+  }
+
+  function goToStep(next: number) {
+    if (navBusy) return;
+    setI(next);
+  }
 
   if (!step) {
     return (
@@ -76,13 +120,23 @@ export function CookShell({
   return (
     <main className="min-h-screen flex flex-col bg-paper">
       <header className="flex items-center justify-between px-6 py-4 border-b border-ink-l/50">
-        <Link
-          href={`/recipes/${recipeId}`}
-          className="flex items-center gap-2 text-ink-3 hover:text-ink"
-        >
-          <X size={18} strokeWidth={1.5} />
-          <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
-        </Link>
+        {navBusy ? (
+          <span
+            className="flex items-center gap-2 text-ink-3 opacity-40 pointer-events-none"
+            aria-disabled="true"
+          >
+            <X size={18} strokeWidth={1.5} />
+            <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
+          </span>
+        ) : (
+          <Link
+            href={`/recipes/${recipeId}`}
+            className="flex items-center gap-2 text-ink-3 hover:text-ink"
+          >
+            <X size={18} strokeWidth={1.5} />
+            <span className="font-mono text-[11px] uppercase tracking-wider">Close</span>
+          </Link>
+        )}
         <div className="text-center">
           <Label>cook · {recipeName}</Label>
           <Mono className="text-ink text-[14px]">
@@ -110,6 +164,24 @@ export function CookShell({
         <Body size="lg" className="text-ink text-[20px] md:text-[24px] leading-[1.45]">
           {step.text}
         </Body>
+
+        <StepPhotoControl
+          recipeId={recipeId}
+          stepIndex={i}
+          photoUrl={step.photo_url}
+          persistImmediately
+          disabled={photoBusy}
+          onBusyChange={setUploadBusy}
+          capture
+          size="lg"
+          className="items-center w-full"
+          onChange={setStepPhoto}
+        />
+        {photoError && photoError.stepIndex === i ? (
+          <Body size="sm" className="text-danger">
+            {photoError.message}
+          </Body>
+        ) : null}
 
         {remaining != null ? (
           <div className="flex items-center gap-3">
@@ -178,8 +250,8 @@ export function CookShell({
       <footer className="flex items-center justify-between gap-4 px-6 py-6 border-t border-ink-l/50 max-w-3xl mx-auto w-full">
         <Btn
           variant="outline"
-          onClick={() => setI(Math.max(0, i - 1))}
-          disabled={i === 0}
+          onClick={() => goToStep(Math.max(0, i - 1))}
+          disabled={i === 0 || navBusy}
         >
           <ChevronLeft size={16} /> Back
         </Btn>
@@ -189,6 +261,7 @@ export function CookShell({
             size="lg"
             onClick={() => setFinished(true)}
             full
+            disabled={navBusy}
           >
             Done
           </Btn>
@@ -196,8 +269,9 @@ export function CookShell({
           <Btn
             variant="primary"
             size="lg"
-            onClick={() => setI(Math.min(steps.length - 1, i + 1))}
+            onClick={() => goToStep(Math.min(steps.length - 1, i + 1))}
             full
+            disabled={navBusy}
           >
             Next <ChevronRight size={16} />
           </Btn>

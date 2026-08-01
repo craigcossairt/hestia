@@ -8,6 +8,7 @@ import { FamilyNotes, type FamilyNote } from "@/components/recipe/family-notes";
 import { TipsList } from "@/components/recipe/tips-list";
 import type { Ingredient, Step } from "@/lib/types/database";
 import type { FamilyMember } from "@/lib/family";
+import { orderIngredientsByFirstUse } from "@/lib/recipes/match-ingredients";
 
 export default async function RecipeDetailPage({
   params,
@@ -61,8 +62,11 @@ export default async function RecipeDetailPage({
     );
   }
 
-  const ingredients: Ingredient[] = recipe.ingredients_json ?? [];
   const steps: Step[] = recipe.steps_json ?? [];
+  const ingredients: Ingredient[] = orderIngredientsByFirstUse(
+    recipe.ingredients_json ?? [],
+    steps,
+  );
   // Family modifications were generated when the recipe was saved.
   // Filter against the *current* household so notes for members the
   // user has since removed don't keep haunting the recipe card.
@@ -127,20 +131,31 @@ export default async function RecipeDetailPage({
           </div>
           <div className="flex flex-col gap-4">
             <Label>steps</Label>
-            <ol className="flex flex-col gap-4">
+            <ol className="flex flex-col gap-5">
               {steps.map((step, i) => (
                 <li key={i} className="flex gap-4">
                   <Mono className="text-ink-3 text-[18px] w-6 shrink-0 mt-0.5">
                     {String(i + 1).padStart(2, "0")}
                   </Mono>
-                  <Body size="lg" className="text-ink-2">
-                    {step.text}
-                    {step.timer_sec ? (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-accent-tint text-accent font-mono">
-                        {Math.round(step.timer_sec / 60)} min timer
-                      </span>
+                  <div className="flex flex-col gap-3 min-w-0 flex-1">
+                    <Body size="lg" className="text-ink-2">
+                      {step.text}
+                      {step.timer_sec ? (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-accent-tint text-accent font-mono">
+                          {Math.round(step.timer_sec / 60)} min timer
+                        </span>
+                      ) : null}
+                    </Body>
+                    {step.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={step.photo_url}
+                        alt={`Step ${i + 1}`}
+                        className="w-full max-w-sm rounded-thumb border border-ink-l object-cover aspect-[4/3]"
+                        loading="lazy"
+                      />
                     ) : null}
-                  </Body>
+                  </div>
                 </li>
               ))}
             </ol>

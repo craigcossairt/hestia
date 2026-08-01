@@ -1,4 +1,5 @@
 import type { GeneratedRecipe } from "@/lib/ai/prompts/recipe";
+import { orderIngredientsByFirstUse } from "@/lib/recipes/match-ingredients";
 
 const DEFAULT_QTY_BY_UNIT: Record<string, number> = {
   each: 1,
@@ -62,27 +63,30 @@ function defaultQtyForUnit(unit: string): number {
 
 /** Fill in missing/zero quantities the model sometimes emits as 0. */
 export function normalizeGeneratedRecipe<T extends GeneratedRecipe>(recipe: T): T {
+  const ingredients = recipe.ingredients.map((ing) => {
+    if (ing.qty > 0) return ing;
+    if (TO_TASTE.test(ing.name)) {
+      return {
+        ...ing,
+        qty: 1,
+        unit: ing.unit?.trim() ? ing.unit : "pinch",
+        optional: true,
+      };
+    }
+    const fromName = guessQtyFromName(ing.name);
+    if (fromName) {
+      return {
+        ...ing,
+        qty: fromName.qty,
+        unit: fromName.unit ?? ing.unit,
+      };
+    }
+    return { ...ing, qty: defaultQtyForUnit(ing.unit || "each") };
+  });
+
   return {
     ...recipe,
-    ingredients: recipe.ingredients.map((ing) => {
-      if (ing.qty > 0) return ing;
-      if (TO_TASTE.test(ing.name)) {
-        return {
-          ...ing,
-          qty: 1,
-          unit: ing.unit?.trim() ? ing.unit : "pinch",
-          optional: true,
-        };
-      }
-      const fromName = guessQtyFromName(ing.name);
-      if (fromName) {
-        return {
-          ...ing,
-          qty: fromName.qty,
-          unit: fromName.unit ?? ing.unit,
-        };
-      }
-      return { ...ing, qty: defaultQtyForUnit(ing.unit || "each") };
-    }),
+    // List ingredients in the order they first appear in the steps.
+    ingredients: orderIngredientsByFirstUse(ingredients, recipe.steps),
   };
 }

@@ -11,6 +11,7 @@ import {
   recalculateRecipeMacros,
   type RecipePatch,
 } from "@/app/(app)/recipes/actions";
+import { StepPhotoControl } from "@/components/recipe/step-photo-control";
 import type { Ingredient, Step } from "@/lib/types/database";
 import type { ParsedIngredient } from "@/lib/recipes/parse-ingredient-line";
 import {
@@ -27,6 +28,11 @@ import {
   normalizeSteps,
   normalizeTips,
 } from "@/lib/recipes/normalize-recipe-form";
+import {
+  newEditableStep,
+  toEditableSteps,
+  type EditableStep,
+} from "@/lib/recipes/editable-step";
 import {
   formatQuantity,
   normalizeRecipeUnit,
@@ -87,9 +93,10 @@ interface InitialRecipe {
   tips: string[];
 }
 
-interface FormState extends InitialRecipe {
+interface FormState extends Omit<InitialRecipe, "steps"> {
   prep_min: number;
   cook_min: number;
+  steps: EditableStep[];
 }
 
 function buildInitialForm(initial: InitialRecipe): FormState {
@@ -97,7 +104,7 @@ function buildInitialForm(initial: InitialRecipe): FormState {
     ...initial,
     tips: normalizeTips(initial.tips),
     ingredients: normalizeIngredients(initial.ingredients),
-    steps: normalizeSteps(initial.steps),
+    steps: toEditableSteps(normalizeSteps(initial.steps)),
     prep_min: initial.prep_min ?? 0,
     cook_min: initial.cook_min ?? initial.time_min,
   };
@@ -539,19 +546,33 @@ export function EditRecipeForm({ recipeId, initial }: EditRecipeFormProps) {
             </button>
             <button
               type="button"
-              onClick={() => patch("steps", [...form.steps, { text: "" }])}
+              onClick={() => patch("steps", [...form.steps, newEditableStep()])}
               className="text-ink-3 hover:text-ink text-[12px] flex items-center gap-1"
             >
               <Plus size={12} /> add step
             </button>
           </div>
         </div>
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-3">
           {form.steps.map((step, i) => (
-            <li key={i} className="flex gap-2 items-start">
+            <li key={step.clientKey} className="flex gap-2 items-start">
               <Mono className="text-ink-3 text-[14px] mt-2 w-7 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </Mono>
+              <StepPhotoControl
+                recipeId={recipeId}
+                stepIndex={i}
+                photoUrl={step.photo_url}
+                persistImmediately={false}
+                onChange={(url) =>
+                  patch(
+                    "steps",
+                    form.steps.map((x, j) =>
+                      j === i ? { ...x, photo_url: url } : x,
+                    ),
+                  )
+                }
+              />
               <textarea
                 value={step.text}
                 onChange={(e) =>
