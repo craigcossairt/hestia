@@ -1,0 +1,17 @@
+{
+  "name": "Hestia",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev",
+      "description": "Next.js 16 dev server (Turbopack) on http://localhost:3000. Runs in demo mode when Supabase env vars are unset; set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (and optionally XAI_API_KEY) as secrets to enable auth, database, and AI features."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 3000
+    }
+  ]
+}
