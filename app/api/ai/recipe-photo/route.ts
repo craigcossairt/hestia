@@ -5,7 +5,7 @@
 // Was previously hardcoded to xAI; switched to the pluggable provider
 // abstraction so OpenAI / Anthropic / Google all work via the same
 // route. Also runs the resolved photo chain so a user-uploaded
-// cookbook page still yields a recipe-card photo (Pexels / Brave /
+// cookbook page still yields a recipe-card photo (Pexels / Commons /
 // AI gen) without forcing the user to capture the dish itself.
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     // Standard photo-resolution chain. Vision-parsed recipes don't
     // have a source URL, but the AI may still surface an image_url
-    // (rare) and the chain has Pexels / Brave / AI image generation
+    // (rare) and the chain has Pexels / Commons / AI image generation
     // as fallbacks so the recipe card has a usable photo. supabase + user
     // passed so the ai-gen fallback can upload to Storage rather than
     // returning a data: URI.

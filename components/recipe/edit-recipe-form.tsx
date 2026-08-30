@@ -883,7 +883,7 @@ function PhotoEditor({
         <div className="w-32 h-32 shrink-0 rounded-card overflow-hidden border border-ink-l bg-paper-2 flex items-center justify-center">
           {currentUrl ? (
             // Plain <img> rather than next/image so non-allowlisted hosts
-            // (Pexels, Brave thumbnails, user uploads) just work.
+            // (Pexels, Wikimedia Commons, user uploads) just work.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={currentUrl}
