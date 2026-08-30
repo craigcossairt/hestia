@@ -148,9 +148,8 @@ export async function POST(req: NextRequest) {
     schema: PlanWeekSchema,
     // Disable search for the bulk plan generator. With auto-search the
     // model issues a search per recipe BEFORE streaming any tokens, which
-    // can stack 60+ seconds of dead time. The photo chain still has Brave
-    // + Pexels as fast/free fallbacks. Single-recipe routes keep search
-    // on (one search, much shorter).
+    // can stack 60+ seconds of dead time. The photo chain still has Pexels
+    // + Wikimedia Commons as fast/free fallbacks.
     providerOptions: getProviderOptions({ disableSearch: true }),
     ...getModelOpts(),
     prompt: planWeekPrompt({

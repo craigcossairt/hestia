@@ -14,7 +14,7 @@ import type { FamilyMember } from "@/lib/family";
 // by a client-supplied result instead of a server-side AI call.
 
 // Photo resolution + 21 inserts can take longer than the previous 120s
-// budget when the photo chain has to go all the way through Brave/Pexels
+// budget when the photo chain has to go all the way through Pexels/Commons
 // for every meal. 300s = Vercel default, plenty of headroom.
 export const maxDuration = 300;
 

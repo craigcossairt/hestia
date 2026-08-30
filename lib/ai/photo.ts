@@ -9,12 +9,12 @@
 //      (the AI's + ours) for the same recipe.
 //   1. og:image extraction — when a recipe was parsed from a webpage,
 //      the page's own marketing image is the gold standard.
-//   2. Pexels search — free with a generous tier (~200 req/hour). Try
-//      this BEFORE Brave so a 21-recipe plan doesn't burn through
-//      paid Brave quota on common dishes Pexels covers fine.
-//   3. Brave web image search — better at niche/specific dish names but
-//      paid (~$0.10 per query at the entry tier; $5 free monthly burns
-//      after ~50 queries). Fallback only.
+//   2. Pexels search — free with a generous tier (~200 req/hour) and the
+//      better-looking result for everyday dishes, which is most of them.
+//   3. Wikimedia Commons image search — free, keyless, and unusually good
+//      at the niche/regional dish names Pexels' stock library misses
+//      ("khachapuri", "cochinita pibil"). Fallback only, because the
+//      photos are amateur-quality more often than Pexels'.
 //   4. AI image generation — slowest + most expensive; creative
 //      fallback when search misses.
 //   5. null — caller renders a FoodImage SVG fallback.
@@ -26,7 +26,7 @@ import { assertSafeFetchUrl, fetchWithSafeRedirects } from "@/lib/net/safe-url";
 
 export interface ResolvedPhoto {
   url: string;
-  source: "ai_search" | "og" | "web" | "pexels" | "ai_gen";
+  source: "ai_search" | "og" | "commons" | "pexels" | "ai_gen";
 }
 
 export async function resolveRecipePhoto(args: {
@@ -36,8 +36,9 @@ export async function resolveRecipePhoto(args: {
   // search). When present and points at a real image, we use it directly
   // instead of running another search.
   aiImageUrl?: string | null;
-  // Short cuisine / style hint for AI image gen and search refinement
-  // (e.g. "creamy pasta dish, Italian, photographed from above").
+  // Short cuisine / style hint for AI image generation (e.g. "creamy
+  // pasta dish, Italian, photographed from above"). Not fed to the
+  // Commons search — see tryCommonsImageSearch for why.
   promptHint?: string;
   // Supabase client + userId — required to enable the AI image-generation
   // fallback. AI-gen images come back as base64 and are uploaded to the
@@ -64,13 +65,13 @@ export async function resolveRecipePhoto(args: {
     if (og) return { url: og, source: "og" };
   }
 
-  // 2. Pexels (free, generous quota — try first to spare Brave $$).
+  // 2. Pexels (free, generous quota, best-looking for everyday dishes).
   const pex = await tryPexelsSearch(recipeName);
   if (pex) return { url: pex, source: "pexels" };
 
-  // 3. Brave web image search (paid, but better at niche/specific names).
-  const web = await tryWebImageSearch(recipeName, promptHint);
-  if (web) return { url: web, source: "web" };
+  // 3. Wikimedia Commons (free + keyless, better at niche/specific names).
+  const commons = await tryCommonsImageSearch(recipeName);
+  if (commons) return { url: commons, source: "commons" };
 
   // 4. AI image generation (slowest + most expensive). Only when we have
   //    a Supabase client + user — otherwise we'd persist a data URI which
@@ -159,47 +160,109 @@ async function tryExtractOgImage(url: string): Promise<string | null> {
   }
 }
 
-interface BraveImageResponse {
-  results?: Array<{
-    properties?: { url?: string };
-    thumbnail?: { src?: string };
-    url?: string;
-  }>;
+// Shape of the MediaWiki action API response with formatversion=2, where
+// `query.pages` is an array (the legacy default keys it by page id).
+interface CommonsSearchResponse {
+  query?: {
+    pages?: Array<{
+      // Generator result ordering. The API does not guarantee `pages`
+      // comes back in search-relevance order, but every generated page
+      // carries its rank here, so we sort on it.
+      index?: number;
+      imageinfo?: Array<{
+        url?: string;
+        thumburl?: string;
+        mime?: string;
+      }>;
+    }>;
+  };
 }
 
-// Brave Search Image API. Free tier 2k queries/month — generous for our
-// needs (one query per generated recipe). Set BRAVE_SEARCH_API_KEY.
-async function tryWebImageSearch(
-  query: string,
-  hint?: string,
-): Promise<string | null> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) return null;
+// Wikimedia insists on a descriptive, contactable User-Agent for API
+// traffic; generic agents get throttled or blocked outright.
+const COMMONS_USER_AGENT =
+  "HestiaBot/1.0 (https://github.com/craigcossairt/hestia; recipe photo lookup)";
+
+// Bounds the thumbnail we ask for. Commons originals are frequently
+// 10–40 MB scans; a 1200px-wide thumb is plenty for a recipe card and
+// keeps the stored URL cheap to serve.
+const COMMONS_THUMB_WIDTH = 1200;
+
+// Only these render reliably in an <img> across browsers. The
+// `filetype:bitmap` search qualifier already filters out SVG/PDF/video,
+// but the mime check is the one that actually guarantees it.
+const COMMONS_ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+// Wikimedia Commons image search. Free, keyless, no account and no card —
+// which is the whole reason it sits here: it replaced Brave's image API
+// after Brave retired its free tier. Commons is also a better fit for this
+// slot than a general web-image index, because its strength is exactly
+// what we fall back for: specific, named, regional dishes.
+//
+// Deliberately searches the bare dish name. Commons search is keyword
+// matching over file captions and categories, not a semantic web index,
+// so appending the AI's style hint ("photographed from above, shallow
+// depth of field") drops recall to near zero rather than refining it.
+async function tryCommonsImageSearch(query: string): Promise<string | null> {
   try {
-    const refined = hint ? `${query} ${hint}` : `${query} food recipe`;
+    const params = new URLSearchParams({
+      action: "query",
+      format: "json",
+      formatversion: "2",
+      generator: "search",
+      // Namespace 6 is File:. `filetype:bitmap` keeps out SVG diagrams,
+      // PDFs and video, which Commons returns freely for food terms.
+      gsrsearch: `filetype:bitmap ${query}`,
+      gsrnamespace: "6",
+      gsrlimit: "8",
+      prop: "imageinfo",
+      iiprop: "url|mime",
+      iiurlwidth: String(COMMONS_THUMB_WIDTH),
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(
-      `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(refined)}&count=5&safesearch=strict`,
-      {
+    let res: Response;
+    try {
+      res = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, {
         signal: controller.signal,
         headers: {
           Accept: "application/json",
-          "X-Subscription-Token": apiKey,
+          "User-Agent": COMMONS_USER_AGENT,
         },
-      },
-    );
-    clearTimeout(timeout);
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!res.ok) return null;
-    const json = (await res.json()) as BraveImageResponse;
-    // Prefer a full-size result over the thumbnail.
-    for (const r of json.results ?? []) {
-      const url = r.properties?.url ?? r.url ?? r.thumbnail?.src;
-      if (url && /^https?:\/\//.test(url)) return url;
+    const json = (await res.json()) as CommonsSearchResponse;
+    const rank = (p: { index?: number }) => p.index ?? Number.MAX_SAFE_INTEGER;
+    const pages = [...(json.query?.pages ?? [])].sort(
+      (a, b) => rank(a) - rank(b),
+    );
+    for (const page of pages) {
+      const info = page.imageinfo?.[0];
+      if (!info) continue;
+      if (info.mime && !COMMONS_ALLOWED_MIME.has(info.mime)) continue;
+      // Prefer the bounded thumbnail; the original is the fallback only
+      // when the thumbnailer declined to render one.
+      const url = info.thumburl ?? info.url;
+      if (url && isCommonsUploadUrl(url)) return url;
     }
     return null;
   } catch {
     return null;
+  }
+}
+
+// Commons serves every file from upload.wikimedia.org. Pinning the host
+// means the URL we hand back can't be steered somewhere else by the API
+// response, so this layer needs no separate SSRF re-validation.
+function isCommonsUploadUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && url.hostname === "upload.wikimedia.org";
+  } catch {
+    return false;
   }
 }
 

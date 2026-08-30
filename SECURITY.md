@@ -29,7 +29,7 @@ In-scope:
 Out-of-scope:
 
 - Third-party services Hestia depends on (Supabase, Vercel, xAI, Kroger,
-  USDA, Pexels, Brave). Report to those vendors directly.
+  USDA, Pexels, Wikimedia). Report to those vendors directly.
 - Self-hosted forks running modified code — please report to the fork owner.
 - Issues that require a malicious browser extension or already-compromised
   device.

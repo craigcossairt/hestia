@@ -46,7 +46,7 @@ the same web codebase. No app store, no native build.
 | Barcode | `@zxing/browser` + Open Food Facts API |
 | Nutrition refinement | USDA FoodData Central |
 | Grocery | Kroger Public API (Locations + Products + Cart + Profile) |
-| Photos | og:image → Brave → Pexels → AI image gen → stylised SVG |
+| Photos | og:image → Pexels → Wikimedia Commons → AI image gen → stylised SVG |
 | Hosting | Vercel (Hobby tier is enough for a household) |
 
 ## Try it
@@ -97,7 +97,7 @@ XAI_API_KEY=xai-...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-The example file documents every optional integration (Brave, Pexels,
+The example file documents every optional integration (Pexels,
 USDA, Kroger) with what they unlock and where to get the keys.
 
 ### 5. Run
@@ -205,10 +205,19 @@ providers.
 When a recipe is generated or imported, Hestia tries:
 
 1. **og:image** of the source page (URL-imported recipes)
-2. **Brave web image search** (set `BRAVE_SEARCH_API_KEY`, free 2k/month)
-3. **Pexels search** (set `PEXELS_API_KEY`, free, generous tier)
+2. **Pexels search** (set `PEXELS_API_KEY`, free, generous tier) — the
+   better-looking result for the everyday dishes that make up most of a plan
+3. **Wikimedia Commons image search** — no key, no account, no card. Its
+   coverage of specific regional dishes ("khachapuri", "cochinita pibil")
+   beats a stock library, which is exactly what this fallback slot is for
 4. **AI image generation** if your provider supports it
 5. **Stylised SVG fallback** — every recipe always has a visual
+
+Commons replaced Brave image search here when Brave retired its free tier in
+February 2026. Note that Commons photos carry open licences that often
+require attribution (CC BY-SA and similar); Hestia does not currently
+surface that credit, which is fine for a private household instance but
+worth handling before showing these publicly.
 
 ### Nutrition refinement
 
@@ -230,15 +239,17 @@ Running Hestia for a single household on free tiers, expect roughly:
 | Supabase | Free | $0 (< 500MB DB, < 1GB storage) |
 | xAI Grok | Pay-as-you-go | $1–5 for ~1 active user |
 | USDA FDC | Free | $0 |
-| Brave Search | Free | $0 (under 2k queries/month) |
+| Wikimedia Commons | Free | $0 (no key, no account) |
 | Pexels | Free | $0 |
 | Kroger Public API | Free (Personal App) | $0 |
 
 xAI is the only meaningful variable cost. A typical week — generating one
 weekly plan, ~10 recipe creations, ~20 quick-logs, daily Coach use — runs
-about $1. Plan generation is the biggest single cost (~$0.30 per
-21-meal plan with live web search enabled) so set `AI_DISABLE_SEARCH=true`
-if you want to drop that to ~$0.05.
+about $1. Plan generation is the biggest single cost. Live model-side web
+search would add ~$0.30 to a 21-meal plan, but every AI route already opts
+out of it per call, so plans run at the ~$0.05 end today without any env
+change. Photo resolution adds nothing: every layer before AI image
+generation is free.
 
 AI routes and AI-backed server actions are rate-limited per user via
 `checkAiQuota` / `assertAiQuota` (`lib/ai/quota.ts`), backed by the
