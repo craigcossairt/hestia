@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getImageModelId,
+  getModel,
   getModelId,
   getProviderId,
   getProviderOptions,
@@ -117,6 +118,11 @@ describe("provider selection", () => {
     vi.stubEnv("VERCEL", "1");
     expect(getProviderId()).toBe("xai");
     expect(getModelId("bulk")).toBe("grok-4.3");
+  });
+
+  it("refuses xai-direct bulk without an explicit AI_MODEL_BULK override", () => {
+    stubDirectXai();
+    expect(() => getModel("bulk")).toThrow(/AI_XAI_DIRECT requires AI_MODEL_BULK/);
   });
 
   it("defaults to Gateway when VERCEL=1 and AI_PROVIDER is unset", () => {

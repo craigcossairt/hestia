@@ -94,6 +94,8 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4.3",
+    // Remap target only. api.x.ai 410s this id (#69–#71); getModel("bulk")
+    // on xai-direct requires an explicit AI_MODEL_BULK override.
     bulk: "grok-4.3",
     vision: "grok-4.3",
     image: "grok-imagine-image-2.0",
@@ -269,8 +271,13 @@ function ensureGoogle() {
 // `streamText`. Pick "fast" for text + JSON, "bulk" for week-scale JSON,
 // and "vision" for any call that includes image inputs.
 export function getModel(role: ModelRole): LanguageModel {
-  const name = getModelId(role);
   const provider = currentProvider();
+  if (provider === "xai" && role === "bulk" && !envOverride("AI_MODEL_BULK")) {
+    throw new Error(
+      "AI_XAI_DIRECT requires AI_MODEL_BULK. api.x.ai 410s catalog Grok ids (#69–#71). Unset AI_XAI_DIRECT to use Vercel AI Gateway.",
+    );
+  }
+  const name = getModelId(role);
   switch (provider) {
     case "xai":
       return ensureXai()(name);
