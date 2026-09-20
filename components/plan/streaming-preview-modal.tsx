@@ -9,6 +9,8 @@ import { PlanWeekSchema } from "@/lib/ai/prompts/plan-week";
 import { cn } from "@/lib/utils";
 import {
   emptyWeekStreamMessage,
+  GONE_WEEK_PLAN_MESSAGE,
+  isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
   shouldErrorEmptyWeekStream,
@@ -282,6 +284,9 @@ export function StreamingPreviewModal({
     }
     if (isUnhelpfulWeekStreamSchemaError(raw)) {
       return emptyWeekStreamMessage(elapsed);
+    }
+    if (isGoneWeekPlanError(raw)) {
+      return GONE_WEEK_PLAN_MESSAGE;
     }
     return raw;
   }

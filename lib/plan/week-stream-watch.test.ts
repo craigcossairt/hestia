@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   FIRST_MEAL_STALL_SECONDS,
   emptyWeekStreamMessage,
+  GONE_WEEK_PLAN_MESSAGE,
+  isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
   shouldErrorEmptyWeekStream,
@@ -72,6 +74,17 @@ describe("shouldAbortStalledWeekStream", () => {
 describe("emptyWeekStreamMessage", () => {
   it("mentions timeout near the function budget", () => {
     expect(emptyWeekStreamMessage(303)).toMatch(/timed out/i);
+  });
+});
+
+describe("isGoneWeekPlanError", () => {
+  it("matches HTTP 410 statusText and status codes", () => {
+    expect(isGoneWeekPlanError("Gone")).toBe(true);
+    expect(isGoneWeekPlanError("GONE")).toBe(true);
+    expect(isGoneWeekPlanError("410 Gone")).toBe(true);
+    expect(isGoneWeekPlanError("HTTP 410")).toBe(true);
+    expect(isGoneWeekPlanError(GONE_WEEK_PLAN_MESSAGE)).toBe(false);
+    expect(isGoneWeekPlanError("Hit a rate limit")).toBe(false);
   });
 });
 

@@ -8,6 +8,9 @@ export const FIRST_MEAL_STALL_SECONDS = 120;
 export const STALLED_WEEK_STREAM_MESSAGE =
   "The plan sat too long without streaming any meals, so Hestia stopped waiting. Try again, or generate without snack/dessert/beverage.";
 
+export const GONE_WEEK_PLAN_MESSAGE =
+  "The AI model for week planning is no longer available. Try again in a moment.";
+
 export function emptyWeekStreamMessage(elapsedSeconds: number): string {
   if (elapsedSeconds >= 280) {
     return "The plan timed out before any meals streamed. Try again, or generate without snack/dessert/beverage.";
@@ -22,6 +25,14 @@ export function emptyWeekStreamMessage(elapsedSeconds: number): string {
 export function isUnhelpfulWeekStreamSchemaError(raw: string): boolean {
   const lower = raw.toLowerCase();
   return lower.includes("expected object") && lower.includes("undefined");
+}
+
+// HTTP 410 empty bodies become APICallError.message = "Gone" (the
+// statusText). Recipe-generate already maps this; the week-plan 502
+// helper used to forward it raw into the modal.
+export function isGoneWeekPlanError(raw: string): boolean {
+  const lower = raw.trim().toLowerCase();
+  return lower === "gone" || /\bgone\b/.test(lower) || /\b410\b/.test(lower);
 }
 
 export function shouldErrorEmptyWeekStream(args: {
