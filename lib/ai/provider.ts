@@ -112,6 +112,27 @@ function envOverride(name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+// Retired / reasoning slugs that stall week-plan JSON (no text-delta until
+// thinking finishes, then often past Vercel's 300s budget). Env overrides
+// from the old docs (AI_MODEL_BULK=grok-4-fast-reasoning, grok-4.6, grok-4.3)
+// must not beat the non-reasoning catalog row.
+function bareModelId(slug: string): string {
+  const slash = slug.lastIndexOf("/");
+  return slash >= 0 ? slug.slice(slash + 1) : slug;
+}
+
+export function isReasoningBulkSlug(slug: string): boolean {
+  const id = bareModelId(slug);
+  if (id.includes("non-reasoning")) return false;
+  if (id.includes("reasoning")) return true;
+  return /^(grok-4)(\.3|\.5|\.6)?(-latest|-0709)?$/.test(id);
+}
+
+function coerceBulkSlug(slug: string, provider: AiProvider): string {
+  if (!isReasoningBulkSlug(slug)) return slug;
+  return catalogModel(provider, "bulk") as string;
+}
+
 // Resolved slug for a role. Exported for tests and telemetry — generation
 // call sites should keep using getModel(role).
 export function getModelId(role: ModelRole): string {
@@ -120,7 +141,9 @@ export function getModelId(role: ModelRole): string {
     return envOverride("AI_MODEL_FAST") ?? (catalogModel(provider, "fast") as string);
   }
   if (role === "bulk") {
-    return envOverride("AI_MODEL_BULK") ?? (catalogModel(provider, "bulk") as string);
+    const raw =
+      envOverride("AI_MODEL_BULK") ?? (catalogModel(provider, "bulk") as string);
+    return coerceBulkSlug(raw, provider);
   }
   return (
     envOverride("AI_MODEL_VISION") ?? (catalogModel(provider, "vision") as string)

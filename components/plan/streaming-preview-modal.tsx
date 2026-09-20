@@ -7,6 +7,12 @@ import { Sparkles, Check } from "lucide-react";
 import { Dialog, H, Body, Btn, Label, Mono } from "@/components/ds";
 import { PlanWeekSchema } from "@/lib/ai/prompts/plan-week";
 import { cn } from "@/lib/utils";
+import {
+  emptyWeekStreamMessage,
+  shouldAbortStalledWeekStream,
+  shouldErrorEmptyWeekStream,
+  STALLED_WEEK_STREAM_MESSAGE,
+} from "@/lib/plan/week-stream-watch";
 
 interface StreamingPreviewModalProps {
   open: boolean;
@@ -49,12 +55,17 @@ export function StreamingPreviewModal({
   } | null>(null);
   const submittedRef = useRef(false);
   const savedRef = useRef(false);
+  const sawLoadingRef = useRef(false);
+  const stalledRef = useRef(false);
   // AbortController for the /save fetch. Closing the modal mid-save used
   // to leave the request running for up to 5min on the server, with the
   // setState chain in the .then handler firing into an unmounted
   // component. Worse, an impatient user who closed + re-clicked Generate
   // would stack a second concurrent save against the same rows.
   const saveCtrlRef = useRef<AbortController | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const elapsedRef = useRef(0);
+  elapsedRef.current = elapsed;
 
   const { object, submit, isLoading, stop } = useObject({
     api: "/api/ai/plan-week/preview",
@@ -63,9 +74,17 @@ export function StreamingPreviewModal({
       setError(err.message ?? "Stream failed");
       setPhase("error");
     },
+    onFinish({ object: finished, error: finishError }) {
+      if (savedRef.current || stalledRef.current) return;
+      const meals = finished?.meals;
+      if (finishError || !Array.isArray(meals) || meals.length === 0) {
+        setError(
+          finishError?.message ?? emptyWeekStreamMessage(elapsedRef.current),
+        );
+        setPhase("error");
+      }
+    },
   });
-
-  const [elapsed, setElapsed] = useState(0);
 
   // Kick off the stream once when the modal opens.
   // `submit` from useObject is a new function reference every render
@@ -82,6 +101,8 @@ export function StreamingPreviewModal({
       saveCtrlRef.current = null;
       submittedRef.current = false;
       savedRef.current = false;
+      sawLoadingRef.current = false;
+      stalledRef.current = false;
       setPhase("streaming");
       setError(null);
       setSavedSummary(null);
@@ -100,6 +121,10 @@ export function StreamingPreviewModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, weekStart, includeSnack, includeDessert, includeBeverage, regenerate]);
 
+  useEffect(() => {
+    if (isLoading) sawLoadingRef.current = true;
+  }, [isLoading]);
+
   // Abort any in-flight save when the component unmounts. handleClose
   // also aborts proactively (more reliable than relying on unmount
   // because the parent may keep the dialog mounted with open=false).
@@ -116,6 +141,45 @@ export function StreamingPreviewModal({
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [open, phase]);
+
+  const mealCount = object?.meals?.length ?? 0;
+
+  // Stream closed with nothing parsed — do not sit in "streaming" (this is
+  // how a 300s Vercel timeout became a 10-minute spinner).
+  useEffect(() => {
+    if (
+      !shouldErrorEmptyWeekStream({
+        phase,
+        isLoading,
+        sawLoading: sawLoadingRef.current,
+        mealCount,
+        saved: savedRef.current,
+      })
+    ) {
+      return;
+    }
+    setError(emptyWeekStreamMessage(elapsed));
+    setPhase("error");
+  }, [phase, isLoading, mealCount, elapsed]);
+
+  // Hard stop if no meals have arrived by the stall threshold. stop() is an
+  // abort, which useObject swallows without onError.
+  useEffect(() => {
+    if (
+      !shouldAbortStalledWeekStream({
+        phase,
+        elapsedSeconds: elapsed,
+        mealCount,
+      })
+    ) {
+      return;
+    }
+    if (stalledRef.current) return;
+    stalledRef.current = true;
+    stop();
+    setError(STALLED_WEEK_STREAM_MESSAGE);
+    setPhase("error");
+  }, [phase, elapsed, mealCount, stop]);
 
   // When the stream completes, kick off the save.
   useEffect(() => {
