@@ -1,5 +1,7 @@
 import {
+  GATEWAY_CREDITS_WEEK_PLAN_MESSAGE,
   goneWeekPlanMessage,
+  isGatewayCreditsError,
   isGoneWeekPlanError,
 } from "@/lib/plan/week-stream-watch";
 
@@ -48,6 +50,9 @@ export function weekPlanModelErrorMessage(
   const raw = rawErrorText(error);
   if (statusCodeOf(error) === 410 || (raw != null && isGoneWeekPlanError(raw))) {
     return goneWeekPlanMessage(modelId, provider);
+  }
+  if (raw != null && isGatewayCreditsError(raw)) {
+    return GATEWAY_CREDITS_WEEK_PLAN_MESSAGE;
   }
   if (raw != null) return raw;
   return "The generator failed before any meals streamed.";

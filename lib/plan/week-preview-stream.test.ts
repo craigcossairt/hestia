@@ -6,6 +6,7 @@ import {
   type WeekPreviewStreamPart,
 } from "@/lib/plan/week-preview-stream";
 import {
+  GATEWAY_CREDITS_WEEK_PLAN_MESSAGE,
   GONE_WEEK_PLAN_MESSAGE,
   goneWeekPlanMessage,
 } from "@/lib/plan/week-stream-watch";
@@ -57,6 +58,16 @@ describe("weekPlanModelErrorMessage", () => {
     expect(
       weekPlanModelErrorMessage(new Error("Invalid argument for grok-4.3")),
     ).toBe("Invalid argument for grok-4.3");
+  });
+
+  it("maps the Gateway credit-card gate to a friendly message", () => {
+    expect(
+      weekPlanModelErrorMessage(
+        new Error(
+          "AI Gateway requires a valid credit card on file to service requests. Please visit https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card",
+        ),
+      ),
+    ).toBe(GATEWAY_CREDITS_WEEK_PLAN_MESSAGE);
   });
 });
 

@@ -6,6 +6,10 @@ import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { Sparkles, Plus, Minus, Check } from "lucide-react";
 import { Dialog, H, Body, Btn, Label, Mono } from "@/components/ds";
 import { PlanRefinementSchema } from "@/lib/ai/prompts/refine-plan";
+import {
+  GATEWAY_CREDITS_WEEK_PLAN_MESSAGE,
+  isGatewayCreditsError,
+} from "@/lib/plan/week-stream-watch";
 
 interface RefinePlanModalProps {
   open: boolean;
@@ -159,6 +163,9 @@ export function RefinePlanModal({
       lower.includes("429")
     ) {
       return "Hit a rate limit on the AI provider. Wait a minute and try again.";
+    }
+    if (isGatewayCreditsError(raw)) {
+      return GATEWAY_CREDITS_WEEK_PLAN_MESSAGE;
     }
     return raw;
   }

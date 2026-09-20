@@ -4,6 +4,7 @@ import {
   emptyWeekStreamMessage,
   GONE_WEEK_PLAN_MESSAGE,
   goneWeekPlanMessage,
+  isGatewayCreditsError,
   isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
@@ -91,6 +92,23 @@ describe("isGoneWeekPlanError", () => {
     expect(isGoneWeekPlanError(goneWeekPlanMessage("spacexai/grok-4.3", "gateway"))).toBe(
       false,
     );
+  });
+});
+
+describe("isGatewayCreditsError", () => {
+  it("matches the Vercel Gateway credit-card gate", () => {
+    expect(
+      isGatewayCreditsError(
+        "AI Gateway requires a valid credit card on file to service requests.",
+      ),
+    ).toBe(true);
+    expect(isGatewayCreditsError("https://vercel.com/d?to=%2Fai%3Fmodal%3Dadd-credit-card")).toBe(
+      true,
+    );
+    expect(isGatewayCreditsError("please add-credit-card to your wallet copy")).toBe(
+      false,
+    );
+    expect(isGatewayCreditsError("Gone")).toBe(false);
   });
 });
 

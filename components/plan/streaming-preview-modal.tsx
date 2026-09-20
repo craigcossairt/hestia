@@ -9,7 +9,9 @@ import { PlanWeekSchema } from "@/lib/ai/prompts/plan-week";
 import { cn } from "@/lib/utils";
 import {
   emptyWeekStreamMessage,
+  GATEWAY_CREDITS_WEEK_PLAN_MESSAGE,
   GONE_WEEK_PLAN_MESSAGE,
+  isGatewayCreditsError,
   isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
@@ -287,6 +289,9 @@ export function StreamingPreviewModal({
     }
     if (isGoneWeekPlanError(raw)) {
       return GONE_WEEK_PLAN_MESSAGE;
+    }
+    if (isGatewayCreditsError(raw)) {
+      return GATEWAY_CREDITS_WEEK_PLAN_MESSAGE;
     }
     return raw;
   }
