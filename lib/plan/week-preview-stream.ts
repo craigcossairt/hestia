@@ -1,5 +1,5 @@
 import {
-  GONE_WEEK_PLAN_MESSAGE,
+  goneWeekPlanMessage,
   isGoneWeekPlanError,
 } from "@/lib/plan/week-stream-watch";
 
@@ -40,10 +40,13 @@ function rawErrorText(error: unknown): string | null {
   return null;
 }
 
-export function weekPlanModelErrorMessage(error: unknown): string {
+export function weekPlanModelErrorMessage(
+  error: unknown,
+  modelId?: string,
+): string {
   const raw = rawErrorText(error);
   if (statusCodeOf(error) === 410 || (raw != null && isGoneWeekPlanError(raw))) {
-    return GONE_WEEK_PLAN_MESSAGE;
+    return goneWeekPlanMessage(modelId);
   }
   if (raw != null) return raw;
   return "The generator failed before any meals streamed.";
@@ -58,6 +61,7 @@ function isTextDelta(part: WeekPreviewStreamPart): part is WeekPreviewStreamPart
 export async function weekPlanTextStreamResponse(args: {
   fullStream: AsyncIterable<WeekPreviewStreamPart>;
   headers?: Record<string, string>;
+  modelId?: string;
 }): Promise<Response> {
   const iterator = args.fullStream[Symbol.asyncIterator]();
   let firstText: string | null = null;
@@ -67,8 +71,11 @@ export async function weekPlanTextStreamResponse(args: {
     const { done, value } = await iterator.next();
     if (done) break;
     if (value.type === "error" || value.type === "abort") {
-      fail = weekPlanModelErrorMessage(value.error);
-      console.error("plan-week/preview model error", value.error);
+      fail = weekPlanModelErrorMessage(value.error, args.modelId);
+      console.error("plan-week/preview model error", {
+        model: args.modelId,
+        error: value.error,
+      });
       break;
     }
     if (isTextDelta(value) && value.text.length > 0) {
@@ -80,7 +87,10 @@ export async function weekPlanTextStreamResponse(args: {
   if (firstText == null) {
     return new Response(fail ?? EMPTY_WEEK_PREVIEW_STREAM_MESSAGE, {
       status: 502,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        ...args.headers,
+      },
     });
   }
 

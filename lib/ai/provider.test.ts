@@ -22,66 +22,64 @@ describe("model role catalog", () => {
 
     expect(getProviderId()).toBe("xai");
     expect(getModelId("fast")).toBe("grok-4.3");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     expect(getModelId("vision")).toBe("grok-4.3");
     expect(getImageModelId()).toBe("grok-imagine-image-2.0");
   });
 
-  it("does not put week generation on grok-4.6", () => {
+  it("pins week generation to grok-4.6 as a diagnostic", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
     vi.stubEnv("AI_MODEL_BULK", "");
-    expect(getModelId("bulk")).not.toMatch(/grok-4\.6/);
+    expect(getModelId("bulk")).toBe("grok-4.6");
   });
 
   it("keeps bulk independent of AI_MODEL_FAST", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
-    vi.stubEnv("AI_MODEL_FAST", "grok-4.6");
+    vi.stubEnv("AI_MODEL_FAST", "grok-4.3");
     vi.stubEnv("AI_MODEL_BULK", "");
 
-    expect(getModelId("fast")).toBe("grok-4.6");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("fast")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
   });
 
-  it("honours per-role env overrides that are still live", () => {
+  it("honours a live grok-4.6 env override", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
-    vi.stubEnv("AI_MODEL_BULK", "grok-3");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4.6");
     vi.stubEnv("AI_MODEL_VISION", "grok-4.3");
     vi.stubEnv("AI_MODEL_IMAGE", "grok-imagine-image");
 
-    expect(getModelId("bulk")).toBe("grok-3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     expect(getModelId("vision")).toBe("grok-4.3");
     expect(getImageModelId()).toBe("grok-imagine-image");
   });
 
-  it("remaps the grok-4.20 non-reasoning family onto grok-4.3", () => {
+  it("remaps the grok-4.20 non-reasoning family onto grok-4.6", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
     vi.stubEnv("AI_MODEL_BULK", "grok-4.20-non-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     vi.stubEnv("AI_MODEL_BULK", "grok-4.20-0309-non-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     vi.stubEnv("AI_PROVIDER", "gateway");
     vi.stubEnv("AI_MODEL_BULK", "xai/grok-4.20-non-reasoning");
-    expect(getModelId("bulk")).toBe("spacexai/grok-4.3");
+    expect(getModelId("bulk")).toBe("xai/grok-4.6");
   });
 
-  it("remaps retired 4.1-fast / 4-fast non-reasoning env onto grok-4.3", () => {
+  it("remaps retired 4.1-fast / grok-4.3 env onto grok-4.6", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
     vi.stubEnv("AI_MODEL_BULK", "grok-4.1-fast-non-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     vi.stubEnv("AI_MODEL_BULK", "grok-4-1-fast-non-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
     vi.stubEnv("AI_MODEL_BULK", "grok-4-fast-non-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
   });
 
-  it("remaps reasoning env overrides on bulk so week gen cannot stall on grok-4.6", () => {
+  it("remaps grok-4-fast-reasoning env on bulk onto grok-4.6", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
     vi.stubEnv("AI_MODEL_BULK", "grok-4-fast-reasoning");
-    expect(getModelId("bulk")).toBe("grok-4.3");
-    vi.stubEnv("AI_MODEL_BULK", "grok-4.6");
-    expect(getModelId("bulk")).toBe("grok-4.3");
-    vi.stubEnv("AI_MODEL_BULK", "grok-4.3");
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.6");
   });
 
   it("uses gateway-prefixed slugs when AI_PROVIDER=gateway", () => {
@@ -92,7 +90,7 @@ describe("model role catalog", () => {
     vi.stubEnv("AI_MODEL_IMAGE", "");
 
     expect(getModelId("fast")).toBe("xai/grok-4.3");
-    expect(getModelId("bulk")).toBe("spacexai/grok-4.3");
+    expect(getModelId("bulk")).toBe("xai/grok-4.6");
     expect(getImageModelId()).toBe("xai/grok-imagine-image-2.0");
   });
 });
@@ -113,28 +111,7 @@ describe("getProviderOptions", () => {
     });
   });
 
-  it("adds reasoningEffort none on the xAI bulk path without dropping search-off", () => {
-    vi.stubEnv("AI_PROVIDER", "xai");
-    expect(
-      getProviderOptions({ disableSearch: true, reasoningEffort: "none" }),
-    ).toEqual({
-      xai: {
-        searchParameters: { mode: "off" },
-        reasoningEffort: "none",
-      },
-    });
-  });
-
-  it("forwards reasoningEffort on gateway so spacexai/grok-4.3 can skip thinking", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
-    expect(
-      getProviderOptions({ disableSearch: true, reasoningEffort: "none" }),
-    ).toEqual({
-      xai: { reasoningEffort: "none" },
-    });
-  });
-
-  it("does not send reasoningEffort on recipe-style search-off calls", () => {
+  it("does not send reasoningEffort on the diagnostic bulk path", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
     expect(getProviderOptions({ disableSearch: true })).toEqual({
       xai: { searchParameters: { mode: "off" } },
@@ -143,9 +120,9 @@ describe("getProviderOptions", () => {
 });
 
 describe("isReasoningBulkSlug", () => {
-  it("treats grok-4.3 / grok-4.6 as reasoning, not the 4.1-fast non-reasoning slug", () => {
+  it("treats grok-4.3 as reasoning and grok-4.6 as the live diagnostic bulk", () => {
     expect(isReasoningBulkSlug("grok-4.3")).toBe(true);
-    expect(isReasoningBulkSlug("grok-4.6")).toBe(true);
+    expect(isReasoningBulkSlug("grok-4.6")).toBe(false);
     expect(isReasoningBulkSlug("grok-4.1-fast-non-reasoning")).toBe(false);
     expect(isReasoningBulkSlug("grok-4.20-non-reasoning")).toBe(false);
     expect(isReasoningBulkSlug("xai/grok-4-fast-reasoning")).toBe(true);
@@ -160,11 +137,12 @@ describe("isRetiredBulkSlug", () => {
     expect(isRetiredBulkSlug("grok-4.20-0309-reasoning")).toBe(false);
   });
 
-  it("matches retired 4.1-fast / 4-fast non-reasoning ids", () => {
+  it("matches retired 4.1-fast ids and grok-4.3", () => {
     expect(isRetiredBulkSlug("grok-4.1-fast-non-reasoning")).toBe(true);
     expect(isRetiredBulkSlug("grok-4-1-fast-non-reasoning")).toBe(true);
     expect(isRetiredBulkSlug("grok-4-fast-non-reasoning")).toBe(true);
     expect(isRetiredBulkSlug("spacexai/grok-4.1-fast-non-reasoning")).toBe(true);
-    expect(isRetiredBulkSlug("grok-4.3")).toBe(false);
+    expect(isRetiredBulkSlug("grok-4.3")).toBe(true);
+    expect(isRetiredBulkSlug("grok-4.6")).toBe(false);
   });
 });

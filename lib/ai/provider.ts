@@ -36,10 +36,11 @@ import { gateway } from "ai";
 export type AiProvider = "xai" | "openai" | "anthropic" | "google" | "gateway";
 // Capability roles — the only model identifiers call sites should use.
 // "fast"   — default text/json: coach, single recipes, pantry, insights.
-// "bulk"   — plan-week's 21-recipe generator. Must stream JSON immediately.
-//            xAI uses grok-4.3 with reasoningEffort "none". Do not point
-//            this at grok-4.6: that model defaults to high reasoning that
-//            cannot be disabled.
+// "bulk"   — plan-week's 21-recipe generator. Diagnostic pin: grok-4.6.
+//            grok-4.3 (and the 4.20 / 4.1-fast non-reasoning family) 410
+//            on api.x.ai after #70, which is already on production. Do
+//            not pass reasoningEffort none here — grok-4.6 rejects
+//            disabling reasoning.
 // "vision" — image-input capable model (receipts, recipe photos).
 export type ModelRole = "fast" | "bulk" | "vision";
 
@@ -71,7 +72,7 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4.3",
-    bulk: "grok-4.3",
+    bulk: "grok-4.6",
     vision: "grok-4.3",
     image: "grok-imagine-image-2.0",
   },
@@ -95,7 +96,7 @@ const DEFAULTS: Record<
   },
   gateway: {
     fast: "xai/grok-4.3",
-    bulk: "spacexai/grok-4.3",
+    bulk: "xai/grok-4.6",
     vision: "xai/grok-4.3",
     image: "xai/grok-imagine-image-2.0",
   },
@@ -113,17 +114,15 @@ function envOverride(name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
-// Retired / reasoning slugs that stall week-plan JSON (no text-delta until
-// thinking finishes, then often past Vercel's 300s budget). Env overrides
-// from the old docs (AI_MODEL_BULK=grok-4-fast-reasoning, grok-4.6) must
-// not beat the catalog row. grok-4.3 is the catalog bulk id — it is a
-// reasoning model, so call sites pass reasoningEffort "none".
+// Retired slugs that 410 week-plan JSON. Env leftovers from the 4.20
+// non-reasoning family, May 15 4.1-fast redirects, and grok-4.3 (410 in
+// prod after #70) must not beat the catalog row. Catalog bulk is a
+// diagnostic pin to grok-4.6 so we can tell "this model id is gone"
+// from "every Grok id is gone".
 //
-// The grok-4.20 non-reasoning family 410s on api.x.ai. Hyphenated
-// grok-4-1-fast-non-reasoning (and Gateway's dotted grok-4.1-fast-non-reasoning
-// plus grok-4-fast-non-reasoning) retired May 15 and redirected to grok-4.3
-// with effort none. Pin the catalog at grok-4.3 instead of chasing the
-// redirect. Not grok-4.6.
+// grok-4.6 is a reasoning model. Call sites omit reasoningEffort so the
+// API does not 400/410 on "none". First-token latency may be high; that
+// is acceptable for this diagnostic.
 function bareModelId(slug: string): string {
   const slash = slug.lastIndexOf("/");
   return slash >= 0 ? slug.slice(slash + 1) : slug;
@@ -133,12 +132,16 @@ export function isReasoningBulkSlug(slug: string): boolean {
   const id = bareModelId(slug);
   if (id.includes("non-reasoning")) return false;
   if (id.includes("reasoning")) return true;
-  return /^(grok-4)(\.3|\.5|\.6)?(-latest|-0709)?$/.test(id);
+  // grok-4.6 is the diagnostic catalog bulk — do not treat it as a
+  // slug that must be remapped away. grok-4.3 still remaps (410 in prod).
+  if (/^grok-4\.6(-latest)?$/.test(id)) return false;
+  return /^(grok-4)(\.3|\.5)?(-latest|-0709)?$/.test(id);
 }
 
 export function isRetiredBulkSlug(slug: string): boolean {
   const id = bareModelId(slug);
   if (/grok-4\.20-.*non-reasoning/.test(id)) return true;
+  if (/^grok-4\.3(-latest)?$/.test(id)) return true;
   switch (id) {
     case "grok-4.1-fast-non-reasoning":
     case "grok-4-1-fast-non-reasoning":
@@ -303,8 +306,8 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 // streams to the client). When search is off we send mode: "off"
 // explicitly so a newer Grok default cannot turn search back on.
 //
-// reasoningEffort is opt-in. Plan-week preview/refine pass "none" so
-// grok-4.3 streams JSON immediately. Recipe routes omit it.
+// reasoningEffort is opt-in. Bulk currently omits it (grok-4.6 diagnostic).
+// Recipe routes omit it. Do not pass "none" on grok-4.6.
 export const REASONING_EFFORTS = ["none", "low", "medium", "high"] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 

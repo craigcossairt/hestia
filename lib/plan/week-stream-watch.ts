@@ -11,6 +11,13 @@ export const STALLED_WEEK_STREAM_MESSAGE =
 export const GONE_WEEK_PLAN_MESSAGE =
   "The AI model for week planning is no longer available. Try again in a moment.";
 
+export function goneWeekPlanMessage(modelId?: string): string {
+  if (modelId && modelId.length > 0) {
+    return `The AI model for week planning is no longer available (${modelId}). Try again in a moment.`;
+  }
+  return GONE_WEEK_PLAN_MESSAGE;
+}
+
 export function emptyWeekStreamMessage(elapsedSeconds: number): string {
   if (elapsedSeconds >= 280) {
     return "The plan timed out before any meals streamed. Try again, or generate without snack/dessert/beverage.";
@@ -28,11 +35,16 @@ export function isUnhelpfulWeekStreamSchemaError(raw: string): boolean {
 }
 
 // HTTP 410 empty bodies become APICallError.message = "Gone" (the
-// statusText). Recipe-generate already maps this; the week-plan 502
-// helper used to forward it raw into the modal.
+// statusText). Match only that exact statusText / "410 Gone" — do not
+// treat "something has gone wrong" or a grok-4.3 slug as unavailable.
 export function isGoneWeekPlanError(raw: string): boolean {
   const lower = raw.trim().toLowerCase();
-  return lower === "gone" || /\bgone\b/.test(lower) || /\b410\b/.test(lower);
+  return (
+    lower === "gone" ||
+    lower === "410" ||
+    lower === "410 gone" ||
+    /^http[\s:-]*410(\s+gone)?$/.test(lower)
+  );
 }
 
 export function shouldErrorEmptyWeekStream(args: {
