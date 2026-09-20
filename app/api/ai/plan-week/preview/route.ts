@@ -165,6 +165,7 @@ export async function POST(req: NextRequest) {
     providerOptions: getProviderOptions({
       disableSearch: true,
       reasoningEffort: "none",
+      modelId,
     }),
     ...getModelOpts(),
     prompt: planWeekPrompt({

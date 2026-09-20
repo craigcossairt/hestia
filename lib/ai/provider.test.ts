@@ -138,7 +138,11 @@ describe("getProviderOptions", () => {
   it("forwards search-off and reasoningEffort none on Gateway", () => {
     vi.stubEnv("AI_PROVIDER", "gateway");
     expect(
-      getProviderOptions({ disableSearch: true, reasoningEffort: "none" }),
+      getProviderOptions({
+        disableSearch: true,
+        reasoningEffort: "none",
+        modelId: "spacexai/grok-4.3",
+      }),
     ).toEqual({
       xai: {
         searchParameters: { mode: "off" },
@@ -148,10 +152,26 @@ describe("getProviderOptions", () => {
     });
   });
 
+  it("does not pin gateway.only for non-SpaceXAI Gateway overrides", () => {
+    vi.stubEnv("AI_PROVIDER", "gateway");
+    expect(
+      getProviderOptions({
+        disableSearch: true,
+        modelId: "openai/gpt-4o-mini",
+      }),
+    ).toEqual({
+      xai: { searchParameters: { mode: "off" } },
+    });
+  });
+
   it("does not pin gateway.only when hitting api.x.ai direct", () => {
     stubDirectXai();
     expect(
-      getProviderOptions({ disableSearch: true, reasoningEffort: "none" }),
+      getProviderOptions({
+        disableSearch: true,
+        reasoningEffort: "none",
+        modelId: "grok-4.3",
+      }),
     ).toEqual({
       xai: {
         searchParameters: { mode: "off" },

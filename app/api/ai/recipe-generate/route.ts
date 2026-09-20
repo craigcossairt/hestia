@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
@@ -84,7 +85,10 @@ export async function POST(req: NextRequest) {
         // resolveRecipePhoto(). Search has been known to surface opaque
         // "Gone" / 503 errors from blocked hosts even when generation
         // would succeed without it (same fix as recipe-parse).
-        providerOptions: getProviderOptions({ disableSearch: true }),
+        providerOptions: getProviderOptions({
+          disableSearch: true,
+          modelId: getModelId("fast"),
+        }),
         ...getModelOpts(),
         prompt: generateRecipePrompt({
           prompt: parsed.data.prompt,

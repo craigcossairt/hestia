@@ -352,6 +352,7 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 export function getProviderOptions(opts?: {
   disableSearch?: boolean;
   reasoningEffort?: ReasoningEffort;
+  modelId?: string;
 }): ProviderOptions {
   const searchOff =
     process.env.AI_DISABLE_SEARCH === "true" || Boolean(opts?.disableSearch);
@@ -371,14 +372,17 @@ export function getProviderOptions(opts?: {
   switch (provider) {
     case "xai":
       return xaiOptions;
-    case "gateway":
+    case "gateway": {
       // spacexai/grok-4.3 is served by xai and vertex. Pin to xai so
       // reasoningEffort "none" in the xai namespace actually applies;
-      // Vertex would ignore it and week-plan would think again.
-      return {
-        ...xaiOptions,
-        gateway: { only: ["xai"] },
-      };
+      // Vertex would ignore it and week-plan would think again. Skip the
+      // pin for openai/* (etc.) Gateway overrides; only would reject them.
+      const pinXai =
+        opts?.modelId != null && opts.modelId.startsWith("spacexai/");
+      return pinXai
+        ? { ...xaiOptions, gateway: { only: ["xai"] } }
+        : xaiOptions;
+    }
     case "openai":
     case "anthropic":
     case "google":

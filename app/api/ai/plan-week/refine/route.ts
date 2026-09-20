@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
       is_leftover_of: r.is_leftover_of,
     }));
 
+  const modelId = getModelId("bulk");
   const result = streamObject({
     model: getModel("bulk"),
     schema: PlanRefinementSchema,
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
     providerOptions: getProviderOptions({
       disableSearch: true,
       reasoningEffort: "none",
+      modelId,
     }),
     // Do not pass abortSignal: req.signal — Next.js can abort the incoming
     // Request when this handler returns the streaming Response.
