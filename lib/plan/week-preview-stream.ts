@@ -1,3 +1,8 @@
+import {
+  GONE_WEEK_PLAN_MESSAGE,
+  isGoneWeekPlanError,
+} from "@/lib/plan/week-stream-watch";
+
 // Turns a model fullStream into an HTTP response for useObject.
 //
 // streamObject / streamText `.toTextStreamResponse()` only forwards
@@ -17,13 +22,30 @@ export type WeekPreviewStreamPart = {
   error?: unknown;
 };
 
-export function weekPlanModelErrorMessage(error: unknown): string {
+function statusCodeOf(error: unknown): number | undefined {
+  if (error && typeof error === "object" && "statusCode" in error) {
+    const n = (error as { statusCode: unknown }).statusCode;
+    return typeof n === "number" ? n : undefined;
+  }
+  return undefined;
+}
+
+function rawErrorText(error: unknown): string | null {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
   if (typeof error === "string" && error.trim().length > 0) {
     return error;
   }
+  return null;
+}
+
+export function weekPlanModelErrorMessage(error: unknown): string {
+  const raw = rawErrorText(error);
+  if (statusCodeOf(error) === 410 || (raw != null && isGoneWeekPlanError(raw))) {
+    return GONE_WEEK_PLAN_MESSAGE;
+  }
+  if (raw != null) return raw;
   return "The generator failed before any meals streamed.";
 }
 

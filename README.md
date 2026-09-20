@@ -177,11 +177,11 @@ provider based on `AI_PROVIDER`. Defaults to `xai`.
 
 | `AI_PROVIDER` | Required env | Default fast / vision | Default bulk (week plan) |
 |---|---|---|---|
-| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.20-0309-non-reasoning` |
+| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.20-non-reasoning` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
-| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `xai/grok-4.20-0309-non-reasoning` |
+| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `xai/grok-4.20-non-reasoning` |
 
 Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
 provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
