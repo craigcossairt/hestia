@@ -88,7 +88,9 @@ describe("isGoneWeekPlanError", () => {
     expect(isGoneWeekPlanError("Hit a rate limit")).toBe(false);
     expect(isGoneWeekPlanError("Something has gone wrong")).toBe(false);
     expect(isGoneWeekPlanError("Invalid argument for grok-4.3")).toBe(false);
-    expect(isGoneWeekPlanError(goneWeekPlanMessage("grok-4.6"))).toBe(false);
+    expect(isGoneWeekPlanError(goneWeekPlanMessage("spacexai/grok-4.3", "gateway"))).toBe(
+      false,
+    );
   });
 });
 

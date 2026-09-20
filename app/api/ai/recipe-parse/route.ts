@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
@@ -122,7 +123,10 @@ export async function POST(req: NextRequest) {
       const result = await generateObject({
         model: getModel("fast"),
         schema: RecipeSchema,
-        providerOptions: getProviderOptions({ disableSearch: true }),
+        providerOptions: getProviderOptions({
+          disableSearch: true,
+          modelId: getModelId("fast"),
+        }),
         ...getModelOpts(),
         prompt: parseRecipeFromUrlPrompt({
           url: parsed.data.url,

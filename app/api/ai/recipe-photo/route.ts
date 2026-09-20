@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
@@ -67,7 +68,10 @@ export async function POST(req: NextRequest) {
         // a cookbook page that's pointless — disable so we don't burn
         // search budget or surface opaque "Gone" errors from blocked
         // crawls.
-        providerOptions: getProviderOptions({ disableSearch: true }),
+        providerOptions: getProviderOptions({
+          disableSearch: true,
+          modelId: getModelId("vision"),
+        }),
         ...getModelOpts(),
         messages: [
           {

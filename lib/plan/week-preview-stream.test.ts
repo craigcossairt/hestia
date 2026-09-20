@@ -44,10 +44,10 @@ describe("weekPlanModelErrorMessage", () => {
     expect(weekPlanModelErrorMessage(statusOnly)).toBe(GONE_WEEK_PLAN_MESSAGE);
   });
 
-  it("includes the model id in the 410 copy so prod slug is visible", () => {
-    expect(weekPlanModelErrorMessage(new Error("Gone"), "grok-4.6")).toBe(
-      goneWeekPlanMessage("grok-4.6"),
-    );
+  it("includes the model id and provider in the 410 copy", () => {
+    expect(
+      weekPlanModelErrorMessage(new Error("Gone"), "spacexai/grok-4.3", "gateway"),
+    ).toBe(goneWeekPlanMessage("spacexai/grok-4.3", "gateway"));
   });
 
   it("does not treat longer gone-in-a-sentence errors as HTTP 410", () => {
@@ -92,12 +92,15 @@ describe("weekPlanTextStreamResponse", () => {
         { type: "start" },
         { type: "error", error: new Error("Gone") },
       ]),
-      modelId: "grok-4.6",
-      headers: { "X-Hestia-Model": "grok-4.6" },
+      modelId: "spacexai/grok-4.3",
+      provider: "gateway",
+      headers: { "X-Hestia-Model": "spacexai/grok-4.3" },
     });
     expect(res.status).toBe(502);
-    expect(res.headers.get("X-Hestia-Model")).toBe("grok-4.6");
-    expect(await readBody(res)).toBe(goneWeekPlanMessage("grok-4.6"));
+    expect(res.headers.get("X-Hestia-Model")).toBe("spacexai/grok-4.3");
+    expect(await readBody(res)).toBe(
+      goneWeekPlanMessage("spacexai/grok-4.3", "gateway"),
+    );
   });
 
   it("streams concatenated text-delta chunks as 200", async () => {

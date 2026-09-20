@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
@@ -133,13 +134,18 @@ export async function POST(req: NextRequest) {
       is_leftover_of: r.is_leftover_of,
     }));
 
+  const modelId = getModelId("bulk");
   const result = streamObject({
     model: getModel("bulk"),
     schema: PlanRefinementSchema,
     // Refine generates a small diff (typically 1-3 new recipes). Bulk
     // search would add latency without much payoff — keep search off here.
-    // Omit reasoningEffort: grok-4.6 diagnostic, same as preview.
-    providerOptions: getProviderOptions({ disableSearch: true }),
+    // reasoningEffort none matches preview so grok-4.3 does not stall.
+    providerOptions: getProviderOptions({
+      disableSearch: true,
+      reasoningEffort: "none",
+      modelId,
+    }),
     // Do not pass abortSignal: req.signal — Next.js can abort the incoming
     // Request when this handler returns the streaming Response.
     ...getModelOpts(),
