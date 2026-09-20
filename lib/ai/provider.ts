@@ -36,9 +36,10 @@ import { gateway } from "ai";
 export type AiProvider = "xai" | "openai" | "anthropic" | "google" | "gateway";
 // Capability roles — the only model identifiers call sites should use.
 // "fast"   — default text/json: coach, single recipes, pantry, insights.
-// "bulk"   — plan-week's 21-recipe generator. Must stream JSON immediately
-//            (non-reasoning). Do not point this at grok-4.6: that model
-//            defaults to high reasoning that cannot be disabled.
+// "bulk"   — plan-week's 21-recipe generator. Must stream JSON immediately.
+//            xAI uses grok-4.3 with reasoningEffort "none". Do not point
+//            this at grok-4.6: that model defaults to high reasoning that
+//            cannot be disabled.
 // "vision" — image-input capable model (receipts, recipe photos).
 export type ModelRole = "fast" | "bulk" | "vision";
 
@@ -70,7 +71,7 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4.3",
-    bulk: "grok-4.20-non-reasoning",
+    bulk: "grok-4.3",
     vision: "grok-4.3",
     image: "grok-imagine-image-2.0",
   },
@@ -94,7 +95,7 @@ const DEFAULTS: Record<
   },
   gateway: {
     fast: "xai/grok-4.3",
-    bulk: "xai/grok-4.20-non-reasoning",
+    bulk: "spacexai/grok-4.3",
     vision: "xai/grok-4.3",
     image: "xai/grok-imagine-image-2.0",
   },
@@ -114,13 +115,15 @@ function envOverride(name: string): string | undefined {
 
 // Retired / reasoning slugs that stall week-plan JSON (no text-delta until
 // thinking finishes, then often past Vercel's 300s budget). Env overrides
-// from the old docs (AI_MODEL_BULK=grok-4-fast-reasoning, grok-4.6, grok-4.3)
-// must not beat the non-reasoning catalog row.
+// from the old docs (AI_MODEL_BULK=grok-4-fast-reasoning, grok-4.6) must
+// not beat the catalog row. grok-4.3 is the catalog bulk id — it is a
+// reasoning model, so call sites pass reasoningEffort "none".
 //
-// The dated 4.20 snapshot (grok-4.20-0309-non-reasoning) is also remapped:
-// Vercel AI Gateway lists only `grok-4.20-non-reasoning` (no 0309). An
-// unknown model comes back as HTTP 410 with an empty body; the SDK uses
-// statusText "Gone", which the 502 helper used to surface verbatim.
+// The grok-4.20 non-reasoning family 410s on api.x.ai. Hyphenated
+// grok-4-1-fast-non-reasoning (and Gateway's dotted grok-4.1-fast-non-reasoning
+// plus grok-4-fast-non-reasoning) retired May 15 and redirected to grok-4.3
+// with effort none. Pin the catalog at grok-4.3 instead of chasing the
+// redirect. Not grok-4.6.
 function bareModelId(slug: string): string {
   const slash = slug.lastIndexOf("/");
   return slash >= 0 ? slug.slice(slash + 1) : slug;
@@ -134,7 +137,16 @@ export function isReasoningBulkSlug(slug: string): boolean {
 }
 
 export function isRetiredBulkSlug(slug: string): boolean {
-  return /grok-4\.20-0309-non-reasoning$/.test(bareModelId(slug));
+  const id = bareModelId(slug);
+  if (/grok-4\.20-.*non-reasoning/.test(id)) return true;
+  switch (id) {
+    case "grok-4.1-fast-non-reasoning":
+    case "grok-4-1-fast-non-reasoning":
+    case "grok-4-fast-non-reasoning":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function coerceBulkSlug(slug: string, provider: AiProvider): string {
@@ -279,8 +291,8 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 }
 
 // Provider-specific options passed straight through to generateText /
-// generateObject / streamText. Today this enables live web search for
-// providers that support it natively.
+// generateObject / streamText. Today this covers xAI web search and
+// optional reasoningEffort.
 //
 // Default-on for xAI (the photo-passthrough chain leans on the model
 // returning image_url from search results — no search means no
@@ -290,12 +302,23 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 // per recipe the model spends 60+ seconds searching before any token
 // streams to the client). When search is off we send mode: "off"
 // explicitly so a newer Grok default cannot turn search back on.
+//
+// reasoningEffort is opt-in. Plan-week preview/refine pass "none" so
+// grok-4.3 streams JSON immediately. Recipe routes omit it.
+export const REASONING_EFFORTS = ["none", "low", "medium", "high"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
 export function getProviderOptions(opts?: {
   disableSearch?: boolean;
+  reasoningEffort?: ReasoningEffort;
 }): ProviderOptions {
   const searchOff =
     process.env.AI_DISABLE_SEARCH === "true" || Boolean(opts?.disableSearch);
   const provider = currentProvider();
+  const reasoning =
+    opts?.reasoningEffort != null
+      ? { reasoningEffort: opts.reasoningEffort }
+      : {};
   switch (provider) {
     case "xai":
       return {
@@ -303,12 +326,15 @@ export function getProviderOptions(opts?: {
           searchParameters: searchOff
             ? { mode: "off" }
             : { mode: "auto", returnCitations: true },
+          ...reasoning,
         },
       };
+    case "gateway":
+      if (opts?.reasoningEffort == null) return {};
+      return { xai: { reasoningEffort: opts.reasoningEffort } };
     case "openai":
     case "anthropic":
     case "google":
-    case "gateway":
       return {};
     default: {
       const _exhaustive: never = provider;

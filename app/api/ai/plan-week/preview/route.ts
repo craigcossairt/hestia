@@ -158,7 +158,12 @@ export async function POST(req: NextRequest) {
     // model issues a search per recipe BEFORE streaming any tokens, which
     // can stack 60+ seconds of dead time. The photo chain still has Pexels
     // + Wikimedia Commons as fast/free fallbacks.
-    providerOptions: getProviderOptions({ disableSearch: true }),
+    // reasoningEffort none: grok-4.3 otherwise thinks before the first
+    // JSON token and blows the 300s budget.
+    providerOptions: getProviderOptions({
+      disableSearch: true,
+      reasoningEffort: "none",
+    }),
     ...getModelOpts(),
     prompt: planWeekPrompt({
       week_dates: dates,
