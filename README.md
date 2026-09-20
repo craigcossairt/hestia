@@ -94,9 +94,13 @@ Copy `.env.local.example` to `.env.local` and fill in at minimum:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-XAI_API_KEY=xai-...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
+
+Choose one AI auth path:
+
+- Gateway (Vercel default): run `vercel env pull`, or set `AI_GATEWAY_API_KEY`.
+- Direct xAI: set `AI_XAI_DIRECT=true` and `XAI_API_KEY=xai-...`.
 
 The example file documents every optional integration (Pexels,
 USDA, Kroger) with what they unlock and where to get the keys.

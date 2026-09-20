@@ -144,6 +144,19 @@ describe("getProviderOptions", () => {
         searchParameters: { mode: "off" },
         reasoningEffort: "none",
       },
+      gateway: { only: ["xai"] },
+    });
+  });
+
+  it("does not pin gateway.only when hitting api.x.ai direct", () => {
+    stubDirectXai();
+    expect(
+      getProviderOptions({ disableSearch: true, reasoningEffort: "none" }),
+    ).toEqual({
+      xai: {
+        searchParameters: { mode: "off" },
+        reasoningEffort: "none",
+      },
     });
   });
 });

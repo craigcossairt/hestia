@@ -343,7 +343,9 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 // explicitly so a newer Grok default cannot turn search back on.
 //
 // reasoningEffort is opt-in. Plan-week preview/refine pass "none" so
-// grok-4.3 streams JSON immediately. Recipe routes omit it.
+// grok-4.3 streams JSON immediately. Recipe routes omit it. On Gateway,
+// also pin routing to the xai provider — Vertex ignores the xai
+// namespace, which would re-enable reasoning on week-plan.
 export const REASONING_EFFORTS = ["none", "low", "medium", "high"] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
@@ -358,16 +360,24 @@ export function getProviderOptions(opts?: {
     opts?.reasoningEffort != null
       ? { reasoningEffort: opts.reasoningEffort }
       : {};
+  const xaiOptions = {
+    xai: {
+      searchParameters: searchOff
+        ? { mode: "off" }
+        : { mode: "auto", returnCitations: true },
+      ...reasoning,
+    },
+  };
   switch (provider) {
     case "xai":
+      return xaiOptions;
     case "gateway":
+      // spacexai/grok-4.3 is served by xai and vertex. Pin to xai so
+      // reasoningEffort "none" in the xai namespace actually applies;
+      // Vertex would ignore it and week-plan would think again.
       return {
-        xai: {
-          searchParameters: searchOff
-            ? { mode: "off" }
-            : { mode: "auto", returnCitations: true },
-          ...reasoning,
-        },
+        ...xaiOptions,
+        gateway: { only: ["xai"] },
       };
     case "openai":
     case "anthropic":
