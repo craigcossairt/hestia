@@ -143,6 +143,7 @@ describe("getProviderOptions", () => {
 
   it("forwards search-off and reasoningEffort none on Gateway", () => {
     vi.stubEnv("AI_PROVIDER", "gateway");
+    vi.stubEnv("XAI_API_KEY", "");
     expect(
       getProviderOptions({
         disableSearch: true,
@@ -160,6 +161,40 @@ describe("getProviderOptions", () => {
 
   it("does not pin gateway.only for non-SpaceXAI Gateway overrides", () => {
     vi.stubEnv("AI_PROVIDER", "gateway");
+    expect(
+      getProviderOptions({
+        disableSearch: true,
+        modelId: "openai/gpt-4o-mini",
+      }),
+    ).toEqual({
+      xai: { searchParameters: { mode: "off" } },
+    });
+  });
+
+  it("sends XAI_API_KEY as Gateway BYOK for spacexai models", () => {
+    vi.stubEnv("AI_PROVIDER", "gateway");
+    vi.stubEnv("XAI_API_KEY", "xai-test-key");
+    expect(
+      getProviderOptions({
+        disableSearch: true,
+        reasoningEffort: "none",
+        modelId: "spacexai/grok-4.3",
+      }),
+    ).toEqual({
+      xai: {
+        searchParameters: { mode: "off" },
+        reasoningEffort: "none",
+      },
+      gateway: {
+        only: ["xai"],
+        byok: { xai: [{ apiKey: "xai-test-key" }] },
+      },
+    });
+  });
+
+  it("does not attach xAI BYOK for non-SpaceXAI Gateway overrides", () => {
+    vi.stubEnv("AI_PROVIDER", "gateway");
+    vi.stubEnv("XAI_API_KEY", "xai-test-key");
     expect(
       getProviderOptions({
         disableSearch: true,

@@ -195,7 +195,9 @@ provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
 `AI_MODEL_VISION` / `AI_MODEL_IMAGE`. `AI_MODEL_BULK` does not fall back to
 `AI_MODEL_FAST` — week generation is independently pinned. On Vercel, Grok
 goes through AI Gateway as `spacexai/grok-4.3` with `reasoningEffort: "none"`
-so the first meal card streams immediately. Leftover `xai/` prefixes are
+so the first meal card streams immediately. If `XAI_API_KEY` is set, Gateway
+sends it as BYOK so Grok bills xAI — the Pro plan card is not AI Gateway
+credits. Leftover `xai/` prefixes are
 rewritten to `spacexai/`. Set `AI_XAI_DIRECT=true` only to hit `api.x.ai`.
 With the Vercel AI Gateway, model strings use the `provider/model-id` form so
 you can pick from any supported provider with a single key.

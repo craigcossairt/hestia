@@ -11,6 +11,9 @@ export const STALLED_WEEK_STREAM_MESSAGE =
 export const GONE_WEEK_PLAN_MESSAGE =
   "The AI model for week planning is no longer available. Try again in a moment.";
 
+export const GATEWAY_CREDITS_WEEK_PLAN_MESSAGE =
+  "Vercel AI Gateway credits are not unlocked on this team. That is separate from the Pro plan card. Open Vercel → AI Gateway and complete Add a Card to unlock credits. Hestia also sends XAI_API_KEY as BYOK so Grok can bill xAI instead.";
+
 export function goneWeekPlanMessage(modelId?: string, provider?: string): string {
   const bits = [modelId, provider].filter(
     (s): s is string => typeof s === "string" && s.length > 0,
@@ -45,6 +48,15 @@ export function isGoneWeekPlanError(raw: string): boolean {
     lower === "410" ||
     lower === "410 gone" ||
     /^http[\s:-]*410(\s+gone)?$/.test(lower)
+  );
+}
+
+export function isGatewayCreditsError(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("valid credit card on file") ||
+    lower.includes("add-credit-card") ||
+    (lower.includes("ai gateway") && lower.includes("credit card"))
   );
 }
 

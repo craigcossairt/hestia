@@ -21,11 +21,15 @@
 //   AI_TEMPERATURE    — sampling temperature for text generations (default 0.4)
 //   AI_SEED           — fixed seed for repeatable outputs (optional; integer)
 //
-//   XAI_API_KEY              — required when using xAI direct (AI_XAI_DIRECT)
+//   XAI_API_KEY              — xAI key. On Gateway this is sent as BYOK so
+//                              Grok bills xAI, not Vercel Gateway credits.
+//                              Also required for AI_XAI_DIRECT.
 //   OPENAI_API_KEY           — required when AI_PROVIDER=openai
 //   ANTHROPIC_API_KEY        — required when AI_PROVIDER=anthropic
 //   GOOGLE_GENERATIVE_AI_API_KEY — required when AI_PROVIDER=google
 //   AI_GATEWAY_API_KEY       — optional; Vercel OIDC is enough on deploy
+//                              to *authenticate*, but Gateway still needs
+//                              AI Gateway credits unless BYOK is set.
 //
 // Gateway models use "provider/model-id" strings, e.g. "spacexai/grok-4.3".
 
@@ -383,11 +387,21 @@ export function getProviderOptions(opts?: {
       // spacexai/grok-4.3 is served by xai and vertex. Pin to xai so
       // reasoningEffort "none" in the xai namespace actually applies;
       // Vertex would ignore it and week-plan would think again. Skip the
-      // pin for openai/* (etc.) Gateway overrides; only would reject them.
+      // pin for openai/* (etc.) Gateway overrides; gateway.only would
+      // reject them. When XAI_API_KEY is set, pass it as BYOK so Grok
+      // bills xAI instead of Vercel Gateway credits (Pro plan card ≠
+      // Gateway credits).
       const pinXai =
         opts?.modelId != null && opts.modelId.startsWith("spacexai/");
-      return pinXai
-        ? { ...xaiOptions, gateway: { only: ["xai"] } }
+      const xaiKey = envOverride("XAI_API_KEY");
+      const gatewayOpts: {
+        only?: string[];
+        byok?: { xai: { apiKey: string }[] };
+      } = {};
+      if (pinXai) gatewayOpts.only = ["xai"];
+      if (pinXai && xaiKey) gatewayOpts.byok = { xai: [{ apiKey: xaiKey }] };
+      return Object.keys(gatewayOpts).length > 0
+        ? { ...xaiOptions, gateway: gatewayOpts }
         : xaiOptions;
     }
     case "openai":
