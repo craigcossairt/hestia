@@ -5,7 +5,10 @@ import {
   weekPlanTextStreamResponse,
   type WeekPreviewStreamPart,
 } from "@/lib/plan/week-preview-stream";
-import { GONE_WEEK_PLAN_MESSAGE } from "@/lib/plan/week-stream-watch";
+import {
+  GONE_WEEK_PLAN_MESSAGE,
+  goneWeekPlanMessage,
+} from "@/lib/plan/week-stream-watch";
 
 async function* parts(
   events: WeekPreviewStreamPart[],
@@ -39,6 +42,21 @@ describe("weekPlanModelErrorMessage", () => {
     expect(weekPlanModelErrorMessage(withStatus)).toBe(GONE_WEEK_PLAN_MESSAGE);
     const statusOnly = { statusCode: 410 };
     expect(weekPlanModelErrorMessage(statusOnly)).toBe(GONE_WEEK_PLAN_MESSAGE);
+  });
+
+  it("includes the model id in the 410 copy so prod slug is visible", () => {
+    expect(weekPlanModelErrorMessage(new Error("Gone"), "grok-4.6")).toBe(
+      goneWeekPlanMessage("grok-4.6"),
+    );
+  });
+
+  it("does not treat longer gone-in-a-sentence errors as HTTP 410", () => {
+    expect(weekPlanModelErrorMessage(new Error("Something has gone wrong"))).toBe(
+      "Something has gone wrong",
+    );
+    expect(
+      weekPlanModelErrorMessage(new Error("Invalid argument for grok-4.3")),
+    ).toBe("Invalid argument for grok-4.3");
   });
 });
 
@@ -74,9 +92,12 @@ describe("weekPlanTextStreamResponse", () => {
         { type: "start" },
         { type: "error", error: new Error("Gone") },
       ]),
+      modelId: "grok-4.6",
+      headers: { "X-Hestia-Model": "grok-4.6" },
     });
     expect(res.status).toBe(502);
-    expect(await readBody(res)).toBe(GONE_WEEK_PLAN_MESSAGE);
+    expect(res.headers.get("X-Hestia-Model")).toBe("grok-4.6");
+    expect(await readBody(res)).toBe(goneWeekPlanMessage("grok-4.6"));
   });
 
   it("streams concatenated text-delta chunks as 200", async () => {

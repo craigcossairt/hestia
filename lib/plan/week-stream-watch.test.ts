@@ -3,6 +3,7 @@ import {
   FIRST_MEAL_STALL_SECONDS,
   emptyWeekStreamMessage,
   GONE_WEEK_PLAN_MESSAGE,
+  goneWeekPlanMessage,
   isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
@@ -78,13 +79,16 @@ describe("emptyWeekStreamMessage", () => {
 });
 
 describe("isGoneWeekPlanError", () => {
-  it("matches HTTP 410 statusText and status codes", () => {
+  it("matches exact HTTP 410 statusText and status codes", () => {
     expect(isGoneWeekPlanError("Gone")).toBe(true);
     expect(isGoneWeekPlanError("GONE")).toBe(true);
     expect(isGoneWeekPlanError("410 Gone")).toBe(true);
     expect(isGoneWeekPlanError("HTTP 410")).toBe(true);
     expect(isGoneWeekPlanError(GONE_WEEK_PLAN_MESSAGE)).toBe(false);
     expect(isGoneWeekPlanError("Hit a rate limit")).toBe(false);
+    expect(isGoneWeekPlanError("Something has gone wrong")).toBe(false);
+    expect(isGoneWeekPlanError("Invalid argument for grok-4.3")).toBe(false);
+    expect(isGoneWeekPlanError(goneWeekPlanMessage("grok-4.6"))).toBe(false);
   });
 });
 
