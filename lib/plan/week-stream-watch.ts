@@ -15,6 +15,15 @@ export function emptyWeekStreamMessage(elapsedSeconds: number): string {
   return "The generator finished without streaming any meals. Try again in a moment.";
 }
 
+// useObject onFinish validates the accumulated JSON against PlanWeekSchema.
+// An empty or aborted body is `undefined`, which Zod reports as
+// "expected object, received undefined". That is not an actionable
+// user message — treat it as the empty-stream case instead.
+export function isUnhelpfulWeekStreamSchemaError(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return lower.includes("expected object") && lower.includes("undefined");
+}
+
 export function shouldErrorEmptyWeekStream(args: {
   phase: "streaming" | "saving" | "done" | "error";
   isLoading: boolean;

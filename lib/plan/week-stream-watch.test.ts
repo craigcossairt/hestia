@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FIRST_MEAL_STALL_SECONDS,
   emptyWeekStreamMessage,
+  isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
   shouldErrorEmptyWeekStream,
 } from "@/lib/plan/week-stream-watch";
@@ -71,5 +72,22 @@ describe("shouldAbortStalledWeekStream", () => {
 describe("emptyWeekStreamMessage", () => {
   it("mentions timeout near the function budget", () => {
     expect(emptyWeekStreamMessage(303)).toMatch(/timed out/i);
+  });
+});
+
+describe("isUnhelpfulWeekStreamSchemaError", () => {
+  it("matches the Zod undefined-object message from useObject onFinish", () => {
+    expect(
+      isUnhelpfulWeekStreamSchemaError(
+        "Invalid input: expected object, received undefined",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not swallow unrelated errors", () => {
+    expect(isUnhelpfulWeekStreamSchemaError("Hit a rate limit")).toBe(
+      false,
+    );
+    expect(isUnhelpfulWeekStreamSchemaError("invalid_type")).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import { PlanWeekSchema } from "@/lib/ai/prompts/plan-week";
 import { cn } from "@/lib/utils";
 import {
   emptyWeekStreamMessage,
+  isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
   shouldErrorEmptyWeekStream,
   STALLED_WEEK_STREAM_MESSAGE,
@@ -74,16 +75,10 @@ export function StreamingPreviewModal({
       setError(err.message ?? "Stream failed");
       setPhase("error");
     },
-    onFinish({ object: finished, error: finishError }) {
-      if (savedRef.current || stalledRef.current) return;
-      const meals = finished?.meals;
-      if (finishError || !Array.isArray(meals) || meals.length === 0) {
-        setError(
-          finishError?.message ?? emptyWeekStreamMessage(elapsedRef.current),
-        );
-        setPhase("error");
-      }
-    },
+    // Do not use onFinish to set errors. useObject validates the final
+    // JSON against PlanWeekSchema and reports Zod "expected object,
+    // received undefined" when the body is empty — that is what showed
+    // after #66. Empty streams are handled by the mealCount effect below.
   });
 
   // Kick off the stream once when the modal opens.
@@ -284,6 +279,9 @@ export function StreamingPreviewModal({
     }
     if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) {
       return "Hit a rate limit on the AI provider. Wait a minute and try again.";
+    }
+    if (isUnhelpfulWeekStreamSchemaError(raw)) {
+      return emptyWeekStreamMessage(elapsed);
     }
     return raw;
   }
