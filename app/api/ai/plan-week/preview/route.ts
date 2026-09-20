@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { streamObject } from "ai";
+import { streamText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
@@ -8,11 +8,8 @@ import {
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
-import {
-  PlanWeekSchema,
-  planWeekPrompt,
-  type PlanSlot,
-} from "@/lib/ai/prompts/plan-week";
+import { planWeekPrompt, type PlanSlot } from "@/lib/ai/prompts/plan-week";
+import { weekPlanTextStreamResponse } from "@/lib/plan/week-preview-stream";
 import { buildProgramContext } from "@/lib/programs";
 import { startOfWeek, isValidDate } from "@/lib/dates/week";
 import type { FamilyMember } from "@/lib/family";
@@ -144,19 +141,19 @@ export async function POST(req: NextRequest) {
     ).filter((e) => slots.includes(e.slot));
   }
 
-  // The modal uses experimental_useObject, which incrementally parses a
-  // JSON object text stream from streamObject().toTextStreamResponse().
-  // streamText is a different protocol: the body can close empty/non-object,
-  // and useObject then validates `undefined` against PlanWeekSchema.
+  // useObject concatenates a JSON *text* stream and parsePartialJsons it.
+  // streamObject / Output.object send xAI json_schema (strict). That path
+  // either buffers the whole 21-recipe blob or 400s; toTextStreamResponse
+  // then swallows the error and the client sees an empty 200 (0 meals).
+  // Plain streamText emits `{ "meals": [` token-by-token. /save still
+  // validates PlanWeekSchema.
   //
-  // Do not pass abortSignal: req.signal. Next.js Route Handlers can abort
-  // the incoming Request when this function returns the streaming Response,
-  // which immediately kills the model call (0 meals, Zod undefined).
+  // Do not pass abortSignal: req.signal — Next.js can abort the incoming
+  // Request when this handler returns the streaming Response.
   const modelId = getModelId("bulk");
   console.info("plan-week/preview", { model: modelId, provider: "bulk" });
-  const result = streamObject({
+  const result = streamText({
     model: getModel("bulk"),
-    schema: PlanWeekSchema,
     // Disable search for the bulk plan generator. With auto-search the
     // model issues a search per recipe BEFORE streaming any tokens, which
     // can stack 60+ seconds of dead time. The photo chain still has Pexels
@@ -190,11 +187,8 @@ export async function POST(req: NextRequest) {
     }),
   });
 
-  return result.toTextStreamResponse({
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-      "X-Hestia-Model": modelId,
-    },
+  return weekPlanTextStreamResponse({
+    fullStream: result.fullStream,
+    headers: { "X-Hestia-Model": modelId },
   });
 }
