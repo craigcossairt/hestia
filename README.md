@@ -177,19 +177,20 @@ provider based on `AI_PROVIDER`. Defaults to `xai`.
 
 | `AI_PROVIDER` | Required env | Default fast / vision | Default bulk (week plan) |
 |---|---|---|---|
-| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.1-fast-non-reasoning` |
+| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.3` (`reasoningEffort: none`) |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
-| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `spacexai/grok-4.1-fast-non-reasoning` |
+| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
 
 Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
 provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
 `AI_MODEL_VISION` / `AI_MODEL_IMAGE`. `AI_MODEL_BULK` does not fall back to
-`AI_MODEL_FAST` — week generation must stay on a non-reasoning model even if
-Coach is pointed at something slower. With the Vercel AI Gateway, model
-strings use the `provider/model-id` form so you can pick from any
-supported provider with a single key.
+`AI_MODEL_FAST` — week generation must stay off grok-4.6 even if Coach is
+pointed at something slower. xAI bulk is `grok-4.3` with
+`reasoningEffort: "none"` so the first meal card streams immediately. With
+the Vercel AI Gateway, model strings use the `provider/model-id` form so
+you can pick from any supported provider with a single key.
 
 xAI image generation defaults to `grok-imagine-image-2.0`. Do not point `bulk`
 at `grok-4.6`: it defaults to high reasoning that cannot be disabled, which

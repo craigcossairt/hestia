@@ -138,7 +138,11 @@ export async function POST(req: NextRequest) {
     schema: PlanRefinementSchema,
     // Refine generates a small diff (typically 1-3 new recipes). Bulk
     // search would add latency without much payoff — keep search off here.
-    providerOptions: getProviderOptions({ disableSearch: true }),
+    // reasoningEffort none matches preview so grok-4.3 does not stall.
+    providerOptions: getProviderOptions({
+      disableSearch: true,
+      reasoningEffort: "none",
+    }),
     // Do not pass abortSignal: req.signal — Next.js can abort the incoming
     // Request when this handler returns the streaming Response.
     ...getModelOpts(),
