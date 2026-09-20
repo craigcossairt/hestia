@@ -105,6 +105,9 @@ describe("isGatewayCreditsError", () => {
     expect(isGatewayCreditsError("https://vercel.com/d?to=%2Fai%3Fmodal%3Dadd-credit-card")).toBe(
       true,
     );
+    expect(isGatewayCreditsError("please add-credit-card to your wallet copy")).toBe(
+      false,
+    );
     expect(isGatewayCreditsError("Gone")).toBe(false);
   });
 });

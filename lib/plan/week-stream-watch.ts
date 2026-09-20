@@ -12,7 +12,7 @@ export const GONE_WEEK_PLAN_MESSAGE =
   "The AI model for week planning is no longer available. Try again in a moment.";
 
 export const GATEWAY_CREDITS_WEEK_PLAN_MESSAGE =
-  "Vercel AI Gateway credits are not unlocked on this team. That is separate from the Pro plan card. Open Vercel → AI Gateway and complete Add a Card to unlock credits. Hestia also sends XAI_API_KEY as BYOK so Grok can bill xAI instead.";
+  "Vercel AI Gateway credits are not unlocked on this team. That is separate from the Pro plan card. Open Vercel → AI Gateway and complete Add a Card, or set XAI_API_KEY so Grok can bill xAI instead.";
 
 export function goneWeekPlanMessage(modelId?: string, provider?: string): string {
   const bits = [modelId, provider].filter(
@@ -53,11 +53,11 @@ export function isGoneWeekPlanError(raw: string): boolean {
 
 export function isGatewayCreditsError(raw: string): boolean {
   const lower = raw.toLowerCase();
-  return (
-    lower.includes("valid credit card on file") ||
-    lower.includes("add-credit-card") ||
-    (lower.includes("ai gateway") && lower.includes("credit card"))
-  );
+  if (lower.includes("valid credit card on file")) return true;
+  if (lower.includes("ai gateway") && lower.includes("credit card")) return true;
+  if (/[?&]modal=add-credit-card(?:&|$)/.test(lower)) return true;
+  if (/modal%3dadd-credit-card(?:%26|&|$)/.test(lower)) return true;
+  return false;
 }
 
 export function shouldErrorEmptyWeekStream(args: {
