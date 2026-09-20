@@ -175,18 +175,25 @@ A nightly cron that re-runs `seed-demo.ts` keeps the data fresh.
 Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
 provider based on `AI_PROVIDER`. Defaults to `xai`.
 
-| `AI_PROVIDER` | Required env | Default fast model | Default vision model |
+| `AI_PROVIDER` | Required env | Default fast / vision | Default bulk (week plan) |
 |---|---|---|---|
-| `xai` (default) | `XAI_API_KEY` | `grok-4-fast-reasoning` | `grok-2-vision-1212` |
+| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.20-0309-non-reasoning` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
-| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4-fast-reasoning` | `xai/grok-2-vision-1212` |
+| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `xai/grok-4.20-0309-non-reasoning` |
 
-Override the model per role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
-`AI_MODEL_VISION` / `AI_MODEL_IMAGE`. With the Vercel AI Gateway, model
+Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
+provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
+`AI_MODEL_VISION` / `AI_MODEL_IMAGE`. `AI_MODEL_BULK` does not fall back to
+`AI_MODEL_FAST` — week generation must stay on a non-reasoning model even if
+Coach is pointed at something slower. With the Vercel AI Gateway, model
 strings use the `provider/model-id` form so you can pick from any
 supported provider with a single key.
+
+xAI image generation defaults to `grok-imagine-image-2.0`. Do not point `bulk`
+at `grok-4.6`: it defaults to high reasoning that cannot be disabled, which
+stalls the week-plan stream before the first meal card.
 
 ### Consistency across providers
 

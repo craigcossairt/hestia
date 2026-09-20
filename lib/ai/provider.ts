@@ -3,13 +3,15 @@
 // Anthropic, Google Gemini, or any model accessible via the Vercel AI
 // Gateway with a single env change.
 //
+// Call sites MUST use roles (`getModel("fast" | "bulk" | "vision")`), never
+// provider slugs. Slugs live only in the catalog below (plus env overrides).
+//
 // Env vars (all optional except the API key for the chosen provider):
 //   AI_PROVIDER       — "xai" (default) | "openai" | "anthropic" | "google" | "gateway"
 //   AI_MODEL_FAST     — override the fast text/json model
-//   AI_MODEL_BULK     — override the model used for the plan-week generator
-//                       (defaults to AI_MODEL_FAST). Swap to a faster
-//                       non-reasoning model — e.g. AI_MODEL_BULK=grok-3-fast
-//                       on xAI — when 21-meal generations are timing out.
+//   AI_MODEL_BULK     — override the plan-week generator. Independent of
+//                       AI_MODEL_FAST so a Coach bump cannot put week
+//                       generation back on a reasoning model.
 //   AI_MODEL_VISION   — override the vision (image input) model
 //   AI_MODEL_IMAGE    — override the image-generation model
 //   AI_TEMPERATURE    — sampling temperature for text generations (default 0.4)
@@ -32,27 +34,45 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { gateway } from "ai";
 
 export type AiProvider = "xai" | "openai" | "anthropic" | "google" | "gateway";
-// "fast"   — default text/json model, balanced quality/latency.
-// "bulk"   — used by plan-week's 21-recipe generator. Defaults to "fast"
-//            for each provider; override via AI_MODEL_BULK to swap in a
-//            faster non-reasoning variant when big plans time out.
-// "vision" — image-input capable model.
+// Capability roles — the only model identifiers call sites should use.
+// "fast"   — default text/json: coach, single recipes, pantry, insights.
+// "bulk"   — plan-week's 21-recipe generator. Must stream JSON immediately
+//            (non-reasoning). Do not point this at grok-4.6: that model
+//            defaults to high reasoning that cannot be disabled.
+// "vision" — image-input capable model (receipts, recipe photos).
 export type ModelRole = "fast" | "bulk" | "vision";
 
-const PROVIDER: AiProvider = (process.env.AI_PROVIDER as AiProvider) || "xai";
+const PROVIDERS = [
+  "xai",
+  "openai",
+  "anthropic",
+  "google",
+  "gateway",
+] as const satisfies readonly AiProvider[];
 
-// Sensible defaults per provider. Override per role via AI_MODEL_FAST /
-// AI_MODEL_VISION / AI_MODEL_IMAGE. For the gateway, the model strings use
+function isAiProvider(value: string): value is AiProvider {
+  return (PROVIDERS as readonly string[]).includes(value);
+}
+
+function currentProvider(): AiProvider {
+  const raw = process.env.AI_PROVIDER;
+  if (!raw) return "xai";
+  if (isAiProvider(raw)) return raw;
+  throw new Error(`Unknown AI_PROVIDER: ${raw}`);
+}
+
+// Per-provider catalog keyed by role. Override a role via AI_MODEL_FAST /
+// AI_MODEL_BULK / AI_MODEL_VISION / AI_MODEL_IMAGE. Gateway strings use
 // "provider/model".
 const DEFAULTS: Record<
   AiProvider,
   Record<ModelRole | "image", string | null>
 > = {
   xai: {
-    fast: "grok-4-fast-reasoning",
-    bulk: "grok-4-fast-reasoning",
-    vision: "grok-2-vision-1212",
-    image: "grok-2-image-1212",
+    fast: "grok-4.3",
+    bulk: "grok-4.20-0309-non-reasoning",
+    vision: "grok-4.3",
+    image: "grok-imagine-image-2.0",
   },
   openai: {
     fast: "gpt-4o-mini",
@@ -73,28 +93,42 @@ const DEFAULTS: Record<
     image: "imagen-3.0-generate-001",
   },
   gateway: {
-    fast: "xai/grok-4-fast-reasoning",
-    bulk: "xai/grok-4-fast-reasoning",
-    vision: "xai/grok-2-vision-1212",
-    image: "xai/grok-2-image-1212",
+    fast: "xai/grok-4.3",
+    bulk: "xai/grok-4.20-0309-non-reasoning",
+    vision: "xai/grok-4.3",
+    image: "xai/grok-imagine-image-2.0",
   },
 };
 
-function modelName(role: ModelRole): string {
-  if (role === "fast")
-    return process.env.AI_MODEL_FAST || (DEFAULTS[PROVIDER].fast as string);
-  if (role === "bulk") {
-    return (
-      process.env.AI_MODEL_BULK ||
-      process.env.AI_MODEL_FAST ||
-      (DEFAULTS[PROVIDER].bulk as string)
-    );
-  }
-  return process.env.AI_MODEL_VISION || (DEFAULTS[PROVIDER].vision as string);
+function catalogModel(
+  provider: AiProvider,
+  role: ModelRole | "image",
+): string | null {
+  return DEFAULTS[provider][role];
 }
 
-function imageModelName(): string | null {
-  return process.env.AI_MODEL_IMAGE || DEFAULTS[PROVIDER].image;
+function envOverride(name: string): string | undefined {
+  const v = process.env[name];
+  return v && v.length > 0 ? v : undefined;
+}
+
+// Resolved slug for a role. Exported for tests and telemetry — generation
+// call sites should keep using getModel(role).
+export function getModelId(role: ModelRole): string {
+  const provider = currentProvider();
+  if (role === "fast") {
+    return envOverride("AI_MODEL_FAST") ?? (catalogModel(provider, "fast") as string);
+  }
+  if (role === "bulk") {
+    return envOverride("AI_MODEL_BULK") ?? (catalogModel(provider, "bulk") as string);
+  }
+  return (
+    envOverride("AI_MODEL_VISION") ?? (catalogModel(provider, "vision") as string)
+  );
+}
+
+export function getImageModelId(): string | null {
+  return envOverride("AI_MODEL_IMAGE") ?? catalogModel(currentProvider(), "image");
 }
 
 function requireKey(name: string, label: string): string {
@@ -147,11 +181,12 @@ function ensureGoogle() {
 }
 
 // Returns a LanguageModel ready for `generateObject` / `generateText` /
-// `streamText`. Pick "fast" for text + JSON outputs and "vision" for any
-// call that includes image inputs.
+// `streamText`. Pick "fast" for text + JSON, "bulk" for week-scale JSON,
+// and "vision" for any call that includes image inputs.
 export function getModel(role: ModelRole): LanguageModel {
-  const name = modelName(role);
-  switch (PROVIDER) {
+  const name = getModelId(role);
+  const provider = currentProvider();
+  switch (provider) {
     case "xai":
       return ensureXai()(name);
     case "openai":
@@ -163,18 +198,21 @@ export function getModel(role: ModelRole): LanguageModel {
     case "gateway":
       requireKey("AI_GATEWAY_API_KEY", "Vercel AI Gateway API key");
       return gateway(name);
-    default:
-      throw new Error(`Unknown AI_PROVIDER: ${PROVIDER}`);
+    default: {
+      const _exhaustive: never = provider;
+      throw new Error(`Unknown AI_PROVIDER: ${_exhaustive}`);
+    }
   }
 }
 
 // Image generation model, or null if the configured provider doesn't ship
 // one. Use with `experimental_generateImage` from the AI SDK.
 export function getImageModel(): ImageModel | null {
-  const name = imageModelName();
+  const name = getImageModelId();
   if (!name) return null;
+  const provider = currentProvider();
   try {
-    switch (PROVIDER) {
+    switch (provider) {
       case "xai":
         return ensureXai().imageModel(name);
       case "openai":
@@ -186,11 +224,14 @@ export function getImageModel(): ImageModel | null {
       case "gateway":
         requireKey("AI_GATEWAY_API_KEY", "Vercel AI Gateway API key");
         return gateway.imageModel(name);
+      default: {
+        const _exhaustive: never = provider;
+        throw new Error(`Unknown AI_PROVIDER: ${_exhaustive}`);
+      }
     }
   } catch {
     return null;
   }
-  return null;
 }
 
 // Default sampling settings — kept consistent across providers so swapping
@@ -215,28 +256,37 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 // { disableSearch: true } per call for routes where the search latency
 // is too costly (e.g. plan-week generates 21 recipes; with auto-search
 // per recipe the model spends 60+ seconds searching before any token
-// streams to the client).
+// streams to the client). When search is off we send mode: "off"
+// explicitly so a newer Grok default cannot turn search back on.
 export function getProviderOptions(opts?: {
   disableSearch?: boolean;
 }): ProviderOptions {
-  const globallyDisabled = process.env.AI_DISABLE_SEARCH === "true";
-  if (globallyDisabled || opts?.disableSearch) return {};
-  switch (PROVIDER) {
+  const searchOff =
+    process.env.AI_DISABLE_SEARCH === "true" || Boolean(opts?.disableSearch);
+  const provider = currentProvider();
+  switch (provider) {
     case "xai":
       return {
         xai: {
-          searchParameters: { mode: "auto", returnCitations: true },
+          searchParameters: searchOff
+            ? { mode: "off" }
+            : { mode: "auto", returnCitations: true },
         },
       };
-    default:
-      // OpenAI / Anthropic / Google search wiring varies per provider and
-      // is left to the user (e.g. AI_MODEL_FAST=gpt-4o-search-preview).
+    case "openai":
+    case "anthropic":
+    case "google":
+    case "gateway":
       return {};
+    default: {
+      const _exhaustive: never = provider;
+      throw new Error(`Unknown AI_PROVIDER: ${_exhaustive}`);
+    }
   }
 }
 
 // Useful for clients that need to know which provider is wired up
 // (telemetry, debug pages, etc).
 export function getProviderId(): AiProvider {
-  return PROVIDER;
+  return currentProvider();
 }
