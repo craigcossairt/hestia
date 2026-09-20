@@ -11,11 +11,12 @@ export const STALLED_WEEK_STREAM_MESSAGE =
 export const GONE_WEEK_PLAN_MESSAGE =
   "The AI model for week planning is no longer available. Try again in a moment.";
 
-export function goneWeekPlanMessage(modelId?: string): string {
-  if (modelId && modelId.length > 0) {
-    return `The AI model for week planning is no longer available (${modelId}). Try again in a moment.`;
-  }
-  return GONE_WEEK_PLAN_MESSAGE;
+export function goneWeekPlanMessage(modelId?: string, provider?: string): string {
+  const bits = [modelId, provider].filter(
+    (s): s is string => typeof s === "string" && s.length > 0,
+  );
+  if (bits.length === 0) return GONE_WEEK_PLAN_MESSAGE;
+  return `The AI model for week planning is no longer available (${bits.join(" via ")}). Try again in a moment.`;
 }
 
 export function emptyWeekStreamMessage(elapsedSeconds: number): string {

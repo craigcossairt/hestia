@@ -82,9 +82,10 @@ npm install
 
 ### 3. Pick an AI provider
 
-Hestia ships with xAI Grok by default — get a key at https://console.x.ai
-(free credits on signup). To use a different provider, see *Choosing an AI
-provider* below.
+Hestia ships Grok via Vercel AI Gateway on deploy (OIDC). Locally, either
+`vercel env pull` / `AI_GATEWAY_API_KEY`, or `AI_XAI_DIRECT=true` plus a
+key from https://console.x.ai. To use a different provider, see *Choosing
+an AI provider* below.
 
 ### 4. Configure env vars
 
@@ -173,29 +174,32 @@ A nightly cron that re-runs `seed-demo.ts` keeps the data fresh.
 ## Choosing an AI provider
 
 Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
-provider based on `AI_PROVIDER`. Defaults to `xai`.
+provider based on `AI_PROVIDER`. On Vercel this defaults to **gateway**
+(OIDC — no `AI_GATEWAY_API_KEY` required). Direct `api.x.ai` 410'd every
+Grok slug we tried (#69–#71); live Gateway ids are `spacexai/grok-*`.
 
 | `AI_PROVIDER` | Required env | Default fast / vision | Default bulk (week plan) |
 |---|---|---|---|
-| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.6` (diagnostic) |
+| `gateway` (Vercel default) | OIDC or `AI_GATEWAY_API_KEY` | `spacexai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
+| `xai` (local / `AI_XAI_DIRECT`) | `XAI_API_KEY` | `grok-4.3` | `grok-4.3` (`reasoningEffort: none`) |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
-| `gateway` | `AI_GATEWAY_API_KEY` | `xai/grok-4.3` | `xai/grok-4.6` (diagnostic) |
 
 Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
 provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
 `AI_MODEL_VISION` / `AI_MODEL_IMAGE`. `AI_MODEL_BULK` does not fall back to
-`AI_MODEL_FAST` — week generation is independently pinned. xAI bulk is a
-diagnostic pin to `grok-4.6` after `grok-4.3` 410'd on production (#70).
-Expect slower first tokens (reasoning cannot be disabled on 4.6). With
-the Vercel AI Gateway, model strings use the `provider/model-id` form so
+`AI_MODEL_FAST` — week generation is independently pinned. On Vercel, Grok
+goes through AI Gateway as `spacexai/grok-4.3` with `reasoningEffort: "none"`
+so the first meal card streams immediately. Leftover `xai/` prefixes are
+rewritten to `spacexai/`. Set `AI_XAI_DIRECT=true` only to hit `api.x.ai`.
+With the Vercel AI Gateway, model strings use the `provider/model-id` form so
 you can pick from any supported provider with a single key.
 
-xAI image generation defaults to `grok-imagine-image-2.0`. Bulk is
-temporarily `grok-4.6` to rule out the model after `grok-4.3` 410'd. That
-slug reasons by default; if week gen hangs past ~2 minutes without a
-meal card, the model is reachable and the 410 was slug-specific.
+xAI image generation defaults to `grok-imagine-image-2.0` (Gateway:
+`spacexai/grok-imagine-image-2.0`). Do not point `bulk` at `grok-4.6`: it
+defaults to high reasoning that cannot be disabled, which stalls the
+week-plan stream before the first meal card.
 
 ### Consistency across providers
 

@@ -43,10 +43,11 @@ function rawErrorText(error: unknown): string | null {
 export function weekPlanModelErrorMessage(
   error: unknown,
   modelId?: string,
+  provider?: string,
 ): string {
   const raw = rawErrorText(error);
   if (statusCodeOf(error) === 410 || (raw != null && isGoneWeekPlanError(raw))) {
-    return goneWeekPlanMessage(modelId);
+    return goneWeekPlanMessage(modelId, provider);
   }
   if (raw != null) return raw;
   return "The generator failed before any meals streamed.";
@@ -62,6 +63,7 @@ export async function weekPlanTextStreamResponse(args: {
   fullStream: AsyncIterable<WeekPreviewStreamPart>;
   headers?: Record<string, string>;
   modelId?: string;
+  provider?: string;
 }): Promise<Response> {
   const iterator = args.fullStream[Symbol.asyncIterator]();
   let firstText: string | null = null;
@@ -71,9 +73,16 @@ export async function weekPlanTextStreamResponse(args: {
     const { done, value } = await iterator.next();
     if (done) break;
     if (value.type === "error" || value.type === "abort") {
-      fail = weekPlanModelErrorMessage(value.error, args.modelId);
+      fail = weekPlanModelErrorMessage(value.error, args.modelId, args.provider);
       console.error("plan-week/preview model error", {
         model: args.modelId,
+        provider: args.provider,
+        statusCode:
+          value.error &&
+          typeof value.error === "object" &&
+          "statusCode" in value.error
+            ? (value.error as { statusCode: unknown }).statusCode
+            : undefined,
         error: value.error,
       });
       break;

@@ -6,6 +6,7 @@ import {
   getModel,
   getModelId,
   getModelOpts,
+  getProviderId,
   getProviderOptions,
 } from "@/lib/ai/provider";
 import { planWeekPrompt, type PlanSlot } from "@/lib/ai/prompts/plan-week";
@@ -151,14 +152,20 @@ export async function POST(req: NextRequest) {
   // Do not pass abortSignal: req.signal — Next.js can abort the incoming
   // Request when this handler returns the streaming Response.
   const modelId = getModelId("bulk");
-  console.info("plan-week/preview", { model: modelId, provider: "bulk" });
+  const provider = getProviderId();
+  console.info("plan-week/preview", { model: modelId, role: "bulk", provider });
   const result = streamText({
     model: getModel("bulk"),
     // Disable search for the bulk plan generator. With auto-search the
     // model issues a search per recipe BEFORE streaming any tokens, which
     // can stack 60+ seconds of dead time. The photo chain still has Pexels
     // + Wikimedia Commons as fast/free fallbacks.
-    providerOptions: getProviderOptions({ disableSearch: true }),
+    // reasoningEffort none: grok-4.3 otherwise thinks before the first
+    // JSON token and blows the 300s budget.
+    providerOptions: getProviderOptions({
+      disableSearch: true,
+      reasoningEffort: "none",
+    }),
     ...getModelOpts(),
     prompt: planWeekPrompt({
       week_dates: dates,
@@ -189,7 +196,8 @@ export async function POST(req: NextRequest) {
 
   return weekPlanTextStreamResponse({
     fullStream: result.fullStream,
-    headers: { "X-Hestia-Model": modelId },
+    headers: { "X-Hestia-Model": modelId, "X-Hestia-Provider": provider },
     modelId,
+    provider,
   });
 }
