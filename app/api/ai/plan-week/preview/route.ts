@@ -1,17 +1,14 @@
 import { type NextRequest } from "next/server";
-import { streamObject } from "ai";
+import { streamText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkAiQuota } from "@/lib/ai/quota";
 import {
   getModel,
+  getModelId,
   getModelOpts,
   getProviderOptions,
 } from "@/lib/ai/provider";
-import {
-  PlanWeekSchema,
-  planWeekPrompt,
-  type PlanSlot,
-} from "@/lib/ai/prompts/plan-week";
+import { planWeekPrompt, type PlanSlot } from "@/lib/ai/prompts/plan-week";
 import { buildProgramContext } from "@/lib/programs";
 import { startOfWeek, isValidDate } from "@/lib/dates/week";
 import type { FamilyMember } from "@/lib/family";
@@ -143,14 +140,20 @@ export async function POST(req: NextRequest) {
     ).filter((e) => slots.includes(e.slot));
   }
 
-  const result = streamObject({
+  // streamText (not streamObject): xAI json_schema/structured-output
+  // buffers the whole 21-recipe blob, so the client sees 0 meals until
+  // the function hits maxDuration. Plain text JSON streams token-by-token;
+  // /save still validates PlanWeekSchema.
+  const modelId = getModelId("bulk");
+  console.info("plan-week/preview", { model: modelId, provider: "bulk" });
+  const result = streamText({
     model: getModel("bulk"),
-    schema: PlanWeekSchema,
     // Disable search for the bulk plan generator. With auto-search the
     // model issues a search per recipe BEFORE streaming any tokens, which
     // can stack 60+ seconds of dead time. The photo chain still has Pexels
     // + Wikimedia Commons as fast/free fallbacks.
     providerOptions: getProviderOptions({ disableSearch: true }),
+    abortSignal: req.signal,
     ...getModelOpts(),
     prompt: planWeekPrompt({
       week_dates: dates,
@@ -179,5 +182,11 @@ export async function POST(req: NextRequest) {
     }),
   });
 
-  return result.toTextStreamResponse();
+  return result.toTextStreamResponse({
+    headers: {
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+      "X-Hestia-Model": modelId,
+    },
+  });
 }

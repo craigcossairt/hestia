@@ -4,6 +4,7 @@ import {
   getModelId,
   getProviderId,
   getProviderOptions,
+  isReasoningBulkSlug,
 } from "@/lib/ai/provider";
 
 afterEach(() => {
@@ -42,13 +43,23 @@ describe("model role catalog", () => {
 
   it("honours per-role env overrides", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
-    vi.stubEnv("AI_MODEL_BULK", "grok-4.3");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4.20-non-reasoning");
     vi.stubEnv("AI_MODEL_VISION", "grok-4.3");
     vi.stubEnv("AI_MODEL_IMAGE", "grok-imagine-image");
 
-    expect(getModelId("bulk")).toBe("grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.20-non-reasoning");
     expect(getModelId("vision")).toBe("grok-4.3");
     expect(getImageModelId()).toBe("grok-imagine-image");
+  });
+
+  it("remaps reasoning env overrides on bulk so week gen cannot stall", () => {
+    vi.stubEnv("AI_PROVIDER", "xai");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4-fast-reasoning");
+    expect(getModelId("bulk")).toBe("grok-4.20-0309-non-reasoning");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4.6");
+    expect(getModelId("bulk")).toBe("grok-4.20-0309-non-reasoning");
+    vi.stubEnv("AI_MODEL_BULK", "grok-4.3");
+    expect(getModelId("bulk")).toBe("grok-4.20-0309-non-reasoning");
   });
 
   it("uses gateway-prefixed slugs when AI_PROVIDER=gateway", () => {
@@ -78,5 +89,14 @@ describe("getProviderOptions", () => {
     expect(getProviderOptions()).toEqual({
       xai: { searchParameters: { mode: "auto", returnCitations: true } },
     });
+  });
+});
+
+describe("isReasoningBulkSlug", () => {
+  it("treats grok-4.3 / grok-4.6 as reasoning, not the non-reasoning 4.20 slug", () => {
+    expect(isReasoningBulkSlug("grok-4.3")).toBe(true);
+    expect(isReasoningBulkSlug("grok-4.6")).toBe(true);
+    expect(isReasoningBulkSlug("grok-4.20-0309-non-reasoning")).toBe(false);
+    expect(isReasoningBulkSlug("xai/grok-4-fast-reasoning")).toBe(true);
   });
 });

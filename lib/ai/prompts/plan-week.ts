@@ -183,5 +183,7 @@ Variety rules:
 - For breakfasts: vary between hot/cold, eggs/grain/yogurt-based.
 - For lunches: prefer batch-able or repurposed dinner leftovers concepts.
 
-Return ONLY a valid object with a "meals" array. No commentary.`);
+Return ONLY a valid object with a "meals" array. No commentary.
+The first character of the response MUST be '{'. Stream meals in array
+order so the client can render each one as soon as it is written.`);
 }

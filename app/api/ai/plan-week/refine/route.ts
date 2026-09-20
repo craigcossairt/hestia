@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
     // Refine generates a small diff (typically 1-3 new recipes). Bulk
     // search would add latency without much payoff — keep search off here.
     providerOptions: getProviderOptions({ disableSearch: true }),
+    abortSignal: req.signal,
     ...getModelOpts(),
     prompt: refinePlanPrompt({
       user_request: body.user_request.trim(),
