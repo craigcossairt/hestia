@@ -70,7 +70,7 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4.3",
-    bulk: "grok-4.20-non-reasoning",
+    bulk: "grok-4.1-fast-non-reasoning",
     vision: "grok-4.3",
     image: "grok-imagine-image-2.0",
   },
@@ -94,7 +94,7 @@ const DEFAULTS: Record<
   },
   gateway: {
     fast: "xai/grok-4.3",
-    bulk: "xai/grok-4.20-non-reasoning",
+    bulk: "spacexai/grok-4.1-fast-non-reasoning",
     vision: "xai/grok-4.3",
     image: "xai/grok-imagine-image-2.0",
   },
@@ -117,10 +117,11 @@ function envOverride(name: string): string | undefined {
 // from the old docs (AI_MODEL_BULK=grok-4-fast-reasoning, grok-4.6, grok-4.3)
 // must not beat the non-reasoning catalog row.
 //
-// The dated 4.20 snapshot (grok-4.20-0309-non-reasoning) is also remapped:
-// Vercel AI Gateway lists only `grok-4.20-non-reasoning` (no 0309). An
-// unknown model comes back as HTTP 410 with an empty body; the SDK uses
-// statusText "Gone", which the 502 helper used to surface verbatim.
+// The grok-4.20 non-reasoning family (dated 0309 snapshot AND the
+// grok-4.20-non-reasoning alias) 410s on api.x.ai. Vercel AI Gateway lists
+// spacexai/grok-4.1-fast-non-reasoning as a live non-reasoning id (not
+// grok-4.6). May 15 retirement still redirects that slug to grok-4.3 with
+// reasoning effort none.
 function bareModelId(slug: string): string {
   const slash = slug.lastIndexOf("/");
   return slash >= 0 ? slug.slice(slash + 1) : slug;
@@ -134,7 +135,7 @@ export function isReasoningBulkSlug(slug: string): boolean {
 }
 
 export function isRetiredBulkSlug(slug: string): boolean {
-  return /grok-4\.20-0309-non-reasoning$/.test(bareModelId(slug));
+  return /grok-4\.20-.*non-reasoning/.test(bareModelId(slug));
 }
 
 function coerceBulkSlug(slug: string, provider: AiProvider): string {
