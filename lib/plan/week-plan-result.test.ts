@@ -3,8 +3,12 @@ import {
   cloneStreamedMeals,
   expectedWeekMealCount,
   persistablePlanWeek,
+  planWeekRichness,
   preferRicherPlan,
+  salvagePlanWeek,
   streamedMeals,
+  summarizeSalvage,
+  weekPlanRequestLog,
   weekStreamFinishAction,
 } from "@/lib/plan/week-plan-result";
 
@@ -73,18 +77,24 @@ describe("persistablePlanWeek", () => {
     ]);
   });
 
-  it("does not treat a named-only stub as persistable", () => {
-    expect(
-      persistablePlanWeek({
-        meals: [
-          {
-            date: "2026-09-21",
-            slot: "breakfast",
-            recipe: { name: "Scrambled Eggs with Toast" },
-          },
-        ],
-      }),
-    ).toBeNull();
+  it("salvages a named-only stub with slot defaults so it can save", () => {
+    const result = persistablePlanWeek({
+      meals: [
+        {
+          date: "2026-09-21",
+          slot: "breakfast",
+          recipe: { name: "Scrambled Eggs with Toast" },
+        },
+      ],
+    });
+    expect(result?.meals).toHaveLength(1);
+    expect(result?.meals[0]?.recipe?.name).toBe("Scrambled Eggs with Toast");
+    expect(result?.meals[0]?.recipe?.ingredients.length).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(result?.meals[0]?.recipe?.steps.length).toBeGreaterThanOrEqual(2);
+    expect(result?.meals[0]?.recipe?.tags).toContain("breakfast");
+    expect(result?.meals[0]?.recipe?.tags).toContain("needs-detail");
   });
 
   it("reads meals from a non-array object map", () => {
@@ -100,7 +110,7 @@ describe("persistablePlanWeek", () => {
     expect(result?.meals).toHaveLength(1);
   });
 
-  it("keeps complete recipes next to named-only stubs", () => {
+  it("keeps complete recipes and salvages named-only stubs beside them", () => {
     const result = persistablePlanWeek({
       meals: [
         {
@@ -115,13 +125,43 @@ describe("persistablePlanWeek", () => {
         },
       ],
     });
-    expect(result?.meals).toEqual([
-      {
-        date: "2026-09-21",
-        slot: "breakfast",
-        recipe: completeRecipe,
-      },
-    ]);
+    expect(result?.meals).toHaveLength(2);
+    expect(result?.meals[0]?.recipe).toEqual(completeRecipe);
+    expect(result?.meals[1]?.recipe?.name).toBe("Half streamed sandwich");
+  });
+
+  it("coerces float macros and object-map ingredients", () => {
+    const result = persistablePlanWeek({
+      meals: [
+        {
+          date: "2026-09-21",
+          slot: "dinner",
+          recipe: {
+            name: "Sheet pan chicken",
+            time_min: 35.4,
+            servings: "4",
+            kcal: 610.2,
+            protein: 42.8,
+            carbs: 18,
+            fat: 28,
+            tags: ["dinner"],
+            ingredients: {
+              0: { name: "chicken thighs", qty: "1.5", unit: "lb" },
+              1: { name: "broccoli", qty: 2, unit: "cup" },
+            },
+            steps: {
+              0: { text: "Roast the chicken." },
+              1: { text: "Add broccoli for the last 12 minutes." },
+            },
+          },
+        },
+      ],
+    });
+    expect(result?.meals[0]?.recipe?.time_min).toBe(35);
+    expect(result?.meals[0]?.recipe?.servings).toBe(4);
+    expect(result?.meals[0]?.recipe?.kcal).toBe(610);
+    expect(result?.meals[0]?.recipe?.ingredients).toHaveLength(2);
+    expect(result?.meals[0]?.recipe?.steps).toHaveLength(2);
   });
 });
 
@@ -157,6 +197,29 @@ describe("preferRicherPlan", () => {
     });
     expect(preferRicherPlan(null, previous)).toEqual(previous);
     expect(preferRicherPlan(previous, null)).toEqual(previous);
+  });
+
+  it("prefers complete recipes over same-length named stubs", () => {
+    const stubs = persistablePlanWeek({
+      meals: [
+        {
+          date: "2026-09-21",
+          slot: "breakfast",
+          recipe: { name: "Veggie omelette" },
+        },
+      ],
+    });
+    const complete = persistablePlanWeek({
+      meals: [
+        {
+          date: "2026-09-21",
+          slot: "breakfast",
+          recipe: completeRecipe,
+        },
+      ],
+    });
+    expect(planWeekRichness(complete)).toBeGreaterThan(planWeekRichness(stubs));
+    expect(preferRicherPlan(complete, stubs)).toEqual(complete);
   });
 });
 
@@ -254,5 +317,46 @@ describe("weekStreamFinishAction", () => {
         persistable: null,
       }),
     ).toEqual({ type: "wait" });
+  });
+});
+
+describe("weekPlanRequestLog", () => {
+  it("reads Vercel request headers used in runtime logs", () => {
+    const headers = new Headers({
+      "x-vercel-id": "sfo1::abc",
+      "x-request-id": "req-1",
+      "x-vercel-deployment-id": "dpl_123",
+    });
+    expect(weekPlanRequestLog(headers)).toEqual({
+      vercelId: "sfo1::abc",
+      requestId: "req-1",
+      deploymentId: "dpl_123",
+    });
+  });
+});
+
+describe("salvagePlanWeek", () => {
+  it("records why a meal cannot be saved", () => {
+    const salvage = salvagePlanWeek({
+      meals: [
+        { slot: "breakfast", recipe: { name: "No date" } },
+        {
+          date: "2026-09-21",
+          slot: "breakfast",
+          recipe: { name: "Scrambled Eggs with Toast" },
+        },
+      ],
+    });
+    expect(salvage.plan?.meals).toHaveLength(1);
+    expect(salvage.filledDefaults).toBe(1);
+    expect(salvage.issues).toEqual([
+      {
+        index: 0,
+        slot: "breakfast",
+        name: "No date",
+        reason: "missing or invalid date",
+      },
+    ]);
+    expect(summarizeSalvage(salvage).persistable).toBe(1);
   });
 });
