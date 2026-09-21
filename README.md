@@ -189,7 +189,7 @@ as BYOK, so it is not used just because the app is on Vercel.
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
-| `gateway` (optional) | OIDC or `AI_GATEWAY_API_KEY`, and **no** `XAI_API_KEY` | `spacexai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
+| `gateway` (optional) | `AI_GATEWAY_API_KEY` (no `XAI_API_KEY`) | `spacexai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
 
 Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
 provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
