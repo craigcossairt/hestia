@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_WEEK_PREVIEW_STREAM_MESSAGE,
+  createWeekPlanJsonGate,
   weekPlanModelErrorMessage,
+  weekPlanTextDeltaText,
   weekPlanTextStreamResponse,
   type WeekPreviewStreamPart,
 } from "@/lib/plan/week-preview-stream";
@@ -128,5 +130,56 @@ describe("weekPlanTextStreamResponse", () => {
     expect(res.headers.get("X-Hestia-Model")).toBe("grok-test");
     expect(res.headers.get("X-Accel-Buffering")).toBe("no");
     expect(await readBody(res)).toBe('{"meals":[]}');
+  });
+
+  it("accepts Responses-style text-delta.delta chunks", async () => {
+    const res = await weekPlanTextStreamResponse({
+      fullStream: parts([
+        { type: "text-delta", delta: '{"meals":[]}' },
+      ]),
+    });
+    expect(res.status).toBe(200);
+    expect(await readBody(res)).toBe('{"meals":[]}');
+  });
+
+  it("strips markdown fences and trailing commentary", async () => {
+    const res = await weekPlanTextStreamResponse({
+      fullStream: parts([
+        {
+          type: "text-delta",
+          text: "```json\n{\"meals\":[]}\n``` extra commentary",
+        },
+      ]),
+    });
+    expect(res.status).toBe(200);
+    expect(await readBody(res)).toBe('{"meals":[]}');
+  });
+});
+
+describe("weekPlanTextDeltaText", () => {
+  it("prefers text over delta", () => {
+    expect(
+      weekPlanTextDeltaText({
+        type: "text-delta",
+        text: "a",
+        delta: "b",
+      }),
+    ).toBe("a");
+    expect(weekPlanTextDeltaText({ type: "text-delta", delta: "b" })).toBe(
+      "b",
+    );
+    expect(weekPlanTextDeltaText({ type: "start" })).toBeNull();
+  });
+});
+
+describe("createWeekPlanJsonGate", () => {
+  it("holds fence prefix until a JSON object starts", () => {
+    const gate = createWeekPlanJsonGate();
+    expect(gate.push("```json\n")).toBe("");
+    expect(gate.push('{"meals":')).toBe('{"meals":');
+    expect(gate.complete).toBe(false);
+    expect(gate.push("[]}")).toBe("[]}");
+    expect(gate.complete).toBe(true);
+    expect(gate.push(" thanks")).toBe("");
   });
 });

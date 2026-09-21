@@ -21,8 +21,89 @@ export const EMPTY_WEEK_PREVIEW_STREAM_MESSAGE =
 export type WeekPreviewStreamPart = {
   type: string;
   text?: string;
+  delta?: string;
   error?: unknown;
 };
+
+export function weekPlanTextDeltaText(
+  part: WeekPreviewStreamPart,
+): string | null {
+  if (part.type !== "text-delta") return null;
+  if (typeof part.text === "string" && part.text.length > 0) return part.text;
+  if (typeof part.delta === "string" && part.delta.length > 0) {
+    return part.delta;
+  }
+  return null;
+}
+
+// Responses / chat models sometimes wrap JSON in ```json fences or append
+// commentary after the closing brace. useObject concatenates the raw body;
+// a failed final parse replaces the streamed meals with undefined.
+export function createWeekPlanJsonGate(): {
+  push(chunk: string): string;
+  complete: boolean;
+} {
+  let raw = "";
+  let emitted = 0;
+  let complete = false;
+
+  return {
+    get complete() {
+      return complete;
+    },
+    push(chunk: string): string {
+      if (complete || chunk.length === 0) return "";
+      raw += chunk;
+      const json = stripToJsonObject(raw);
+      if (json == null) return "";
+      const sliced = sliceJsonObject(json);
+      const out = sliced.text.slice(emitted);
+      emitted = sliced.text.length;
+      complete = sliced.complete;
+      return out;
+    },
+  };
+}
+
+function stripToJsonObject(raw: string): string | null {
+  const unfenced = raw.replace(/^\s*```(?:json)?\s*/i, "");
+  const start = unfenced.indexOf("{");
+  if (start < 0) return null;
+  return unfenced.slice(start);
+}
+
+function sliceJsonObject(source: string): { text: string; complete: boolean } {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { text: source.slice(0, i + 1), complete: true };
+      }
+    }
+  }
+  return { text: source, complete: false };
+}
 
 function statusCodeOf(error: unknown): number | undefined {
   if (error && typeof error === "object" && "statusCode" in error) {
@@ -58,12 +139,6 @@ export function weekPlanModelErrorMessage(
   return "The generator failed before any meals streamed.";
 }
 
-function isTextDelta(part: WeekPreviewStreamPart): part is WeekPreviewStreamPart & {
-  text: string;
-} {
-  return part.type === "text-delta" && typeof part.text === "string";
-}
-
 export async function weekPlanTextStreamResponse(args: {
   fullStream: AsyncIterable<WeekPreviewStreamPart>;
   headers?: Record<string, string>;
@@ -71,6 +146,7 @@ export async function weekPlanTextStreamResponse(args: {
   provider?: string;
 }): Promise<Response> {
   const iterator = args.fullStream[Symbol.asyncIterator]();
+  const gate = createWeekPlanJsonGate();
   let firstText: string | null = null;
   let fail: string | null = null;
 
@@ -92,8 +168,11 @@ export async function weekPlanTextStreamResponse(args: {
       });
       break;
     }
-    if (isTextDelta(value) && value.text.length > 0) {
-      firstText = value.text;
+    const delta = weekPlanTextDeltaText(value);
+    if (delta == null) continue;
+    const forwarded = gate.push(delta);
+    if (forwarded.length > 0) {
+      firstText = forwarded;
       break;
     }
   }
@@ -114,15 +193,21 @@ export async function weekPlanTextStreamResponse(args: {
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(initial));
-        while (true) {
-          const { done, value } = await iterator.next();
-          if (done) break;
-          if (value.type === "error" || value.type === "abort") {
-            console.error("plan-week/preview model error", value.error);
-            break;
-          }
-          if (isTextDelta(value) && value.text.length > 0) {
-            controller.enqueue(encoder.encode(value.text));
+        if (!gate.complete) {
+          while (true) {
+            const { done, value } = await iterator.next();
+            if (done) break;
+            if (value.type === "error" || value.type === "abort") {
+              console.error("plan-week/preview model error", value.error);
+              break;
+            }
+            const delta = weekPlanTextDeltaText(value);
+            if (delta == null) continue;
+            const forwarded = gate.push(delta);
+            if (forwarded.length > 0) {
+              controller.enqueue(encoder.encode(forwarded));
+            }
+            if (gate.complete) break;
           }
         }
         controller.close();
