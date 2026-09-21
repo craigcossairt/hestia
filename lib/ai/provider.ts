@@ -8,10 +8,11 @@
 //
 // Env vars (all optional except the API key for the chosen provider):
 //   AI_PROVIDER       — "xai" | "openai" | "anthropic" | "google" | "gateway"
-//                       Unset on Vercel → gateway (OIDC). api.x.ai 410s
-//                       every Grok slug we tried; live Gateway ids are
-//                       spacexai/*. Set AI_XAI_DIRECT=true to force
-//                       createXai → api.x.ai.
+//                       Default is xai (XAI_API_KEY → api.x.ai /v1/responses).
+//                       Gateway bills Vercel credits even with BYOK, so a
+//                       leftover AI_PROVIDER=gateway is ignored when
+//                       XAI_API_KEY is set. Set AI_PROVIDER=gateway only
+//                       when you want Gateway and do not have an xAI key.
 //   AI_MODEL_FAST     — override the fast text/json model
 //   AI_MODEL_BULK     — override the plan-week generator. Independent of
 //                       AI_MODEL_FAST so a Coach bump cannot put week
@@ -21,15 +22,11 @@
 //   AI_TEMPERATURE    — sampling temperature for text generations (default 0.4)
 //   AI_SEED           — fixed seed for repeatable outputs (optional; integer)
 //
-//   XAI_API_KEY              — xAI key. On Gateway this is sent as BYOK so
-//                              Grok bills xAI, not Vercel Gateway credits.
-//                              Also required for AI_XAI_DIRECT.
+//   XAI_API_KEY              — required when using xAI (the default)
 //   OPENAI_API_KEY           — required when AI_PROVIDER=openai
 //   ANTHROPIC_API_KEY        — required when AI_PROVIDER=anthropic
 //   GOOGLE_GENERATIVE_AI_API_KEY — required when AI_PROVIDER=google
-//   AI_GATEWAY_API_KEY       — optional; Vercel OIDC is enough on deploy
-//                              to *authenticate*, but Gateway still needs
-//                              AI Gateway credits unless BYOK is set.
+//   AI_GATEWAY_API_KEY       — required only when AI_PROVIDER=gateway
 //
 // Gateway models use "provider/model-id" strings, e.g. "spacexai/grok-4.3".
 
@@ -44,10 +41,10 @@ import { gateway } from "ai";
 export type AiProvider = "xai" | "openai" | "anthropic" | "google" | "gateway";
 // Capability roles — the only model identifiers call sites should use.
 // "fast"   — default text/json: coach, single recipes, pantry, insights.
-// "bulk"   — plan-week's 21-recipe generator. On Gateway this is
-//            spacexai/grok-4.3 with reasoningEffort "none" so JSON
-//            streams immediately. Do not point this at grok-4.6: that
-//            model defaults to high reasoning that cannot be disabled.
+// "bulk"   — plan-week's 21-recipe generator. grok-4.3 with
+//            reasoningEffort "none" so JSON streams immediately. Do not
+//            point this at grok-4.6: that model defaults to high
+//            reasoning that cannot be disabled.
 // "vision" — image-input capable model (receipts, recipe photos).
 export type ModelRole = "fast" | "bulk" | "vision";
 
@@ -63,14 +60,6 @@ function isAiProvider(value: string): value is AiProvider {
   return (PROVIDERS as readonly string[]).includes(value);
 }
 
-function gatewayAvailable(): boolean {
-  return (
-    process.env.VERCEL === "1" ||
-    Boolean(process.env.AI_GATEWAY_API_KEY) ||
-    Boolean(process.env.VERCEL_OIDC_TOKEN)
-  );
-}
-
 function currentProvider(): AiProvider {
   const raw = process.env.AI_PROVIDER;
   if (raw && !isAiProvider(raw)) {
@@ -79,13 +68,11 @@ function currentProvider(): AiProvider {
   if (raw === "openai" || raw === "anthropic" || raw === "google") {
     return raw;
   }
-  // api.x.ai returned HTTP 410 for grok-4.20-non-reasoning, grok-4.3, and
-  // grok-4.6 (#69–#71). Live Gateway /v1/models lists spacexai/grok-*
-  // (not xai/grok-*). On Vercel, OIDC authenticates Gateway — do not
-  // require AI_GATEWAY_API_KEY. Force api.x.ai with AI_XAI_DIRECT=true.
-  const forceDirectXai = process.env.AI_XAI_DIRECT === "true";
-  if (raw === "gateway") return "gateway";
-  if (!forceDirectXai && gatewayAvailable()) return "gateway";
+  // Gateway BYOK still requires paid Vercel credits. Prefer the user's
+  // xAI key whenever it is present, including leftover AI_PROVIDER=gateway.
+  if (raw === "gateway" && !process.env.XAI_API_KEY) {
+    return "gateway";
+  }
   return "xai";
 }
 
@@ -98,8 +85,6 @@ const DEFAULTS: Record<
 > = {
   xai: {
     fast: "grok-4.3",
-    // Remap target only. api.x.ai 410s this id (#69–#71); getModel("bulk")
-    // on xai-direct requires an explicit AI_MODEL_BULK override.
     bulk: "grok-4.3",
     vision: "grok-4.3",
     image: "grok-imagine-image-2.0",
@@ -142,11 +127,11 @@ function envOverride(name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
-// Retired / reasoning slugs that stall or 410 week-plan JSON. Env leftovers
+// Retired / reasoning slugs that stall week-plan JSON. Env leftovers
 // from the 4.20 non-reasoning family and May 15 4.1-fast redirects remap
 // onto the catalog row. grok-4.6 remaps because it cannot disable
 // reasoning. grok-4.3 is the catalog bulk id; call sites pass
-// reasoningEffort "none" when using it via Gateway.
+// reasoningEffort "none".
 function bareModelId(slug: string): string {
   const slash = slug.lastIndexOf("/");
   return slash >= 0 ? slug.slice(slash + 1) : slug;
@@ -212,14 +197,14 @@ export function getModelId(role: ModelRole): string {
       throw new Error(`Unknown model role: ${_exhaustive}`);
     }
   }
-  return provider === "gateway" ? withGatewayPrefix(slug) : slug;
+  return provider === "gateway" ? withGatewayPrefix(slug) : bareModelId(slug);
 }
 
 export function getImageModelId(): string | null {
   const provider = currentProvider();
   const slug = envOverride("AI_MODEL_IMAGE") ?? catalogModel(provider, "image");
   if (!slug) return null;
-  return provider === "gateway" ? withGatewayPrefix(slug) : slug;
+  return provider === "gateway" ? withGatewayPrefix(slug) : bareModelId(slug);
 }
 
 function requireKey(name: string, label: string): string {
@@ -275,16 +260,14 @@ function ensureGoogle() {
 // `streamText`. Pick "fast" for text + JSON, "bulk" for week-scale JSON,
 // and "vision" for any call that includes image inputs.
 export function getModel(role: ModelRole): LanguageModel {
-  const provider = currentProvider();
-  if (provider === "xai" && role === "bulk" && !envOverride("AI_MODEL_BULK")) {
-    throw new Error(
-      "AI_XAI_DIRECT requires AI_MODEL_BULK. api.x.ai 410s catalog Grok ids (#69–#71). Unset AI_XAI_DIRECT to use Vercel AI Gateway.",
-    );
-  }
   const name = getModelId(role);
+  const provider = currentProvider();
   switch (provider) {
     case "xai":
-      return ensureXai()(name);
+      // Chat Completions is legacy. Production 410s were empty-body
+      // Gone from that endpoint (and from deprecated live-search
+      // search_parameters). The console-listed models are on /v1/responses.
+      return ensureXai().responses(name);
     case "openai":
       return ensureOpenAI()(name);
     case "anthropic":
@@ -341,22 +324,17 @@ export function getModelOpts(): { temperature: number; seed?: number } {
 }
 
 // Provider-specific options passed straight through to generateText /
-// generateObject / streamText. Today this covers xAI web search and
-// optional reasoningEffort.
+// generateObject / streamText. Today this covers xAI reasoningEffort
+// and, on Gateway only, optional live-search flags.
 //
-// Default-on for xAI (the photo-passthrough chain leans on the model
-// returning image_url from search results — no search means no
-// passthrough). Set AI_DISABLE_SEARCH=true to opt out globally, OR pass
-// { disableSearch: true } per call for routes where the search latency
-// is too costly (e.g. plan-week generates 21 recipes; with auto-search
-// per recipe the model spends 60+ seconds searching before any token
-// streams to the client). When search is off we send mode: "off"
-// explicitly so a newer Grok default cannot turn search back on.
+// xAI deprecated Live Search (`search_parameters`) on chat completions
+// in favor of Agent Tools on the Responses API. Sending that field can
+// 410 the call. Direct xAI therefore never sends searchParameters;
+// omitting tools on xai.responses() keeps search off. Gateway may still
+// honor the xai.searchParameters namespace.
 //
 // reasoningEffort is opt-in. Plan-week preview/refine pass "none" so
-// grok-4.3 streams JSON immediately. Recipe routes omit it. On Gateway,
-// also pin routing to the xai provider — Vertex ignores the xai
-// namespace, which would re-enable reasoning on week-plan.
+// grok-4.3 streams JSON immediately. Recipe routes omit it.
 export const REASONING_EFFORTS = ["none", "low", "medium", "high"] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
@@ -372,36 +350,22 @@ export function getProviderOptions(opts?: {
     opts?.reasoningEffort != null
       ? { reasoningEffort: opts.reasoningEffort }
       : {};
-  const xaiOptions = {
-    xai: {
-      searchParameters: searchOff
-        ? { mode: "off" }
-        : { mode: "auto", returnCitations: true },
-      ...reasoning,
-    },
-  };
   switch (provider) {
     case "xai":
-      return xaiOptions;
+      return Object.keys(reasoning).length > 0 ? { xai: reasoning } : {};
     case "gateway": {
-      // spacexai/grok-4.3 is served by xai and vertex. Pin to xai so
-      // reasoningEffort "none" in the xai namespace actually applies;
-      // Vertex would ignore it and week-plan would think again. Skip the
-      // pin for openai/* (etc.) Gateway overrides; gateway.only would
-      // reject them. When XAI_API_KEY is set, pass it as BYOK so Grok
-      // bills xAI instead of Vercel Gateway credits (Pro plan card ≠
-      // Gateway credits).
+      const xaiOptions = {
+        xai: {
+          searchParameters: searchOff
+            ? { mode: "off" }
+            : { mode: "auto", returnCitations: true },
+          ...reasoning,
+        },
+      };
       const pinXai =
         opts?.modelId != null && opts.modelId.startsWith("spacexai/");
-      const xaiKey = envOverride("XAI_API_KEY");
-      const gatewayOpts: {
-        only?: string[];
-        byok?: { xai: { apiKey: string }[] };
-      } = {};
-      if (pinXai) gatewayOpts.only = ["xai"];
-      if (pinXai && xaiKey) gatewayOpts.byok = { xai: [{ apiKey: xaiKey }] };
-      return Object.keys(gatewayOpts).length > 0
-        ? { ...xaiOptions, gateway: gatewayOpts }
+      return pinXai
+        ? { ...xaiOptions, gateway: { only: ["xai"] } }
         : xaiOptions;
     }
     case "openai":

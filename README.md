@@ -82,10 +82,9 @@ npm install
 
 ### 3. Pick an AI provider
 
-Hestia ships Grok via Vercel AI Gateway on deploy (OIDC). Locally, either
-`vercel env pull` / `AI_GATEWAY_API_KEY`, or `AI_XAI_DIRECT=true` plus a
-key from https://console.x.ai. To use a different provider, see *Choosing
-an AI provider* below.
+Hestia ships Grok via your `XAI_API_KEY` from https://console.x.ai
+(Responses API at `https://api.x.ai/v1/responses`). To use a different
+provider, see *Choosing an AI provider* below.
 
 ### 4. Configure env vars
 
@@ -99,8 +98,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 Choose one AI auth path:
 
-- Gateway (Vercel default): run `vercel env pull`, or set `AI_GATEWAY_API_KEY`.
-- Direct xAI: set `AI_XAI_DIRECT=true` and `XAI_API_KEY=xai-...`.
+- Direct xAI (default): set `XAI_API_KEY=xai-...`.
+- Vercel AI Gateway (optional): set `AI_PROVIDER=gateway`, `AI_GATEWAY_API_KEY`, and leave `XAI_API_KEY` unset. This bills Gateway credits.
 
 The example file documents every optional integration (Pexels,
 USDA, Kroger) with what they unlock and where to get the keys.
@@ -178,34 +177,31 @@ A nightly cron that re-runs `seed-demo.ts` keeps the data fresh.
 ## Choosing an AI provider
 
 Hestia routes every AI call through `lib/ai/provider.ts`, which picks a
-provider based on `AI_PROVIDER`. On Vercel this defaults to **gateway**
-(OIDC — no `AI_GATEWAY_API_KEY` required). Direct `api.x.ai` 410'd every
-Grok slug we tried (#69–#71); live Gateway ids are `spacexai/grok-*`.
+provider based on `AI_PROVIDER`. The default is **xai**: your
+`XAI_API_KEY` from https://console.x.ai, via the Responses API at
+`https://api.x.ai/v1/responses`. That bills xAI only. Vercel AI Gateway
+is opt-in and bills **Gateway credits** even when you pass the xAI key
+as BYOK, so it is not used just because the app is on Vercel.
 
 | `AI_PROVIDER` | Required env | Default fast / vision | Default bulk (week plan) |
 |---|---|---|---|
-| `gateway` (Vercel default) | OIDC or `AI_GATEWAY_API_KEY` | `spacexai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
-| `xai` (local / `AI_XAI_DIRECT`) | `XAI_API_KEY` | `grok-4.3` | `grok-4.3` (`reasoningEffort: none`) |
+| `xai` (default) | `XAI_API_KEY` | `grok-4.3` | `grok-4.3` (`reasoningEffort: none`) |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-flash` |
+| `gateway` (optional) | OIDC or `AI_GATEWAY_API_KEY`, and **no** `XAI_API_KEY` | `spacexai/grok-4.3` | `spacexai/grok-4.3` (`reasoningEffort: none`) |
 
 Call sites pass a **role** (`fast`, `bulk`, `vision`) into `getModel()`, never a
 provider slug. Override a role with `AI_MODEL_FAST` / `AI_MODEL_BULK` /
 `AI_MODEL_VISION` / `AI_MODEL_IMAGE`. `AI_MODEL_BULK` does not fall back to
-`AI_MODEL_FAST` — week generation is independently pinned. On Vercel, Grok
-goes through AI Gateway as `spacexai/grok-4.3` with `reasoningEffort: "none"`
-so the first meal card streams immediately. If `XAI_API_KEY` is set, Gateway
-sends it as BYOK so Grok bills xAI — the Pro plan card is not AI Gateway
-credits. Leftover `xai/` prefixes are
-rewritten to `spacexai/`. Set `AI_XAI_DIRECT=true` only to hit `api.x.ai`.
-With the Vercel AI Gateway, model strings use the `provider/model-id` form so
-you can pick from any supported provider with a single key.
+`AI_MODEL_FAST` — week generation is independently pinned to `grok-4.3` with
+`reasoningEffort: "none"` so the first meal card streams immediately.
+Leftover `spacexai/` prefixes are stripped on direct xAI. A leftover
+`AI_PROVIDER=gateway` is ignored whenever `XAI_API_KEY` is set.
 
-xAI image generation defaults to `grok-imagine-image-2.0` (Gateway:
-`spacexai/grok-imagine-image-2.0`). Do not point `bulk` at `grok-4.6`: it
-defaults to high reasoning that cannot be disabled, which stalls the
-week-plan stream before the first meal card.
+Do not point `bulk` at `grok-4.6`: it defaults to high reasoning that
+cannot be disabled, which stalls the week-plan stream before the first
+meal card. xAI image generation defaults to `grok-imagine-image-2.0`.
 
 ### Consistency across providers
 

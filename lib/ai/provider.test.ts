@@ -13,9 +13,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-function stubDirectXai() {
+function stubXai() {
   vi.stubEnv("AI_PROVIDER", "xai");
-  vi.stubEnv("AI_XAI_DIRECT", "true");
+  vi.stubEnv("XAI_API_KEY", "xai-test");
+  vi.stubEnv("AI_XAI_DIRECT", "");
   vi.stubEnv("VERCEL", "");
   vi.stubEnv("AI_GATEWAY_API_KEY", "");
   vi.stubEnv("VERCEL_OIDC_TOKEN", "");
@@ -25,9 +26,21 @@ function stubDirectXai() {
   vi.stubEnv("AI_MODEL_IMAGE", "");
 }
 
+function stubGateway() {
+  vi.stubEnv("AI_PROVIDER", "gateway");
+  vi.stubEnv("XAI_API_KEY", "");
+  vi.stubEnv("AI_XAI_DIRECT", "");
+  vi.stubEnv("VERCEL", "1");
+  vi.stubEnv("AI_GATEWAY_API_KEY", "vck_test");
+  vi.stubEnv("AI_MODEL_FAST", "");
+  vi.stubEnv("AI_MODEL_BULK", "");
+  vi.stubEnv("AI_MODEL_VISION", "");
+  vi.stubEnv("AI_MODEL_IMAGE", "");
+}
+
 describe("model role catalog", () => {
   it("resolves current xAI-direct defaults per role", () => {
-    stubDirectXai();
+    stubXai();
 
     expect(getProviderId()).toBe("xai");
     expect(getModelId("fast")).toBe("grok-4.3");
@@ -37,12 +50,12 @@ describe("model role catalog", () => {
   });
 
   it("does not put week generation on grok-4.6", () => {
-    stubDirectXai();
+    stubXai();
     expect(getModelId("bulk")).not.toMatch(/grok-4\.6/);
   });
 
   it("keeps bulk independent of AI_MODEL_FAST", () => {
-    stubDirectXai();
+    stubXai();
     vi.stubEnv("AI_MODEL_FAST", "grok-4.6");
 
     expect(getModelId("fast")).toBe("grok-4.6");
@@ -50,7 +63,7 @@ describe("model role catalog", () => {
   });
 
   it("honours per-role env overrides that are still live", () => {
-    stubDirectXai();
+    stubXai();
     vi.stubEnv("AI_MODEL_BULK", "grok-3");
     vi.stubEnv("AI_MODEL_VISION", "grok-4.3");
     vi.stubEnv("AI_MODEL_IMAGE", "grok-imagine-image");
@@ -61,19 +74,18 @@ describe("model role catalog", () => {
   });
 
   it("remaps the grok-4.20 non-reasoning family onto grok-4.3", () => {
-    stubDirectXai();
+    stubXai();
     vi.stubEnv("AI_MODEL_BULK", "grok-4.20-non-reasoning");
     expect(getModelId("bulk")).toBe("grok-4.3");
     vi.stubEnv("AI_MODEL_BULK", "grok-4.20-0309-non-reasoning");
     expect(getModelId("bulk")).toBe("grok-4.3");
-    vi.stubEnv("AI_XAI_DIRECT", "");
-    vi.stubEnv("AI_PROVIDER", "gateway");
+    stubGateway();
     vi.stubEnv("AI_MODEL_BULK", "xai/grok-4.20-non-reasoning");
     expect(getModelId("bulk")).toBe("spacexai/grok-4.3");
   });
 
   it("remaps grok-4.6 and retired 4.1-fast env onto grok-4.3", () => {
-    stubDirectXai();
+    stubXai();
     vi.stubEnv("AI_MODEL_BULK", "grok-4.6");
     expect(getModelId("bulk")).toBe("grok-4.3");
     vi.stubEnv("AI_MODEL_BULK", "grok-4.1-fast-non-reasoning");
@@ -83,12 +95,7 @@ describe("model role catalog", () => {
   });
 
   it("uses spacexai/ Gateway ids, not xai/", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
-    vi.stubEnv("AI_XAI_DIRECT", "");
-    vi.stubEnv("AI_MODEL_FAST", "");
-    vi.stubEnv("AI_MODEL_BULK", "");
-    vi.stubEnv("AI_MODEL_VISION", "");
-    vi.stubEnv("AI_MODEL_IMAGE", "");
+    stubGateway();
 
     expect(getProviderId()).toBe("gateway");
     expect(getModelId("fast")).toBe("spacexai/grok-4.3");
@@ -96,54 +103,81 @@ describe("model role catalog", () => {
     expect(getImageModelId()).toBe("spacexai/grok-imagine-image-2.0");
   });
 
+  it("strips leftover spacexai/ prefixes on direct xAI", () => {
+    stubXai();
+    vi.stubEnv("AI_MODEL_FAST", "spacexai/grok-4.3");
+    expect(getModelId("fast")).toBe("grok-4.3");
+  });
+
   it("rewrites leftover xai/ env prefixes to spacexai/ on Gateway", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
+    stubGateway();
     vi.stubEnv("AI_MODEL_FAST", "xai/grok-4.3");
     expect(getModelId("fast")).toBe("spacexai/grok-4.3");
   });
 });
 
 describe("provider selection", () => {
-  it("routes xai to Gateway on Vercel so api.x.ai 410s are skipped", () => {
+  it("stays on xAI with XAI_API_KEY even on Vercel", () => {
     vi.stubEnv("AI_PROVIDER", "xai");
-    vi.stubEnv("AI_XAI_DIRECT", "");
     vi.stubEnv("VERCEL", "1");
-    expect(getProviderId()).toBe("gateway");
-    expect(getModelId("bulk")).toBe("spacexai/grok-4.3");
+    vi.stubEnv("AI_GATEWAY_API_KEY", "vck_test");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "oidc-test");
+    expect(getProviderId()).toBe("xai");
+    expect(getModelId("bulk")).toBe("grok-4.3");
   });
 
-  it("keeps xai-direct when AI_XAI_DIRECT=true even on Vercel", () => {
-    vi.stubEnv("AI_PROVIDER", "xai");
-    vi.stubEnv("AI_XAI_DIRECT", "true");
+  it("defaults to xAI when AI_PROVIDER is unset, including on Vercel", () => {
+    vi.stubEnv("AI_PROVIDER", "");
+    vi.stubEnv("XAI_API_KEY", "xai-test");
     vi.stubEnv("VERCEL", "1");
     expect(getProviderId()).toBe("xai");
     expect(getModelId("bulk")).toBe("grok-4.3");
   });
 
-  it("refuses xai-direct bulk without an explicit AI_MODEL_BULK override", () => {
-    stubDirectXai();
-    expect(() => getModel("bulk")).toThrow(/AI_XAI_DIRECT requires AI_MODEL_BULK/);
+  it("uses the Responses API on direct xAI", () => {
+    stubXai();
+    const model = getModel("bulk");
+    expect(typeof model).not.toBe("string");
+    if (typeof model === "string") return;
+    expect(model.provider).toBe("xai.responses");
   });
 
-  it("defaults to Gateway when VERCEL=1 and AI_PROVIDER is unset", () => {
-    vi.stubEnv("AI_PROVIDER", "");
-    vi.stubEnv("AI_XAI_DIRECT", "");
-    vi.stubEnv("VERCEL", "1");
+  it("uses Gateway only when AI_PROVIDER=gateway and XAI_API_KEY is unset", () => {
+    stubGateway();
     expect(getProviderId()).toBe("gateway");
+    expect(getModelId("bulk")).toBe("spacexai/grok-4.3");
+  });
+
+  it("ignores leftover AI_PROVIDER=gateway when XAI_API_KEY is set", () => {
+    vi.stubEnv("AI_PROVIDER", "gateway");
+    vi.stubEnv("XAI_API_KEY", "xai-test");
+    vi.stubEnv("VERCEL", "1");
+    expect(getProviderId()).toBe("xai");
+    expect(getModelId("bulk")).toBe("grok-4.3");
   });
 });
 
 describe("getProviderOptions", () => {
-  it("sends xAI search mode off when disableSearch is set", () => {
-    stubDirectXai();
-    expect(getProviderOptions({ disableSearch: true })).toEqual({
-      xai: { searchParameters: { mode: "off" } },
+  it("does not send deprecated searchParameters on direct xAI", () => {
+    stubXai();
+    expect(getProviderOptions({ disableSearch: true })).toEqual({});
+  });
+
+  it("forwards reasoningEffort none on direct xAI without searchParameters", () => {
+    stubXai();
+    expect(
+      getProviderOptions({
+        disableSearch: true,
+        reasoningEffort: "none",
+        modelId: "grok-4.3",
+      }),
+    ).toEqual({
+      xai: { reasoningEffort: "none" },
     });
   });
 
   it("forwards search-off and reasoningEffort none on Gateway", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
-    vi.stubEnv("XAI_API_KEY", "");
+    stubGateway();
     expect(
       getProviderOptions({
         disableSearch: true,
@@ -160,7 +194,7 @@ describe("getProviderOptions", () => {
   });
 
   it("does not pin gateway.only for non-SpaceXAI Gateway overrides", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
+    stubGateway();
     expect(
       getProviderOptions({
         disableSearch: true,
@@ -168,56 +202,6 @@ describe("getProviderOptions", () => {
       }),
     ).toEqual({
       xai: { searchParameters: { mode: "off" } },
-    });
-  });
-
-  it("sends XAI_API_KEY as Gateway BYOK for spacexai models", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
-    vi.stubEnv("XAI_API_KEY", "xai-test-key");
-    expect(
-      getProviderOptions({
-        disableSearch: true,
-        reasoningEffort: "none",
-        modelId: "spacexai/grok-4.3",
-      }),
-    ).toEqual({
-      xai: {
-        searchParameters: { mode: "off" },
-        reasoningEffort: "none",
-      },
-      gateway: {
-        only: ["xai"],
-        byok: { xai: [{ apiKey: "xai-test-key" }] },
-      },
-    });
-  });
-
-  it("does not attach xAI BYOK for non-SpaceXAI Gateway overrides", () => {
-    vi.stubEnv("AI_PROVIDER", "gateway");
-    vi.stubEnv("XAI_API_KEY", "xai-test-key");
-    expect(
-      getProviderOptions({
-        disableSearch: true,
-        modelId: "openai/gpt-4o-mini",
-      }),
-    ).toEqual({
-      xai: { searchParameters: { mode: "off" } },
-    });
-  });
-
-  it("does not pin gateway.only when hitting api.x.ai direct", () => {
-    stubDirectXai();
-    expect(
-      getProviderOptions({
-        disableSearch: true,
-        reasoningEffort: "none",
-        modelId: "grok-4.3",
-      }),
-    ).toEqual({
-      xai: {
-        searchParameters: { mode: "off" },
-        reasoningEffort: "none",
-      },
     });
   });
 });
