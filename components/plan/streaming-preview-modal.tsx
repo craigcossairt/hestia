@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { Sparkles, Check } from "lucide-react";
 import { Dialog, H, Body, Btn, Label, Mono } from "@/components/ds";
-import { PlanWeekSchema } from "@/lib/ai/prompts/plan-week";
+import { PlanWeekSchema, type PlanWeekResult } from "@/lib/ai/prompts/plan-week";
 import { cn } from "@/lib/utils";
 import {
   emptyWeekStreamMessage,
@@ -15,12 +15,15 @@ import {
   isGoneWeekPlanError,
   isUnhelpfulWeekStreamSchemaError,
   shouldAbortStalledWeekStream,
-  shouldErrorEmptyWeekStream,
   STALLED_WEEK_STREAM_MESSAGE,
 } from "@/lib/plan/week-stream-watch";
 import {
+  cloneStreamedMeals,
   expectedWeekMealCount,
   persistablePlanWeek,
+  preferRicherPlan,
+  streamedMeals,
+  weekStreamFinishAction,
 } from "@/lib/plan/week-plan-result";
 
 interface StreamingPreviewModalProps {
@@ -72,24 +75,26 @@ export function StreamingPreviewModal({
   // component. Worse, an impatient user who closed + re-clicked Generate
   // would stack a second concurrent save against the same rows.
   const saveCtrlRef = useRef<AbortController | null>(null);
-  const snapshotRef = useRef<typeof object>(undefined);
+  const streamErrorRef = useRef<string | null>(null);
+  const [savedMeals, setSavedMeals] = useState<unknown[]>([]);
+  const [maxMealsSeen, setMaxMealsSeen] = useState(0);
+  const [persistablePlan, setPersistablePlan] =
+    useState<PlanWeekResult | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
-  elapsedRef.current = elapsed;
 
   const { object, submit, isLoading, stop } = useObject({
     api: "/api/ai/plan-week/preview",
     schema: PlanWeekSchema,
     onError(err) {
-      // A late stream error must not discard meals the UI already showed.
-      if ((snapshotRef.current?.meals?.length ?? 0) > 0) return;
-      setError(err.message ?? "Stream failed");
-      setPhase("error");
+      // Do not flip phase here. A failed final parse used to set error
+      // before save ran, which is how visible meals became "empty stream".
+      streamErrorRef.current = err.message ?? "Stream failed";
     },
     // Do not use onFinish to set errors. useObject validates the final
     // JSON against PlanWeekSchema and reports Zod "expected object,
     // received undefined" when the body is empty — that is what showed
-    // after #66. Empty streams are handled by the mealCount effect below.
+    // after #66. Empty streams are handled by weekStreamFinishAction.
   });
 
   // Kick off the stream once when the modal opens.
@@ -109,11 +114,15 @@ export function StreamingPreviewModal({
       savedRef.current = false;
       sawLoadingRef.current = false;
       stalledRef.current = false;
-      snapshotRef.current = undefined;
+      streamErrorRef.current = null;
+      setSavedMeals([]);
+      setMaxMealsSeen(0);
+      setPersistablePlan(null);
       setPhase("streaming");
       setError(null);
       setSavedSummary(null);
       setElapsed(0);
+      elapsedRef.current = 0;
       return;
     }
     if (submittedRef.current) return;
@@ -145,112 +154,146 @@ export function StreamingPreviewModal({
   // intentional. Counter resets on close.
   useEffect(() => {
     if (!open || phase === "done" || phase === "error") return;
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    const id = setInterval(() => {
+      setElapsed((s) => {
+        const next = s + 1;
+        elapsedRef.current = next;
+        return next;
+      });
+    }, 1000);
     return () => clearInterval(id);
   }, [open, phase]);
 
-  const mealCount = object?.meals?.length ?? 0;
-  if (mealCount > 0) snapshotRef.current = object;
-  const viewObject =
-    mealCount > 0 ? object : snapshotRef.current;
-  const viewMealCount = viewObject?.meals?.length ?? 0;
+  const incomingMeals = streamedMeals(object);
+  const incomingCount = incomingMeals.length;
+  const livePersistable =
+    incomingCount > 0 ? persistablePlanWeek({ meals: incomingMeals }) : null;
+  const persistable = preferRicherPlan(livePersistable, persistablePlan);
+  const viewMeals = incomingCount > 0 ? incomingMeals : savedMeals;
+  const viewMealCount = Math.max(viewMeals.length, maxMealsSeen, incomingCount);
   const expectedTotal = expectedWeekMealCount({
     includeSnack,
     includeDessert,
     includeBeverage,
   });
 
-  // Stream closed: save whatever meals we already rendered. Do not treat a
-  // cleared useObject payload as "zero meals" if the snapshot still has them.
+  // High-water copies during render so a wiped useObject payload cannot
+  // take the visible cards with it. React retries the render when these
+  // setStates fire; only grow, never shrink.
+  if (incomingCount > savedMeals.length) {
+    setSavedMeals(cloneStreamedMeals(incomingMeals));
+  } else if (
+    incomingCount > 0 &&
+    (livePersistable?.meals.length ?? 0) > (persistablePlan?.meals.length ?? 0)
+  ) {
+    setSavedMeals(cloneStreamedMeals(incomingMeals));
+  }
+  if (incomingCount > maxMealsSeen) {
+    setMaxMealsSeen(incomingCount);
+  }
+  if (
+    persistable &&
+    persistable.meals.length > (persistablePlan?.meals.length ?? 0)
+  ) {
+    setPersistablePlan(persistable);
+  }
+
+  // Stream closed: save whatever meals we already rendered, even if
+  // useObject cleared the object or onError already fired.
   useEffect(() => {
-    if (
-      phase !== "streaming" ||
-      isLoading ||
-      !sawLoadingRef.current ||
-      savedRef.current
-    ) {
-      return;
-    }
-    const persistable = persistablePlanWeek(viewObject);
-    if (persistable) {
-      savedRef.current = true;
-      setPhase("saving");
-      saveCtrlRef.current = new AbortController();
-      const signal = saveCtrlRef.current.signal;
-      const snapshot = persistable;
-      void (async () => {
-        try {
-          const res = await fetch("/api/ai/plan-week/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              week_start: weekStart,
-              include_snack: includeSnack,
-              include_dessert: includeDessert,
-              include_beverage: includeBeverage,
-              regenerate,
-              result: snapshot,
-            }),
-            signal,
-          });
-          const text = await res.text();
-          let json: {
-            ok?: boolean;
-            error?: string;
-            created?: Array<unknown>;
-            skipped?: number;
-          } = {};
+    const action = weekStreamFinishAction({
+      phase,
+      isLoading,
+      sawLoading: sawLoadingRef.current,
+      saved: savedRef.current,
+      mealsSeen: viewMealCount,
+      persistable,
+    });
+    switch (action.type) {
+      case "wait":
+        return;
+      case "save": {
+        savedRef.current = true;
+        setError(null);
+        setPhase("saving");
+        saveCtrlRef.current = new AbortController();
+        const signal = saveCtrlRef.current.signal;
+        const snapshot = action.plan;
+        void (async () => {
           try {
-            json = text ? JSON.parse(text) : {};
-          } catch {
-            throw new Error(
-              res.ok
-                ? "Server returned a non-JSON response."
-                : `Server error (${res.status}).`,
-            );
+            const res = await fetch("/api/ai/plan-week/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                week_start: weekStart,
+                include_snack: includeSnack,
+                include_dessert: includeDessert,
+                include_beverage: includeBeverage,
+                regenerate,
+                result: snapshot,
+              }),
+              signal,
+            });
+            const text = await res.text();
+            let json: {
+              ok?: boolean;
+              error?: string;
+              created?: Array<unknown>;
+              skipped?: number;
+            } = {};
+            try {
+              json = text ? JSON.parse(text) : {};
+            } catch {
+              throw new Error(
+                res.ok
+                  ? "Server returned a non-JSON response."
+                  : `Server error (${res.status}).`,
+              );
+            }
+            if (!res.ok) {
+              throw new Error(json.error ?? `Save failed (${res.status}).`);
+            }
+            setSavedSummary({
+              created: json.created?.length ?? 0,
+              skipped: json.skipped ?? 0,
+            });
+            setPhase("done");
+            router.refresh();
+          } catch (err) {
+            if ((err as { name?: string }).name === "AbortError") return;
+            setError((err as Error).message);
+            setPhase("error");
           }
-          if (!res.ok) {
-            throw new Error(json.error ?? `Save failed (${res.status}).`);
-          }
-          setSavedSummary({
-            created: json.created?.length ?? 0,
-            skipped: json.skipped ?? 0,
-          });
-          setPhase("done");
-          router.refresh();
-        } catch (err) {
-          if ((err as { name?: string }).name === "AbortError") return;
-          setError((err as Error).message);
-          setPhase("error");
-        }
-      })();
-      return;
+        })();
+        return;
+      }
+      case "incomplete":
+        setError(
+          "The plan streamed, but meals were too incomplete to save. Try again.",
+        );
+        setPhase("error");
+        return;
+      case "empty": {
+        const raw = streamErrorRef.current;
+        setError(
+          raw && !isUnhelpfulWeekStreamSchemaError(raw)
+            ? raw
+            : emptyWeekStreamMessage(elapsedRef.current),
+        );
+        setPhase("error");
+        return;
+      }
+      default: {
+        const _exhaustive: never = action;
+        throw new Error(`Unknown week stream finish action: ${_exhaustive}`);
+      }
     }
-    if (viewMealCount > 0) {
-      setError(
-        "The plan streamed, but meals were too incomplete to save. Try again.",
-      );
-      setPhase("error");
-      return;
-    }
-    if (
-      !shouldErrorEmptyWeekStream({
-        phase,
-        isLoading,
-        sawLoading: sawLoadingRef.current,
-        mealCount: viewMealCount,
-        saved: savedRef.current,
-      })
-    ) {
-      return;
-    }
-    setError(emptyWeekStreamMessage(elapsedRef.current));
-    setPhase("error");
   }, [
     phase,
     isLoading,
-    viewObject,
     viewMealCount,
+    persistable,
+    persistablePlan,
     weekStart,
     includeSnack,
     includeDessert,
@@ -301,7 +344,7 @@ export function StreamingPreviewModal({
     if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) {
       return "Hit a rate limit on the AI provider. Wait a minute and try again.";
     }
-    if (isUnhelpfulWeekStreamSchemaError(raw)) {
+    if (isUnhelpfulWeekStreamSchemaError(raw) && maxMealsSeen === 0) {
       return emptyWeekStreamMessage(elapsed);
     }
     if (isGoneWeekPlanError(raw)) {
@@ -324,7 +367,12 @@ export function StreamingPreviewModal({
       string,
       Array<{ slot: string; name: string | null; isLeftover: boolean }>
     >();
-    const meals = viewObject?.meals ?? [];
+    const meals = viewMeals as Array<{
+      date?: string;
+      slot?: string;
+      recipe?: { name?: string };
+      is_leftover_of_index?: number;
+    }>;
     for (const m of meals) {
       if (!m?.date || !m?.slot) continue;
       const arr = byDate.get(m.date) ?? [];
@@ -345,7 +393,7 @@ export function StreamingPreviewModal({
       total: meals.length,
       named: namedCount,
     };
-  }, [viewObject?.meals]);
+  }, [viewMeals]);
 
   // Rotating progress hint while we wait for the stream's first tokens.
   // Once meals start arriving, the meal list itself is the progress.
