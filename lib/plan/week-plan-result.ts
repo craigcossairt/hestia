@@ -115,8 +115,16 @@ export function salvagePlanWeek(value: unknown): PlanSalvageResult {
     }
     const salvaged = salvageMeal(entry, index);
     if (salvaged.meal) {
-      meals.push(salvaged.meal);
-      if (salvaged.filledDefaults) filledDefaults += 1;
+      const parsed = PlanMealSchema.safeParse(salvaged.meal);
+      if (parsed.success) {
+        meals.push(parsed.data);
+        if (salvaged.filledDefaults) filledDefaults += 1;
+        return;
+      }
+      issues.push({
+        ...salvaged.issue,
+        reason: flattenZod(parsed.error),
+      });
       return;
     }
     issues.push(salvaged.issue);
@@ -263,7 +271,7 @@ function salvageMeal(
       issue: { ...issueBase, date, reason: "missing or invalid slot" },
     };
   }
-  const leftover = asInt(raw.is_leftover_of_index, 0, 59);
+  const leftover = leftoverIndex(raw.is_leftover_of_index);
   if (leftover != null) {
     return {
       meal: { date, slot, is_leftover_of_index: leftover },
@@ -499,6 +507,12 @@ function asNumber(value: unknown): number | undefined {
     if (Number.isFinite(parsed)) return parsed;
   }
   return undefined;
+}
+
+function leftoverIndex(value: unknown): number | undefined {
+  const n = asNumber(value);
+  if (n == null || !Number.isInteger(n) || n < 0 || n > 59) return undefined;
+  return n;
 }
 
 function asInt(value: unknown, min: number, max: number): number | undefined {

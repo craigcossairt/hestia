@@ -205,6 +205,10 @@ export function StreamingPreviewModal({
   // Stream closed: save whatever meals we already rendered, even if
   // useObject cleared the object or onError already fired.
   useEffect(() => {
+    if (savedRef.current) return;
+    if (phase === "saving" || phase === "done") return;
+    if (isLoading || !sawLoadingRef.current) return;
+
     const salvage = salvagePlanWeek({ meals: viewMeals });
     const persistableNow = preferRicherPlan(salvage.plan, persistable);
     const persistLog = summarizeSalvage(salvage);
@@ -242,8 +246,7 @@ export function StreamingPreviewModal({
                 include_dessert: includeDessert,
                 include_beverage: includeBeverage,
                 regenerate,
-                result:
-                  viewMeals.length > 0 ? { meals: viewMeals } : snapshot,
+                result: snapshot,
               }),
               signal,
             });

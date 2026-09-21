@@ -163,6 +163,21 @@ describe("persistablePlanWeek", () => {
     expect(result?.meals[0]?.recipe?.ingredients).toHaveLength(2);
     expect(result?.meals[0]?.recipe?.steps).toHaveLength(2);
   });
+
+  it("does not clamp a bad leftover index into leftover of meal 0", () => {
+    const result = persistablePlanWeek({
+      meals: [
+        {
+          date: "2026-09-21",
+          slot: "lunch",
+          is_leftover_of_index: -1,
+          recipe: { name: "Chicken rice bowl" },
+        },
+      ],
+    });
+    expect(result?.meals[0]?.is_leftover_of_index).toBeUndefined();
+    expect(result?.meals[0]?.recipe?.name).toBe("Chicken rice bowl");
+  });
 });
 
 describe("cloneStreamedMeals", () => {
