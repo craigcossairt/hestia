@@ -110,6 +110,25 @@ describe("isGatewayCreditsError", () => {
     );
     expect(isGatewayCreditsError("Gone")).toBe(false);
   });
+
+  it("matches Gateway BYOK paid-credits and top-up modal URLs", () => {
+    expect(
+      isGatewayCreditsError(
+        "Bring Your Own Key (BYOK) is available only with paid credits. Purchase at https://vercel.com/d?to=%2Fai%3Fmodal%3Dtop-up",
+      ),
+    ).toBe(true);
+    expect(
+      isGatewayCreditsError(
+        "https://vercel.com/d?to=%2Fai%3Fmodal%3Dtop-up",
+      ),
+    ).toBe(true);
+    expect(isGatewayCreditsError("https://vercel.com/?modal=top-up")).toBe(
+      true,
+    );
+    expect(isGatewayCreditsError("paid credits without gateway copy")).toBe(
+      false,
+    );
+  });
 });
 
 describe("isUnhelpfulWeekStreamSchemaError", () => {
