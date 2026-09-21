@@ -18,6 +18,10 @@ import {
   shouldErrorEmptyWeekStream,
   STALLED_WEEK_STREAM_MESSAGE,
 } from "@/lib/plan/week-stream-watch";
+import {
+  expectedWeekMealCount,
+  persistablePlanWeek,
+} from "@/lib/plan/week-plan-result";
 
 interface StreamingPreviewModalProps {
   open: boolean;
@@ -68,6 +72,7 @@ export function StreamingPreviewModal({
   // component. Worse, an impatient user who closed + re-clicked Generate
   // would stack a second concurrent save against the same rows.
   const saveCtrlRef = useRef<AbortController | null>(null);
+  const snapshotRef = useRef<typeof object>(undefined);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
   elapsedRef.current = elapsed;
@@ -76,6 +81,8 @@ export function StreamingPreviewModal({
     api: "/api/ai/plan-week/preview",
     schema: PlanWeekSchema,
     onError(err) {
+      // A late stream error must not discard meals the UI already showed.
+      if ((snapshotRef.current?.meals?.length ?? 0) > 0) return;
       setError(err.message ?? "Stream failed");
       setPhase("error");
     },
@@ -102,6 +109,7 @@ export function StreamingPreviewModal({
       savedRef.current = false;
       sawLoadingRef.current = false;
       stalledRef.current = false;
+      snapshotRef.current = undefined;
       setPhase("streaming");
       setError(null);
       setSavedSummary(null);
@@ -142,24 +150,114 @@ export function StreamingPreviewModal({
   }, [open, phase]);
 
   const mealCount = object?.meals?.length ?? 0;
+  if (mealCount > 0) snapshotRef.current = object;
+  const viewObject =
+    mealCount > 0 ? object : snapshotRef.current;
+  const viewMealCount = viewObject?.meals?.length ?? 0;
+  const expectedTotal = expectedWeekMealCount({
+    includeSnack,
+    includeDessert,
+    includeBeverage,
+  });
 
-  // Stream closed with nothing parsed — do not sit in "streaming" (this is
-  // how a 300s Vercel timeout became a 10-minute spinner).
+  // Stream closed: save whatever meals we already rendered. Do not treat a
+  // cleared useObject payload as "zero meals" if the snapshot still has them.
   useEffect(() => {
+    if (
+      phase !== "streaming" ||
+      isLoading ||
+      !sawLoadingRef.current ||
+      savedRef.current
+    ) {
+      return;
+    }
+    const persistable = persistablePlanWeek(viewObject);
+    if (persistable) {
+      savedRef.current = true;
+      setPhase("saving");
+      saveCtrlRef.current = new AbortController();
+      const signal = saveCtrlRef.current.signal;
+      const snapshot = persistable;
+      void (async () => {
+        try {
+          const res = await fetch("/api/ai/plan-week/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              week_start: weekStart,
+              include_snack: includeSnack,
+              include_dessert: includeDessert,
+              include_beverage: includeBeverage,
+              regenerate,
+              result: snapshot,
+            }),
+            signal,
+          });
+          const text = await res.text();
+          let json: {
+            ok?: boolean;
+            error?: string;
+            created?: Array<unknown>;
+            skipped?: number;
+          } = {};
+          try {
+            json = text ? JSON.parse(text) : {};
+          } catch {
+            throw new Error(
+              res.ok
+                ? "Server returned a non-JSON response."
+                : `Server error (${res.status}).`,
+            );
+          }
+          if (!res.ok) {
+            throw new Error(json.error ?? `Save failed (${res.status}).`);
+          }
+          setSavedSummary({
+            created: json.created?.length ?? 0,
+            skipped: json.skipped ?? 0,
+          });
+          setPhase("done");
+          router.refresh();
+        } catch (err) {
+          if ((err as { name?: string }).name === "AbortError") return;
+          setError((err as Error).message);
+          setPhase("error");
+        }
+      })();
+      return;
+    }
+    if (viewMealCount > 0) {
+      setError(
+        "The plan streamed, but meals were too incomplete to save. Try again.",
+      );
+      setPhase("error");
+      return;
+    }
     if (
       !shouldErrorEmptyWeekStream({
         phase,
         isLoading,
         sawLoading: sawLoadingRef.current,
-        mealCount,
+        mealCount: viewMealCount,
         saved: savedRef.current,
       })
     ) {
       return;
     }
-    setError(emptyWeekStreamMessage(elapsed));
+    setError(emptyWeekStreamMessage(elapsedRef.current));
     setPhase("error");
-  }, [phase, isLoading, mealCount, elapsed]);
+  }, [
+    phase,
+    isLoading,
+    viewObject,
+    viewMealCount,
+    weekStart,
+    includeSnack,
+    includeDessert,
+    includeBeverage,
+    regenerate,
+    router,
+  ]);
 
   // Hard stop if no meals have arrived by the stall threshold. stop() is an
   // abort, which useObject swallows without onError.
@@ -168,7 +266,7 @@ export function StreamingPreviewModal({
       !shouldAbortStalledWeekStream({
         phase,
         elapsedSeconds: elapsed,
-        mealCount,
+        mealCount: viewMealCount,
       })
     ) {
       return;
@@ -178,88 +276,7 @@ export function StreamingPreviewModal({
     stop();
     setError(STALLED_WEEK_STREAM_MESSAGE);
     setPhase("error");
-  }, [phase, elapsed, mealCount, stop]);
-
-  // When the stream completes, kick off the save.
-  useEffect(() => {
-    if (
-      phase !== "streaming" ||
-      isLoading ||
-      !object ||
-      savedRef.current
-    ) {
-      return;
-    }
-    if (!Array.isArray(object.meals) || object.meals.length === 0) {
-      // Stream ended with nothing — nothing to save.
-      setError("Generator returned no meals.");
-      setPhase("error");
-      return;
-    }
-    savedRef.current = true;
-    setPhase("saving");
-    saveCtrlRef.current = new AbortController();
-    const signal = saveCtrlRef.current.signal;
-    (async () => {
-      try {
-        const res = await fetch("/api/ai/plan-week/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            week_start: weekStart,
-            include_snack: includeSnack,
-            include_dessert: includeDessert,
-            include_beverage: includeBeverage,
-            regenerate,
-            result: object,
-          }),
-          signal,
-        });
-        const text = await res.text();
-        let json: {
-          ok?: boolean;
-          error?: string;
-          created?: Array<unknown>;
-          skipped?: number;
-        } = {};
-        try {
-          json = text ? JSON.parse(text) : {};
-        } catch {
-          throw new Error(
-            res.ok
-              ? "Server returned a non-JSON response."
-              : `Server error (${res.status}).`,
-          );
-        }
-        if (!res.ok) {
-          throw new Error(json.error ?? `Save failed (${res.status}).`);
-        }
-        setSavedSummary({
-          created: json.created?.length ?? 0,
-          skipped: json.skipped ?? 0,
-        });
-        setPhase("done");
-        router.refresh();
-      } catch (err) {
-        // Aborts come through here as a DOMException with name "AbortError"
-        // (or the polyfilled equivalent). Treat as silent — the user
-        // closed the modal intentionally; don't flash an error.
-        if ((err as { name?: string }).name === "AbortError") return;
-        setError((err as Error).message);
-        setPhase("error");
-      }
-    })();
-  }, [
-    phase,
-    isLoading,
-    object,
-    weekStart,
-    includeSnack,
-    includeDessert,
-    includeBeverage,
-    regenerate,
-    router,
-  ]);
+  }, [phase, elapsed, viewMealCount, stop]);
 
   function handleClose() {
     if (phase === "streaming") stop();
@@ -307,7 +324,7 @@ export function StreamingPreviewModal({
       string,
       Array<{ slot: string; name: string | null; isLeftover: boolean }>
     >();
-    const meals = object?.meals ?? [];
+    const meals = viewObject?.meals ?? [];
     for (const m of meals) {
       if (!m?.date || !m?.slot) continue;
       const arr = byDate.get(m.date) ?? [];
@@ -328,7 +345,7 @@ export function StreamingPreviewModal({
       total: meals.length,
       named: namedCount,
     };
-  }, [object?.meals]);
+  }, [viewObject?.meals]);
 
   // Rotating progress hint while we wait for the stream's first tokens.
   // Once meals start arriving, the meal list itself is the progress.
@@ -370,7 +387,7 @@ export function StreamingPreviewModal({
           <Body size="sm" dim>
             {phase === "streaming" && total > 0 && (
               <>
-                Drafted {named} of {total} meals · {elapsed}s elapsed
+                Drafted {named} of {Math.max(expectedTotal, total)} meals · {elapsed}s elapsed
               </>
             )}
             {phase === "streaming" && total === 0 && (
