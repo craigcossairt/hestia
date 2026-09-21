@@ -21,8 +21,11 @@ import {
   cloneStreamedMeals,
   expectedWeekMealCount,
   persistablePlanWeek,
+  planWeekRichness,
   preferRicherPlan,
+  salvagePlanWeek,
   streamedMeals,
+  summarizeSalvage,
   weekStreamFinishAction,
 } from "@/lib/plan/week-plan-result";
 
@@ -184,7 +187,7 @@ export function StreamingPreviewModal({
     setSavedMeals(cloneStreamedMeals(incomingMeals));
   } else if (
     incomingCount > 0 &&
-    (livePersistable?.meals.length ?? 0) > (persistablePlan?.meals.length ?? 0)
+    planWeekRichness(livePersistable) > planWeekRichness(persistablePlan)
   ) {
     setSavedMeals(cloneStreamedMeals(incomingMeals));
   }
@@ -193,7 +196,8 @@ export function StreamingPreviewModal({
   }
   if (
     persistable &&
-    persistable.meals.length > (persistablePlan?.meals.length ?? 0)
+    (persistable.meals.length > (persistablePlan?.meals.length ?? 0) ||
+      planWeekRichness(persistable) > planWeekRichness(persistablePlan))
   ) {
     setPersistablePlan(persistable);
   }
@@ -201,13 +205,20 @@ export function StreamingPreviewModal({
   // Stream closed: save whatever meals we already rendered, even if
   // useObject cleared the object or onError already fired.
   useEffect(() => {
+    if (savedRef.current) return;
+    if (phase === "saving" || phase === "done") return;
+    if (isLoading || !sawLoadingRef.current) return;
+
+    const salvage = salvagePlanWeek({ meals: viewMeals });
+    const persistableNow = preferRicherPlan(salvage.plan, persistable);
+    const persistLog = summarizeSalvage(salvage);
     const action = weekStreamFinishAction({
       phase,
       isLoading,
       sawLoading: sawLoadingRef.current,
       saved: savedRef.current,
       mealsSeen: viewMealCount,
-      persistable,
+      persistable: persistableNow,
     });
     switch (action.type) {
       case "wait":
@@ -219,6 +230,11 @@ export function StreamingPreviewModal({
         saveCtrlRef.current = new AbortController();
         const signal = saveCtrlRef.current.signal;
         const snapshot = action.plan;
+        if (persistLog.issues.length > 0 || persistLog.filledDefaults > 0) {
+          console.warn("plan-week/persist", persistLog);
+        } else {
+          console.info("plan-week/persist", persistLog);
+        }
         void (async () => {
           try {
             const res = await fetch("/api/ai/plan-week/save", {
@@ -268,8 +284,11 @@ export function StreamingPreviewModal({
         return;
       }
       case "incomplete":
+        console.warn("plan-week/persist incomplete", persistLog);
         setError(
-          "The plan streamed, but meals were too incomplete to save. Try again.",
+          persistLog.issues[0]?.reason
+            ? `The plan streamed, but meals were too incomplete to save (${persistLog.issues[0].reason}). Try again.`
+            : "The plan streamed, but meals were too incomplete to save. Try again.",
         );
         setPhase("error");
         return;
@@ -294,6 +313,7 @@ export function StreamingPreviewModal({
     viewMealCount,
     persistable,
     persistablePlan,
+    viewMeals,
     weekStart,
     includeSnack,
     includeDessert,
